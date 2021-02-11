@@ -24,7 +24,8 @@ cis_mQTL_analyses/terre_data
 
 # RStudio files
 .Rproj.user/
-
+**.Rproj
+**.Rout
 # produced vignettes
 vignettes/*.html
 vignettes/*.pdf
