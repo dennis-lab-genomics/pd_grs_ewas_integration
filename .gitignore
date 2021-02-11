@@ -3,9 +3,10 @@
 **.gz
 cis_mQTL_analyses/digpd_data
 cis_mQTL_analyses/terre_data
+prs_analyses/PRS_interactions
 # History files
 
-.Rhistory
+**.Rhistory
 .Rapp.history
 
 # Session Data files
