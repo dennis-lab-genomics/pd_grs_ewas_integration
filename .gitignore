@@ -10,6 +10,7 @@ cis_mQTL_analyses/terre_data
 
 # Session Data files
 **.RData
+**.RDatatmp
 **.RDS
 **.sscore
 **.vars
