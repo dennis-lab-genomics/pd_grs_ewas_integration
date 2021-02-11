@@ -9,8 +9,11 @@ cis_mQTL_analyses/terre_data
 .Rapp.history
 
 # Session Data files
-.RData
-
+**.RData
+**.RDS
+**.sscore
+**.vars
+**.log
 # User-specific files
 .Ruserdata
 
