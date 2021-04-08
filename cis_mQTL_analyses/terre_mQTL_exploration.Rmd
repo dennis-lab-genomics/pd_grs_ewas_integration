@@ -18,10 +18,9 @@ knitr::opts_chunk$set(cache = TRUE)
 
 ```{r}
 ntests <- 126287251
-mQTL_results <- fread("terre_data/cis_all_impute_mQTL_results_9_methy_PC.txt",key="gene")
+mQTL_results <- fread("terre_data/cis_all_impute_mQTL_results_CTP.txt.gz",key="gene")
 ntests_digpd <- 71513917
-mQTL_results_digpd <- fread("digpd_data/cis_all_impute_mQTL_results_9_methy_PC.txt")
-
+mQTL_results_digpd <- fread("digpd_data/cis_all_impute_mQTL_results_9_methy_PC.txt.gz")
 ```
 ```{r}
 mQTL_results[FDR <0.05,.(total=.N,cpgs=uniqueN(gene))]
@@ -36,13 +35,17 @@ mQTL_results_digpd[`p-value` <(0.05 / ntests),.(total=.N,cpgs=uniqueN(gene))]
 hist(mQTL_results_digpd$`p-value`)
 qq(mQTL_results_digpd$`p-value`)
 ```
+### Checking replication
 ```{r}
-
-to_check_replication <- fread("to_check_replication_terre_digpd_bonf.txt")
-by_cpg <- to_check_replication[,.(p1= min(`p-value.x`),p2=min(`p-value.y`)),by="gene"]
-tmp <- pi0est(to_check_replication$`p-value.y`)
-tmp <- pi0est(to_check_replication$p2)
+to_check_replication <- merge(mQTL_results[`p-value` < (0.05 / .N)],mQTL_results_digpd,by = c("SNP", "gene"))
 ```
+
+$\pi_1$ statistics
+```{r}
+uniqueN(to_check_replication[`p-value.y` < (0.05 / nrow(mQTL_results))]$gene)
+uniqueN(to_check_replication[`p-value.y` < (0.05 / nrow(mQTL_results))]$gene) /53845
+```
+
 ## Colocalization with parkinson's loci
 ```{r}
 probe_pos <- fread("~/cis_mQTL_analyses/terre_data/probe_pos.txt")
@@ -184,6 +187,7 @@ coloc_brain %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3
 ```{r,fig.height=8.5, fig.height=11}
 library(EnsDb.Hsapiens.v86)
 edb <- EnsDb.Hsapiens.v86
+res1_pval <- fread("mqtl_pd_snp_colocalized")
 blood_cpg <- res1_pval %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3)%>% dplyr::filter(PP3_4 > 0.99, PP_4div3 > 5)
 brain_cpg <- coloc_brain %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3)%>% dplyr::filter(PP3_4 > 0.99, PP_4div3 > 5)
 
