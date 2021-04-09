@@ -48,8 +48,8 @@ uniqueN(to_check_replication[`p-value.y` < (0.05 / nrow(mQTL_results))]$gene) /5
 
 ## Colocalization with parkinson's loci
 ```{r}
-probe_pos <- fread("~/cis_mQTL_analyses/terre_data/probe_pos.txt")
-snp_pos <- fread("~/cis_mQTL_analyses/terre_data/snp_pos.txt",key="SNP")
+probe_pos <- fread("terre_data/probe_pos.txt")
+snp_pos <- fread("terre_data/snp_pos.txt",key="SNP")
 methy <- fread("~/cis_mQTL_analyses/terre_data/methylation_combat.txt",key="cpg")
 sum_stats <- fread("~/nallsEtAl2019_excluding23andMe_allVariants.tab.gz", key= "SNP")
 risk_scores <- read_xlsx("~/pd_risk_score/Supplementary materials/Table S2. Detailed summary statistics on all nominated risk variants, known and novel_.xlsx") %>% mutate(CHR = as.numeric(CHR), COUNTED = toupper(`Effect allele`), ALT = toupper(`Other allele`), POS = BP) %>% filter(!is.na(CHR))
@@ -187,7 +187,8 @@ coloc_brain %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3
 ```{r,fig.height=8.5, fig.height=11}
 library(EnsDb.Hsapiens.v86)
 edb <- EnsDb.Hsapiens.v86
-res1_pval <- fread("mqtl_pd_snp_colocalized")
+res1_pval <- fread("mqtl_pd_snp_colocalized_blood.txt")
+coloc_brain <- fread("mqtl_pd_snp_colocalized_brain.txt")
 blood_cpg <- res1_pval %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3)%>% dplyr::filter(PP3_4 > 0.99, PP_4div3 > 5)
 brain_cpg <- coloc_brain %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3)%>% dplyr::filter(PP3_4 > 0.99, PP_4div3 > 5)
 
