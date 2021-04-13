@@ -1,6 +1,6 @@
 ---
 title: "PRS Analysis"
-output: html_document
+output: github_document
 ---
 
 ```{r setup, include=FALSE}
@@ -22,7 +22,7 @@ risk_scores %>% select(SNP,COUNTED, `Beta, all studies`) %>%
 
 # TERRE PRS Analysis
 Generate PRS using `plink2 --score`:
-```{bash}
+```{bash, eval=FALSE}
 ~/plink2 --bfile ~/genotype_qc/TERRE_QC/raw_data.imputed.r2_30.hard_call.maf_mismatch\
   --score pd_prs_file.txt\
   --out terre_prs
@@ -82,7 +82,8 @@ t.test(all_data$SCORE1_AVG[as.logical(all_data$men)],all_data$SCORE1_AVG[!as.log
 
 ```{r}
 # load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE/TERRE_betas_CTC.RData")# terre_betas_CTC
-load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE/TERRE_betas_combat.RData")# betas_sub
+load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE_processed_2021/betas_combat.RData")# betas_sub
+betas_sub <- betas_combat
 # load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE/TERRE_funnorm_processed/betas_combat.RData")
 # betas_sub<- betas_combat
 ```
@@ -316,8 +317,17 @@ tmp <- prs_res %>% rownames_to_column("probe") %>% filter(P.Value < (0.05/ n()))
 write.csv(tmp$probe,row.names=F)
 ```
 ### PRSxAge interaction
-
-@TODO FILL THIS IN 
+```{r}
+design_age <- model.matrix(~1+SCORE1_AVG*sex+age+plate+V3+V4+V5, data=reg_all_data[na_row,])
+age_fit <- lmFit(betas_sub[,na_row],design_age)
+age_fit <- eBayes(age_fit)
+age_res <- topTable(age_fit, number = Inf,coef=9)
+age_main_res <- topTable(age_fit, number = Inf,coef=c(2,9))
+```
+```{r}
+ggplot(age_res,aes(logFC,-log10(P.Value)))+ geom_point()
+ggplot(age_res,aes(logFC,-log10(age_main_res[rownames(age_res),]$P.Value)))+ geom_point()
+```
 ### PRSxSex interaction
 
 ```{r}
@@ -504,7 +514,7 @@ sum(risk_scores$SNP %in% bim$V2)
 ```
 
 Generate PRS using `plink2 --score`:
-```{bash}
+```{bash, eval=FALSE}
 ~/plink2 --bfile ~/genotype_qc/DIGPD_merged_post_imputation_QC/raw_data.imputed.r2_90.hard_call.maf_mismatch\
   --score pd_prs_file.txt list-variants\
   --out digpd_prs
@@ -564,7 +574,8 @@ summary(fit4)
 ```
 ## DIGPD PRS methylation associations
 ```{r}
-load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/DIGPD/DIGPDvisit1_betas_combat.RData")
+load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/DIGPD_processed_2021/DIGPD_betas_combat.RData")
+betas_sub <- betas_combat
 all_digpd_data$patient <- paste0(all_digpd_data$patient,".visit",all_digpd_data$visite)
 digpd_reg_data <- all_digpd_data %>% filter(patient %in% colnames(betas_sub)) %>% mutate(plate=factor(plate))
 betas_digpd <- betas_sub[,digpd_reg_data$patient]

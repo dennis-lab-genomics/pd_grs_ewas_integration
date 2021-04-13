@@ -1,0 +1,28 @@
+---
+title: "Analysis of PRSxPesticide interactions"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(data.table)
+library(qqman)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Checking inflation for prsxpest summary stats
+Before I suspect I was combining effects from limma incorrectly. So I re-rolled the regressions using mice and lm as the mice package seems to be intended to be used. Let's check inflation now within each pesticide:
+
+```{r}
+pesticide_interactions <- fread("prs_interaction_result.txt.gz")
+for(cur_env in unique(pesticide_interactions$env)){
+  qq(pesticide_interactions[env == cur_env]$GxEp,main = cur_env)
+}
+```
+
+## Filtering sumstats based on within-exposure FDR
+```{r}
+pesticide_interactions[, c("GxEq") := .(p.adjust(GxEp,method="BH")) , by="env"]
+pesticide_interactions[GxEq < 0.25][order(GxEq)]
+```
+

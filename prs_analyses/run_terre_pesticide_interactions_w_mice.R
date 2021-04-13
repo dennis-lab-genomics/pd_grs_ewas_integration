@@ -69,7 +69,10 @@ manifest <- expand_grid(cpg = probe_pos$gene, env = envs)
 results <- mclapply(
   1:nrow(manifest),
   function(i){
-    fit_interaction(manifest[i,])
+    tryCatch(
+      fit_interaction(manifest[i,]),
+      error = function(e){print(e); data.table()}
+    )
   },
   mc.cores=num_cores
 )
