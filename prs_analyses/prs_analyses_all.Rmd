@@ -4,16 +4,19 @@ output: github_document
 ---
 
 ```{r setup, include=FALSE}
-library(tidyverse)
-library(data.table)
+library(DMRcate)
 library(limma)
 library(minfi)
 library(rcompanion)
 library(readxl)
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+library(data.table)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 # PD risk score data and matching
-```{r}
+```{r, eval=FALSE}
 risk_scores <- read_xlsx("~/pd_risk_score/Supplementary materials/Table S2. Detailed summary statistics on all nominated risk variants, known and novel_.xlsx") %>% mutate(CHR = as.numeric(CHR), COUNTED = toupper(`Effect allele`), ALT = toupper(`Other allele`), POS = BP) %>% filter(!is.na(CHR))
 risk_scores %>% select(SNP,COUNTED, `Beta, all studies`) %>%
   write_delim("pd_prs_file.txt", col_names = FALSE)
@@ -127,49 +130,52 @@ prs_res <- topTable(prs_fit,coef=2,number = Inf)
 control_res <- topTable(prs_fit_control,coef=2,number = Inf)
 case_res <- topTable(prs_fit_case,coef=2,number = Inf)
 ```
+##### DMR analysis
 
-
-#### Permutation test for checking if reason for discrepancy between cases and controls is sample sized
 ```{r}
-library(parallel)
-num_control <- sum(control_select)
-num_cases <- sum(case_select)
+prs_annotated <- cpg.annotate(datatype = "array", object = betas_sub[,na_row],analysis.type = "differential", design = design_prs, coef = 2,what = "Beta",arraytype = "EPIC",fdr = 0.05)
+prs_dmr_res <- dmrcate(prs_annotated, lambda = 1000, C = 2)
 
-run_at_sample_size <- function(size){
-  to_select <- sample((1:length(na_row))[na_row],size)
-  design_prs <- model.matrix(~1+SCORE1_AVG+age+plate+sex+V3+V4+V5, data=reg_all_data[to_select,])
-  prs_fit <- lmFit(betas_sub[,to_select],design_prs)
-  prs_fit <- eBayes(prs_fit)
-  topTable(prs_fit,coef=2,number = Inf)
-}
+pd_annotated <- cpg.annotate(datatype = "array", object = betas_sub[,na_row],analysis.type = "differential", design = design_pd, coef = 2,what = "Beta",arraytype = "EPIC",fdr=0.05)
+pd_dmr_res <- dmrcate(pd_annotated, lambda = 1000, C = 2)
 
-
-run_at_sample_size_control <- function(size){
-  to_select <- sample((1:length(na_row))[control_select],size)
-  design_prs <- model.matrix(~1+SCORE1_AVG+age+plate+sex+V3+V4+V5, data=reg_all_data[to_select,])
-  prs_fit <- lmFit(betas_sub[,to_select],design_prs)
-  prs_fit <- eBayes(prs_fit)
-  topTable(prs_fit,coef=2,number = Inf)
-}
-
-res_control_size <- lapply(1:10,function(x) run_at_sample_size(num_control))
-res_case_size <- lapply(1:10,function(x) run_at_sample_size(num_cases))
-
-res_case_size_control <- lapply(1:10,function(x) run_at_sample_size_control(num_cases))
+```
+```{r}
+prs_dmr <- extractRanges(prs_dmr_res, genome= "hg19")
+annotation <- minfi::getAnnotation(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)
 ```
 
+##### Plotting
 ```{r}
-control_hits <- unlist(lapply(res_control_size,function(x) nrow(subset(x,adj.P.Val < 0.05 & abs(logFC) > 0.03))))
+library(cowplot)
+get_dmr_effects <- function(dmr,ix,chrom, limma_res){
+  dmr_coord <- as.data.frame(ranges(dmr))[ix,]
+  cpgs <- annotation[annotation$chr == chrom & annotation$pos >= dmr_coord$start & annotation$pos <= dmr_coord$end,]
+  res <- cbind(cpgs,limma_res[cpgs$Name,])
+  dmr_1 <- as.data.frame(res[!is.na(res$logFC),])
+  dmr_methy <- melt(betas_sub[dmr_1$Name,na_row],stringsAsFactors=FALSE)
+  to_plot <- merge(dmr_1,dmr_methy, by.x="Name", by.y = "Var1")
+  merge(to_plot,all_data,by.x="Var2",by.y="patient")
+}
+to_plot <- get_dmr_effects(prs_dmr,1,"chr17",prs_res)
 
-case_hits <- unlist(lapply(res_case_size,function(x) nrow(subset(x,adj.P.Val < 0.05 & abs(logFC) > 0.03))))
-case_size_control_hits <-unlist(lapply(res_case_size_control,function(x) nrow(subset(x,adj.P.Val < 0.05 & abs(logFC) > 0.03))))
-df <- data.frame(hits = c(mean(case_hits),mean(control_hits)), sample_size=c("Sampled to |Cases|","Sampled to |Controls|"),dev=c(sd(case_hits),sd(control_hits)))
-ggplot(df,aes(x=sample_size,y=hits,ymin=hits-dev,ymax=hits+dev)) + geom_bar(stat="identity") + geom_errorbar(width=0.25) + theme_minimal() + labs(x="",y="Number of hits")
-t.test(case_hits,control_hits)
+ggplot(to_plot, aes(pos,value, color= SCORE1_AVG))+ geom_point(alpha = 0.5) + scale_color_distiller(palette = "Spectral") + theme_minimal()
+ggplot(to_plot, aes(pos,value, color= as.factor(PD)))+ geom_point() + scale_color_brewer(palette = "Dark2") + theme_minimal()+ stat_summary(aes(group=as.factor(PD)), fun.y=mean, geom="line")
+
+
+to_plot <- get_dmr_effects(prs_dmr,2,"chr17",prs_res)
+
+ggplot(to_plot, aes(pos,value, color= SCORE1_AVG))+ geom_point(alpha = 0.5) + scale_color_distiller(palette = "Spectral") + theme_minimal()
+ggplot(to_plot, aes(pos,value, color= as.factor(PD)))+ geom_point() + scale_color_brewer(palette = "Dark2") + theme_minimal()+ stat_summary(aes(group=as.factor(PD)), fun.y=mean, geom="line")
+
+to_plot <- get_dmr_effects(prs_dmr,3,"chr17",prs_res)
+
+ggplot(to_plot, aes(pos,value, color= SCORE1_AVG))+ geom_point(alpha = 0.5) + scale_color_distiller(palette = "Spectral") + theme_minimal()
+ggplot(to_plot, aes(pos,value, color= as.factor(PD)))+ geom_point() + scale_color_brewer(palette = "Dark2") + theme_minimal()+ stat_summary(aes(group=as.factor(PD)), fun.y=mean, geom="line")
 ```
 
 
-```{r}
+```{r, eval=FALSE}
 library(ggrepel)
 annot <- fread("~/MethylationEPIC_v-1-0_B4.csv",skip = 7)
 pd_annot <- pd_res %>%rownames_to_column("probe") %>% left_join(annot,by=c("probe"="Name"))%>% mutate(gene = gsub(";.*","",UCSC_RefGene_Name)) %>% mutate(gene= ifelse(gene == "",probe,gene))
@@ -307,6 +313,49 @@ qqman::qq(prs_res$P.Value)
 hist(prs_res$P.Value,breaks = 100)
 hist(pd_res$P.Value,breaks=100)
 ```
+
+
+#### Permutation test for checking if reason for discrepancy between cases and controls is sample sized
+```{r, eval=FALSE}
+library(parallel)
+num_control <- sum(control_select)
+num_cases <- sum(case_select)
+
+run_at_sample_size <- function(size){
+  to_select <- sample((1:length(na_row))[na_row],size)
+  design_prs <- model.matrix(~1+SCORE1_AVG+age+plate+sex+V3+V4+V5, data=reg_all_data[to_select,])
+  prs_fit <- lmFit(betas_sub[,to_select],design_prs)
+  prs_fit <- eBayes(prs_fit)
+  topTable(prs_fit,coef=2,number = Inf)
+}
+
+
+run_at_sample_size_control <- function(size){
+  to_select <- sample((1:length(na_row))[control_select],size)
+  design_prs <- model.matrix(~1+SCORE1_AVG+age+plate+sex+V3+V4+V5, data=reg_all_data[to_select,])
+  prs_fit <- lmFit(betas_sub[,to_select],design_prs)
+  prs_fit <- eBayes(prs_fit)
+  topTable(prs_fit,coef=2,number = Inf)
+}
+
+res_control_size <- lapply(1:10,function(x) run_at_sample_size(num_control))
+res_case_size <- lapply(1:10,function(x) run_at_sample_size(num_cases))
+
+res_case_size_control <- lapply(1:10,function(x) run_at_sample_size_control(num_cases))
+```
+
+```{r,eval=FALSE}
+control_hits <- unlist(lapply(res_control_size,function(x) nrow(subset(x,adj.P.Val < 0.05 & abs(logFC) > 0.03))))
+
+case_hits <- unlist(lapply(res_case_size,function(x) nrow(subset(x,adj.P.Val < 0.05 & abs(logFC) > 0.03))))
+case_size_control_hits <-unlist(lapply(res_case_size_control,function(x) nrow(subset(x,adj.P.Val < 0.05 & abs(logFC) > 0.03))))
+df <- data.frame(hits = c(mean(case_hits),mean(control_hits)), sample_size=c("Sampled to |Cases|","Sampled to |Controls|"),dev=c(sd(case_hits),sd(control_hits)))
+ggplot(df,aes(x=sample_size,y=hits,ymin=hits-dev,ymax=hits+dev)) + geom_bar(stat="identity") + geom_errorbar(width=0.25) + theme_minimal() + labs(x="",y="Number of hits")
+t.test(case_hits,control_hits)
+```
+
+
+
 #### What are these PRS hits?
 
 
@@ -325,7 +374,20 @@ age_res <- topTable(age_fit, number = Inf,coef=9)
 age_main_res <- topTable(age_fit, number = Inf,coef=c(2,9))
 ```
 ```{r}
-ggplot(age_res,aes(logFC,-log10(P.Value)))+ geom_point()
+ggplot(age_res,aes(logFC,-log10(P.Value)))+ geom_point() +
+  geom_point(
+    data=subset(age_res,adj.P.Val < 0.05 & abs(logFC) > 0.03),
+    color = "green",
+    mapping=aes(logFC,-log10(P.Value))
+  ) +
+  labs(x = quote(Delta~beta~Methylation)) +
+  theme_minimal() +
+  geom_hline(
+    linetype="dashed",
+    yintercept = min(-log10(age_res$P.Value[age_res$adj.P.Val <0.05]))
+  ) +
+  geom_vline(linetype="dashed",xintercept = 0.03) +
+  geom_vline(linetype="dashed",xintercept = -0.03)
 ggplot(age_res,aes(logFC,-log10(age_main_res[rownames(age_res),]$P.Value)))+ geom_point()
 ```
 ### PRSxSex interaction
@@ -362,12 +424,7 @@ pre_mids <- pre_mids[pre_mids$num %in% colnames(betas_sub),]
 pest_mids <- as.mids(pre_mids, .imp="X_imputation_",.id="num")
 ##@TODO RE-RUN ANALYSES AND AGGREGATE WITH RUBIN'S METHOD WITH mice PACKAGE
 betas_pest <- betas_sub[,rownames(pest_mids$data)]
-```
-```{r}
 exposures <- colnames(pest_mids$data)[colMeans(pest_mids$data,na.rm = T) > 0.025]
-pesticide_interactions <- lapply(exposures, function(pesticide) fread(sprintf("%s_PRS_interaction.txt.gz",pesticide)))
-names(pesticide_interactions) <- exposures
-pesticides_df <- rbindlist(pesticide_interactions,idcol="exposure") %>% group_by(exposure) %>% mutate(FDR = p.adjust(P,method = "BH"))
 ```
 ### PRS exposure interaction with Random Forest Imputation
 ```{r}
