@@ -102,12 +102,12 @@ write_delim(betas_combat %>% as.data.frame() %>%rownames_to_column("cpg") %>% fi
 #Checking number of PCs
 
 ```{r}
-pc_res <- lapply(0:20,function(i)fread(sprintf("terre_data/cis_all_impute_mQTL_results_%d_methy_PC_chr21.txt",i)))
-ctp_res <- fread("terre_data/cis_all_impute_mQTL_results_CTP_chr21.txt")
+pc_res <- lapply(0:20,function(i)fread(sprintf("terre_data/cis_all_impute_mQTL_results_%d_methy_PC_chr21.txt.gz",i)))
+ctp_res <- fread("terre_data/cis_all_impute_mQTL_results_CTP_chr21.txt.gz")
 results_df <- data.frame(PC=0:20,nhit = sapply(pc_res,function(dt)nrow(dt[FDR < 0.05])))
 ggplot(results_df,aes(PC,nhit)) + geom_point() +geom_smooth() + geom_hline(yintercept = nrow(ctp_res[FDR < 0.05]),linetype="dashed")+ annotate(geom="text",y=240500,x=10,label="Hits detected with CTP PC") + ggtitle("mQTLs detected on chr21 Vs Methylation PCs included")
 
-results_df <- data.frame(PC=0:20,nhit = sapply(pc_res,function(dt)nrow(dt[FDR < 0.05,.(unique(gene))])))
-ggplot(results_df,aes(PC,nhit)) + geom_point() +geom_smooth() + geom_hline(yintercept = nrow(ctp_res[FDR < 0.05,.(unique(gene))]),linetype="dashed") + ggtitle("CpG sites on chr21 with one mQTL Vs Methylation PCs included") + annotate(geom="text",y=4200,x=10,label="Hits detected with CTP PC")
+results_df <- data.frame(PC=0:20,nhit = sapply(pc_res,function(dt)nrow(dt[`p-value` < (0.05/ .N),.(unique(gene))])))
+a1 <- ggplot(results_df,aes(PC,nhit)) + geom_point() +geom_smooth() + geom_hline(yintercept = nrow(ctp_res[FDR < 0.05,.(unique(gene))]),linetype="dashed")  + annotate(geom="text",y=4200,x=10,label="Hits detected with cell type 5 proportion PCs") + theme_classic() + labs(y="# mQTLs Detected", x = "# PCs Included")#+ ggtitle("CpG sites on chr21 with one mQTL Vs Methylation PCs included")
 ```
 

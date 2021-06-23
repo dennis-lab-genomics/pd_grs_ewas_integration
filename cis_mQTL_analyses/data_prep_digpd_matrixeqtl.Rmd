@@ -13,25 +13,27 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 digpd_pcs <- fread("~/genotype_qc/eigenvectors.txt")
-digpd_metadata <- fread("/home1/NEURO/SHARE_DECIPHER/digpd_meta_master.csv") %>% select(-PD) %>% mutate(IID = gsub("PAL_[0-9]*_","",IID))
-digpd_meta <- digpd_metadata%>% left_join(digpd_pcs,by=c("IID"))
+digpd_CTP <- fread("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/DIGPD_processed_2021/meta_DIGPD_visit1_robCTP_ancestryPCs.txt")#fread("/home1/NEURO/SHARE_DECIPHER/digpd_meta_master.csv") %>% select(-PD) %>% mutate(IID = gsub("PAL_[0-9]*_","",IID))
+digpd_CTP[,`:=`(patient = gsub(".visit.*","", as.character(Sample_Name)))]
+digpd_map <- fread("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/sampleInfo_revised/digpd_meta_master.csv")[,.(IID = gsub("_PAL.*","",IID),patient)]
+digpd_meta <- digpd_map %>% left_join(digpd_CTP[,.(patient,PD,Age,men,CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,CTP_PC5)],by="patient") %>% left_join(digpd_pcs, by="IID") %>% na.omit() %>% unique()
 genotype <- fread("~/genotype_qc/DIGPD_merged_post_imputation_QC/raw_data.imputed.r2_90.maf_mismatch.traw")
-load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/DIGPD/DIGPDvisit1_betas_combat.RData")#betas_sub
-
+load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/DIGPD_processed_2021/DIGPD_betas_combat.RData") #DIGPD/DIGPDvisit1_betas_combat.RData")#betas_sub
 ```
 
 ## Match Samples
 ```{r}
-colnames(genotype) <- gsub("PAL_[0-9]*_|AOR.*_(AOR.*)","\\1",colnames(genotype))
+betas_sub <- betas_combat
+colnames(betas_sub) <- gsub(".visit.*","",colnames(betas_sub))
+colnames(genotype) <- gsub("_PAL.*|_AOR.*","",colnames(genotype))
 colnames(genotype)
-digpd_meta$patient <- paste0(digpd_meta$patient,".visit",digpd_meta$visite)
-digpd_meta <- digpd_meta %>% filter(IID %in% colnames(genotype)& patient %in% colnames(betas_sub))
+digpd_meta <- digpd_meta %>% filter(IID %in% colnames(genotype),patient %in% colnames(betas_sub))
+new_cols <- c(colnames(genotype)[1:6],colnames(genotype)[7:ncol(genotype)][colnames(genotype)[7:ncol(genotype)] %in% digpd_meta$IID])
+genotype <- genotype[,..new_cols]
 setcolorder(genotype,neworder = c(colnames(genotype)[1:6],digpd_meta$IID))
 
 betas_sub <- betas_sub[,digpd_meta$patient]
 colnames(betas_sub) <- digpd_meta$IID
-
-
 ```
 ```{r}
 all(colnames(betas_sub) == digpd_meta$IID)
@@ -85,11 +87,45 @@ chr21_cpg <- methy_annot[Name %in% rownames(betas_sub) & CHR == 21,]$Name
 write_delim(betas_sub %>% as.data.frame() %>%rownames_to_column("cpg") %>% filter(cpg %in% chr21_cpg),"digpd_data/methylation_combat_chr21.txt")
 ```
 
+## Write CTP covars
+```{r}
+covar <- digpd_meta[,.(PD=PD,age=Age,sex=men,V3=U1,V4=U2,V5=U3,CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,CTP_PC5)]
+write_delim(t(covar) %>% as.data.frame() %>% rownames_to_column("id"),"digpd_data/covariates_CTP.txt")
+```
+## Write CTP data
+```{r}
+fwrite(betas_sub %>% as.data.frame() %>%rownames_to_column("cpg"),"digpd_data/methylation_combat_CTP.txt",sep=" ",quote=F)
+#SNP POS
+write_delim(genotype[,.(SNP,CHR=paste0("chr",CHR),POS)],"digpd_data/snp_pos_CTP.txt")
+#SNPs
+geno_vars <- colnames(genotype)[-c(1,3:6)]
+fwrite(genotype[,..geno_vars],"digpd_data/all_imputed_matrixeQTL_CTP.txt",sep = " ",quote = F)
+#Methy POS
+fwrite(methy_annot[Name %in% rownames(betas_sub),.(geneid=Name, chr=paste0("chr",CHR),s1=MAPINFO,s2=MAPINFO)], "digpd_data/probe_pos_CTP.txt",sep = " ",quote=F)
+#methy
+fwrite(betas_sub %>% as.data.frame() %>%rownames_to_column("cpg"),"digpd_data/methylation_combat_CTP.txt",sep=" ",quote=F)
+```
 
 #Checking number of PCs
 
 ```{r}
-pc_res <- lapply(0:20,function(i)fread(sprintf("digpd_data/cis_all_impute_mQTL_results_%d_methy_PCi_chr21.txt",i)))
-results_df <- data.frame(PC=0:20,nhit = sapply(pc_res,function(dt)nrow(dt[FDR < 0.05])))
-ggplot(results_df,aes(PC,nhit)) + geom_point() +geom_smooth()
+pc_res <- lapply(0:20,function(i)fread(sprintf("digpd_data/cis_all_impute_mQTL_results_%d_methy_PCi_chr21.txt.gz",i)))
+results_df <- data.frame(PC=0:20,nhit = sapply(pc_res,function(dt)nrow(dt[`p-value` < (0.05/.N)])))
+a2 <- ggplot(results_df,aes(PC,nhit)) + geom_point() +geom_smooth() + theme_classic() + labs(y="# mQTLs Detected", x = "# PCs Included")
 ```
+#Checking number of PCs(TERRE)
+
+```{r}
+pc_res <- lapply(0:20,function(i)fread(sprintf("terre_data/cis_all_impute_mQTL_results_%d_methy_PC_chr21.txt.gz",i)))
+ctp_res <- fread("terre_data/cis_all_impute_mQTL_results_CTP_chr21.txt.gz")
+results_df <- data.frame(PC=0:20,nhit = sapply(pc_res,function(dt)nrow(dt[FDR < 0.05])))
+ggplot(results_df,aes(PC,nhit)) + geom_point() +geom_smooth() + geom_hline(yintercept = nrow(ctp_res[FDR < 0.05]),linetype="dashed")+ annotate(geom="text",y=240500,x=10,label="Hits detected with CTP PC") + ggtitle("mQTLs detected on chr21 Vs Methylation PCs included")
+
+results_df <- data.frame(PC=0:20,nhit = sapply(pc_res,function(dt)nrow(dt[`p-value` < (0.05/ .N),])))
+a1 <- ggplot(results_df,aes(PC,nhit)) + geom_point() +geom_smooth() + geom_hline(yintercept = nrow(ctp_res[`p-value` < (0.05/.N),]),linetype="dashed")  + annotate(geom="text",y=nrow(ctp_res[`p-value` < (0.05/.N),])+ 500,x=10,label="Hits detected with 5 cell type proportion PCs",size=3) + theme_classic() + labs(y="# mQTLs Detected", x = "# PCs Included")#+ ggtitle("CpG sites on chr21 with one mQTL Vs Methylation PCs included")
+a1
+```
+```{r}
+cowplot::plot_grid(a1,a2,labels="AUTO")
+```
+
