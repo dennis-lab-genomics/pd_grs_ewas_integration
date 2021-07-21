@@ -70,4 +70,3 @@ write_delim(methy_annot[Name %in% rownames(betas_sub),.(geneid=Name, chr=paste0(
 chr21_cpg <- methy_annot[Name %in% rownames(betas_sub) & CHR == 21,]$Name
 #methy
 write_delim(betas_sub %>% as.data.frame() %>%rownames_to_column("cpg") %>% filter(cpg %in% chr21_cpg),"terre_data/methylation_combat_chr21.txt")
-

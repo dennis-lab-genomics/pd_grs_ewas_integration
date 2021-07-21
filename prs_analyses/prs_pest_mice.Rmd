@@ -19,23 +19,22 @@ Before I suspect I was combining effects from limma incorrectly. So I re-rolled 
 
 ```{r}
 pesticide_interactions <- fread("prs_interaction_result.txt.gz")
-for(cur_env in unique(pesticide_interactions$env)){
-  plots[[cur_env]] <- as.grob(~qq(pesticide_interactions[pesticide_interactions$env == cur_env,]$GxEp,main = cur_env))
+for (cur_env in unique(pesticide_interactions$env)) {
+  plots[[cur_env]] <- as.grob(~ qq(pesticide_interactions[pesticide_interactions$env == cur_env, ]$GxEp, main = cur_env))
 }
 ```
 ```{r, fig.width=11,fig.height=12}
-do.call(plot_grid,plots)
+do.call(plot_grid, plots)
 ```
 
 ## Filtering sumstats based on within-exposure FDR
 ```{r}
-manifest <- fread("~/MethylationEPIC_v-1-0_B4.csv",skip = 7,fill=TRUE)
-pesticide_interactions[, c("GxEq") := .(p.adjust(GxEp,method="BH")) , by="env"]
+manifest <- fread("~/MethylationEPIC_v-1-0_B4.csv", skip = 7, fill = TRUE)
+pesticide_interactions[, c("GxEq") := .(p.adjust(GxEp, method = "BH")), by = "env"]
 sig_interactions <- pesticide_interactions[GxEq < 0.25][order(GxEq)]
 ```
 ```{r}
-merge(sig_interactions,manifest,by.x = "cpg", by.y = "Name")[,.(cpg,env,GxEp,GxEq,Relation_to_UCSC_CpG_Island,UCSC_RefGene_Name)][order(GxEq)]
+merge(sig_interactions, manifest, by.x = "cpg", by.y = "Name")[, .(cpg, env, GxEp, GxEq, Relation_to_UCSC_CpG_Island, UCSC_RefGene_Name)][order(GxEq)]
 
-merge(sig_interactions,manifest,by.x = "cpg", by.y = "Name")[,.(cpg,env,GxEp,GxEq,Relation_to_UCSC_CpG_Island,UCSC_RefGene_Name)][order(GxEq)] %>% write.csv(quote=F)
+merge(sig_interactions, manifest, by.x = "cpg", by.y = "Name")[, .(cpg, env, GxEp, GxEq, Relation_to_UCSC_CpG_Island, UCSC_RefGene_Name)][order(GxEq)] %>% write.csv(quote = F)
 ```
-

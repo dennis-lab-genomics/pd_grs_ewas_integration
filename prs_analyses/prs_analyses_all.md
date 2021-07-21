@@ -29,7 +29,7 @@ Generate PRS using `plink2 --score`:
 ``` r
 terre_prs <- fread("terre_prs.sscore")
 terre_pcs <- fread("~/genotype_qc/TERRE_QC/raw_data.geno.maf.mind.sex_check.het_filter.ibd_filter.eigenvec")
-terre_metadata <- read.csv("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv") %>% 
+terre_metadata <- read.csv("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv") %>%
   mutate(
     FID = gsub("(PAE_[0-9]*_[1-9]*)_.*","\\1",FID),
     IID = gsub("(PAE_[0-9]*_[1-9]*)_.*","\\1",IID)
@@ -46,7 +46,7 @@ pd_h2 <- function(R2O,case_prop,prevalence=0.22){
   thd <- -1 * qnorm(K,0,1)
   zv <- dnorm(thd) #z (normal density)
   mv <- zv/K #mean liability for case
-  theta <- mv*(P-K)/(1-K)*(mv*(P-K)/(1-K)-thd) #θ in equation 
+  theta <- mv*(P-K)/(1-K)*(mv*(P-K)/(1-K)-thd) #θ in equation
   cv <- K*(1-K)/zv^2*K*(1-K)/(P*(1-P)) #C in
   return(R2O*cv/(1+R2O*theta*cv))
 }
@@ -54,33 +54,33 @@ fit1 <- glm(PD ~ SCORE1_AVG + men + age + V3 + V4 + V5, data=all_data,family="bi
 summary(fit1)
 ```
 
-    ## 
+    ##
     ## Call:
-    ## glm(formula = PD ~ SCORE1_AVG + men + age + V3 + V4 + V5, family = "binomial", 
+    ## glm(formula = PD ~ SCORE1_AVG + men + age + V3 + V4 + V5, family = "binomial",
     ##     data = all_data)
-    ## 
-    ## Deviance Residuals: 
-    ##     Min       1Q   Median       3Q      Max  
-    ## -1.2848  -0.9247  -0.7438   1.2828   1.8974  
-    ## 
+    ##
+    ## Deviance Residuals:
+    ##     Min       1Q   Median       3Q      Max
+    ## -1.2848  -0.9247  -0.7438   1.2828   1.8974
+    ##
     ## Coefficients:
-    ##               Estimate Std. Error z value Pr(>|z|)   
-    ## (Intercept)  -0.214332   1.389442  -0.154  0.87741   
+    ##               Estimate Std. Error z value Pr(>|z|)
+    ## (Intercept)  -0.214332   1.389442  -0.154  0.87741
     ## SCORE1_AVG  119.851470  37.440324   3.201  0.00137 **
-    ## men           0.015331   0.282655   0.054  0.95674   
-    ## age          -0.004509   0.020867  -0.216  0.82892   
-    ## V3           -1.432036   2.222793  -0.644  0.51941   
-    ## V4            3.669214   2.340954   1.567  0.11702   
-    ## V5           -1.986483   2.311060  -0.860  0.39003   
+    ## men           0.015331   0.282655   0.054  0.95674
+    ## age          -0.004509   0.020867  -0.216  0.82892
+    ## V3           -1.432036   2.222793  -0.644  0.51941
+    ## V4            3.669214   2.340954   1.567  0.11702
+    ## V5           -1.986483   2.311060  -0.860  0.39003
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
+    ##
     ## (Dispersion parameter for binomial family taken to be 1)
-    ## 
+    ##
     ##     Null deviance: 312.35  on 244  degrees of freedom
     ## Residual deviance: 298.96  on 238  degrees of freedom
     ## AIC: 312.96
-    ## 
+    ##
     ## Number of Fisher Scoring iterations: 4
 
 ``` r
@@ -88,15 +88,15 @@ fit1_null <- glm(PD ~  men + age + V3 + V4 + V5, data=all_data,family="binomial"
 summary(fit1_null)
 ```
 
-    ## 
+    ##
     ## Call:
-    ## glm(formula = PD ~ men + age + V3 + V4 + V5, family = "binomial", 
+    ## glm(formula = PD ~ men + age + V3 + V4 + V5, family = "binomial",
     ##     data = all_data)
-    ## 
-    ## Deviance Residuals: 
-    ##     Min       1Q   Median       3Q      Max  
-    ## -1.0954  -0.9182  -0.8456   1.3984   1.7004  
-    ## 
+    ##
+    ## Deviance Residuals:
+    ##     Min       1Q   Median       3Q      Max
+    ## -1.0954  -0.9182  -0.8456   1.3984   1.7004
+    ##
     ## Coefficients:
     ##              Estimate Std. Error z value Pr(>|z|)
     ## (Intercept) -0.368143   1.354648  -0.272    0.786
@@ -105,13 +105,13 @@ summary(fit1_null)
     ## V3          -1.585982   2.183250  -0.726    0.468
     ## V4           2.822024   2.270368   1.243    0.214
     ## V5          -0.945567   2.238829  -0.422    0.673
-    ## 
+    ##
     ## (Dispersion parameter for binomial family taken to be 1)
-    ## 
+    ##
     ##     Null deviance: 312.35  on 244  degrees of freedom
     ## Residual deviance: 309.95  on 239  degrees of freedom
     ## AIC: 321.95
-    ## 
+    ##
     ## Number of Fisher Scoring iterations: 4
 
 ``` r
@@ -119,28 +119,28 @@ nagelkerke(fit1,null=fit1_null)
 ```
 
     ## $Models
-    ##                                                                             
+    ##
     ## Model: "glm, PD ~ SCORE1_AVG + men + age + V3 + V4 + V5, binomial, all_data"
-    ## Null:  "glm, PD ~ men + age + V3 + V4 + V5, binomial, all_data"             
-    ## 
+    ## Null:  "glm, PD ~ men + age + V3 + V4 + V5, binomial, all_data"
+    ##
     ## $Pseudo.R.squared.for.model.vs.null
     ##                              Pseudo.R.squared
     ## McFadden                            0.0354693
     ## Cox and Snell (ML)                  0.0438810
     ## Nagelkerke (Cragg and Uhler)        0.0611331
-    ## 
+    ##
     ## $Likelihood.ratio.test
     ##  Df.diff LogLik.diff  Chisq    p.value
     ##       -1     -5.4969 10.994 0.00091414
-    ## 
+    ##
     ## $Number.of.observations
-    ##           
+    ##
     ## Model: 245
     ## Null:  245
-    ## 
+    ##
     ## $Messages
     ## [1] "Note: For models fit with REML, these statistics are based on refitting with ML"
-    ## 
+    ##
     ## $Warnings
     ## [1] "None"
 
@@ -154,33 +154,33 @@ fit2 <- glm(PD ~ SCORE1_AVG*men + V3+V4+V5, data = all_data, family="binomial")
 summary(fit2)
 ```
 
-    ## 
+    ##
     ## Call:
-    ## glm(formula = PD ~ SCORE1_AVG * men + V3 + V4 + V5, family = "binomial", 
+    ## glm(formula = PD ~ SCORE1_AVG * men + V3 + V4 + V5, family = "binomial",
     ##     data = all_data)
-    ## 
-    ## Deviance Residuals: 
-    ##     Min       1Q   Median       3Q      Max  
-    ## -1.2610  -0.9296  -0.7459   1.2801   1.8999  
-    ## 
+    ##
+    ## Deviance Residuals:
+    ##     Min       1Q   Median       3Q      Max
+    ## -1.2610  -0.9296  -0.7459   1.2801   1.8999
+    ##
     ## Coefficients:
-    ##                Estimate Std. Error z value Pr(>|z|)  
+    ##                Estimate Std. Error z value Pr(>|z|)
     ## (Intercept)     -0.5158     0.2170  -2.377   0.0175 *
     ## SCORE1_AVG     116.5672    52.4905   2.221   0.0264 *
-    ## men              0.0160     0.2962   0.054   0.9569  
-    ## V3              -1.4944     2.2231  -0.672   0.5015  
-    ## V4               3.7077     2.3346   1.588   0.1123  
-    ## V5              -1.9531     2.3101  -0.845   0.3978  
-    ## SCORE1_AVG:men   6.7032    73.9033   0.091   0.9277  
+    ## men              0.0160     0.2962   0.054   0.9569
+    ## V3              -1.4944     2.2231  -0.672   0.5015
+    ## V4               3.7077     2.3346   1.588   0.1123
+    ## V5              -1.9531     2.3101  -0.845   0.3978
+    ## SCORE1_AVG:men   6.7032    73.9033   0.091   0.9277
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
+    ##
     ## (Dispersion parameter for binomial family taken to be 1)
-    ## 
+    ##
     ##     Null deviance: 312.35  on 244  degrees of freedom
     ## Residual deviance: 299.00  on 238  degrees of freedom
     ## AIC: 313
-    ## 
+    ##
     ## Number of Fisher Scoring iterations: 4
 
 ``` r
@@ -188,34 +188,34 @@ fit3 <- glm(PD~SCORE1_AVG*smoking + V3+V4+V5, data=all_data, family="binomial")
 summary(fit3)
 ```
 
-    ## 
+    ##
     ## Call:
-    ## glm(formula = PD ~ SCORE1_AVG * smoking + V3 + V4 + V5, family = "binomial", 
+    ## glm(formula = PD ~ SCORE1_AVG * smoking + V3 + V4 + V5, family = "binomial",
     ##     data = all_data)
-    ## 
-    ## Deviance Residuals: 
-    ##     Min       1Q   Median       3Q      Max  
-    ## -1.3411  -0.9455  -0.7065   1.2100   2.1931  
-    ## 
+    ##
+    ## Deviance Residuals:
+    ##     Min       1Q   Median       3Q      Max
+    ## -1.3411  -0.9455  -0.7065   1.2100   2.1931
+    ##
     ## Coefficients:
-    ##                    Estimate Std. Error z value Pr(>|z|)  
-    ## (Intercept)          0.1389     0.3692   0.376   0.7069  
-    ## SCORE1_AVG          44.9593   100.8567   0.446   0.6558  
+    ##                    Estimate Std. Error z value Pr(>|z|)
+    ## (Intercept)          0.1389     0.3692   0.376   0.7069
+    ## SCORE1_AVG          44.9593   100.8567   0.446   0.6558
     ## smoking             -0.4668     0.2562  -1.822   0.0684 .
-    ## V3                  -1.9876     2.2224  -0.894   0.3711  
+    ## V3                  -1.9876     2.2224  -0.894   0.3711
     ## V4                   4.0161     2.3495   1.709   0.0874 .
-    ## V5                  -2.2174     2.3441  -0.946   0.3442  
-    ## SCORE1_AVG:smoking  62.8430    78.6818   0.799   0.4245  
+    ## V5                  -2.2174     2.3441  -0.946   0.3442
+    ## SCORE1_AVG:smoking  62.8430    78.6818   0.799   0.4245
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
+    ##
     ## (Dispersion parameter for binomial family taken to be 1)
-    ## 
+    ##
     ##     Null deviance: 311.53  on 243  degrees of freedom
     ## Residual deviance: 292.46  on 237  degrees of freedom
     ##   (1 observation deleted due to missingness)
     ## AIC: 306.46
-    ## 
+    ##
     ## Number of Fisher Scoring iterations: 4
 
 ``` r
@@ -223,34 +223,34 @@ fit4 <- glm(PD~SCORE1_AVG*pesticides + V3+V4+V5, data=all_data, family="binomial
 summary(fit4)
 ```
 
-    ## 
+    ##
     ## Call:
-    ## glm(formula = PD ~ SCORE1_AVG * pesticides + V3 + V4 + V5, family = "binomial", 
+    ## glm(formula = PD ~ SCORE1_AVG * pesticides + V3 + V4 + V5, family = "binomial",
     ##     data = all_data)
-    ## 
-    ## Deviance Residuals: 
-    ##     Min       1Q   Median       3Q      Max  
-    ## -1.3710  -0.9186  -0.7153   1.2236   1.9920  
-    ## 
+    ##
+    ## Deviance Residuals:
+    ##     Min       1Q   Median       3Q      Max
+    ## -1.3710  -0.9186  -0.7153   1.2236   1.9920
+    ##
     ## Coefficients:
-    ##                       Estimate Std. Error z value Pr(>|z|)   
+    ##                       Estimate Std. Error z value Pr(>|z|)
     ## (Intercept)            -0.7068     0.2701  -2.617  0.00887 **
-    ## SCORE1_AVG            121.7047    72.6641   1.675  0.09396 . 
-    ## pesticides              0.1518     0.1806   0.841  0.40062   
-    ## V3                     -1.6339     2.4207  -0.675  0.49970   
-    ## V4                      4.8800     2.4935   1.957  0.05034 . 
-    ## V5                     -1.5242     2.4457  -0.623  0.53314   
-    ## SCORE1_AVG:pesticides  10.8645    47.7560   0.228  0.82003   
+    ## SCORE1_AVG            121.7047    72.6641   1.675  0.09396 .
+    ## pesticides              0.1518     0.1806   0.841  0.40062
+    ## V3                     -1.6339     2.4207  -0.675  0.49970
+    ## V4                      4.8800     2.4935   1.957  0.05034 .
+    ## V5                     -1.5242     2.4457  -0.623  0.53314
+    ## SCORE1_AVG:pesticides  10.8645    47.7560   0.228  0.82003
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
+    ##
     ## (Dispersion parameter for binomial family taken to be 1)
-    ## 
+    ##
     ##     Null deviance: 284.23  on 223  degrees of freedom
     ## Residual deviance: 268.00  on 217  degrees of freedom
     ##   (21 observations deleted due to missingness)
     ## AIC: 282
-    ## 
+    ##
     ## Number of Fisher Scoring iterations: 4
 
 ``` r
@@ -258,27 +258,27 @@ fit_null <- glm(PD ~ SCORE1_AVG, data=all_data, family="binomial")
 summary(fit_null)
 ```
 
-    ## 
+    ##
     ## Call:
     ## glm(formula = PD ~ SCORE1_AVG, family = "binomial", data = all_data)
-    ## 
-    ## Deviance Residuals: 
-    ##     Min       1Q   Median       3Q      Max  
-    ## -1.2521  -0.9289  -0.7719   1.2744   1.8661  
-    ## 
+    ##
+    ## Deviance Residuals:
+    ##     Min       1Q   Median       3Q      Max
+    ## -1.2521  -0.9289  -0.7719   1.2744   1.8661
+    ##
     ## Coefficients:
-    ##             Estimate Std. Error z value Pr(>|z|)    
+    ##             Estimate Std. Error z value Pr(>|z|)
     ## (Intercept)  -0.5142     0.1461  -3.519 0.000433 ***
-    ## SCORE1_AVG  108.9156    36.0925   3.018 0.002547 ** 
+    ## SCORE1_AVG  108.9156    36.0925   3.018 0.002547 **
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
+    ##
     ## (Dispersion parameter for binomial family taken to be 1)
-    ## 
+    ##
     ##     Null deviance: 312.35  on 244  degrees of freedom
     ## Residual deviance: 302.72  on 243  degrees of freedom
     ## AIC: 306.72
-    ## 
+    ##
     ## Number of Fisher Scoring iterations: 4
 
 ``` r
@@ -288,7 +288,7 @@ ggplot(all_data %>% mutate(PD= ifelse(PD,"CASE","CONTROL")),aes(as.factor(PD),SC
 ![plot of chunk unnamed-chunk-5](figure/unnamed-chunk-5-1.png)
 
 ``` r
-ggplot(all_data,aes(factor(men),SCORE1_AVG)) +geom_boxplot()+ geom_jitter(height=0, width=0.1) 
+ggplot(all_data,aes(factor(men),SCORE1_AVG)) +geom_boxplot()+ geom_jitter(height=0, width=0.1)
 ```
 
 ![plot of chunk unnamed-chunk-5](figure/unnamed-chunk-5-2.png)
@@ -297,32 +297,32 @@ ggplot(all_data,aes(factor(men),SCORE1_AVG)) +geom_boxplot()+ geom_jitter(height
 t.test(all_data$SCORE1_AVG[as.logical(all_data$PD)],all_data$SCORE1_AVG[!as.logical(all_data$PD)],alternative = "greater")
 ```
 
-    ## 
+    ##
     ##  Welch Two Sample t-test
-    ## 
+    ##
     ## data:  all_data$SCORE1_AVG[as.logical(all_data$PD)] and all_data$SCORE1_AVG[!as.logical(all_data$PD)]
     ## t = 3.027, df = 149.93, p-value = 0.001454
     ## alternative hypothesis: true difference in means is greater than 0
     ## 95 percent confidence interval:
     ##  0.0007487552          Inf
     ## sample estimates:
-    ##     mean of x     mean of y 
+    ##     mean of x     mean of y
     ## -0.0007652869 -0.0024173617
 
 ``` r
 t.test(all_data$SCORE1_AVG[as.logical(all_data$men)],all_data$SCORE1_AVG[!as.logical(all_data$men)])
 ```
 
-    ## 
+    ##
     ##  Welch Two Sample t-test
-    ## 
+    ##
     ## data:  all_data$SCORE1_AVG[as.logical(all_data$men)] and all_data$SCORE1_AVG[!as.logical(all_data$men)]
     ## t = 0.35104, df = 234.04, p-value = 0.7259
     ## alternative hypothesis: true difference in means is not equal to 0
     ## 95 percent confidence interval:
     ##  -0.0008301797  0.0011901588
     ## sample estimates:
-    ##    mean of x    mean of y 
+    ##    mean of x    mean of y
     ## -0.001780672 -0.001960662
 
 ## PRS vs DNAm
@@ -603,8 +603,8 @@ prs_annot <- prs_res %>%rownames_to_column("probe") %>% left_join(annot,by=c("pr
     ## Error in rownames_to_column(., "probe"): object 'prs_res' not found
 
 ``` r
-ggplot(prs_annot,aes(logFC,-log10(P.Value)))+ 
-  geom_point() + 
+ggplot(prs_annot,aes(logFC,-log10(P.Value)))+
+  geom_point() +
   geom_text_repel(
     data=prs_annot%>% filter(abs(logFC) > 0.03 & adj.P.Val < 0.05),
     color="dodgerblue",
@@ -622,7 +622,7 @@ ggplot(prs_annot,aes(logFC,-log10(P.Value)))+
     yintercept = min(-log10(prs_annot$P.Value[prs_annot$adj.P.Val <0.05]))
   ) +
   geom_vline(linetype="dashed",xintercept = 0.03) +
-  geom_vline(linetype="dashed",xintercept = -0.03)+ 
+  geom_vline(linetype="dashed",xintercept = -0.03)+
   ggtitle("Cases and Controls")
 ```
 
@@ -650,7 +650,7 @@ ggplot(case_annot,aes(logFC,-log10(P.Value)))+
     mapping=aes(logFC,-log10(P.Value),label=gene)
   ) +
   geom_point(
-    data=subset(case_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03 & !probe %in% prs_highlight$probe), 
+    data=subset(case_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03 & !probe %in% prs_highlight$probe),
     color = "red",
     mapping=aes(logFC,-log10(P.Value))
   ) +
@@ -660,18 +660,18 @@ ggplot(case_annot,aes(logFC,-log10(P.Value)))+
     mapping=aes(logFC,-log10(P.Value),label=gene)
   ) +
   geom_point(
-    data=case_annot %>% filter(probe %in% prs_highlight$probe),#subset(case_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03), 
+    data=case_annot %>% filter(probe %in% prs_highlight$probe),#subset(case_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03),
     color = "green",
     mapping=aes(logFC,-log10(P.Value))
   ) +
-  labs(x = quote(Delta~beta~Methylation)) + 
-  theme_minimal() + 
+  labs(x = quote(Delta~beta~Methylation)) +
+  theme_minimal() +
   geom_hline(
     linetype="dashed",
     yintercept = min(-log10(case_annot$P.Value[case_annot$adj.P.Val <0.05]))
   ) +
   geom_vline(linetype="dashed",xintercept = 0.03) +
-  geom_vline(linetype="dashed",xintercept = -0.03) + 
+  geom_vline(linetype="dashed",xintercept = -0.03) +
   ggtitle("Cases")
 ```
 
@@ -686,7 +686,7 @@ control_annot <- control_res %>%rownames_to_column("probe") %>% left_join(annot,
     ## Error in rownames_to_column(., "probe"): object 'control_res' not found
 
 ``` r
-ggplot(control_annot,aes(logFC,-log10(P.Value)))+ 
+ggplot(control_annot,aes(logFC,-log10(P.Value)))+
   geom_point() +
   geom_text_repel(
     data=subset(control_annot,adj.P.Val < 0.05& abs(logFC) > 0.03 & !probe %in% prs_highlight$probe),
@@ -708,10 +708,10 @@ ggplot(control_annot,aes(logFC,-log10(P.Value)))+
     color = "green",
     mapping=aes(logFC,-log10(P.Value))
   ) +
-  labs(x = quote(Delta~beta~Methylation)) + 
+  labs(x = quote(Delta~beta~Methylation)) +
   theme_minimal() + geom_hline(linetype="dashed",yintercept = min(-log10(control_annot$P.Value[control_annot$adj.P.Val <0.05]))) +
   geom_vline(linetype="dashed",xintercept = 0.03) +
-  geom_vline(linetype="dashed",xintercept = -0.03)+ 
+  geom_vline(linetype="dashed",xintercept = -0.03)+
   ggtitle("Controls")
 ```
 
@@ -721,14 +721,14 @@ ggplot(control_annot,aes(logFC,-log10(P.Value)))+
 # control_annot[control_annot$adj.P.Val <0.05,c("gene","CHR","MAPINFO","logFC","P.Value","UCSC_RefGene_Name")] %>% mutate(UCSC_RefGene_Name = sapply(UCSC_RefGene_Name,function(x)split(x)[1]))
 
 
-ggplot(pd_annot,aes(logFC,-log10(P.Value)))+ 
-  geom_point() + 
+ggplot(pd_annot,aes(logFC,-log10(P.Value)))+
+  geom_point() +
     geom_text_repel(
     data=pd_annot %>% filter(probe %in% prs_highlight$probe),#subset(pd_annot,adj.P.Val < 0.05& abs(logFC) > 0.03),
     color="dodgerblue",
     mapping=aes(logFC,-log10(P.Value),label=gene)
   ) +
-  geom_point() + 
+  geom_point() +
   geom_text_repel(
     data=pd_annot %>%filter(abs(logFC) > 0.03 & adj.P.Val < 0.05) %>% top_n(25,adj.P.Val),#subset(pd_annot,adj.P.Val < 0.05& abs(logFC) > 0.03),
     color="dodgerblue",
@@ -751,7 +751,7 @@ ggplot(pd_annot,aes(logFC,-log10(P.Value)))+
     yintercept = min(-log10(pd_annot$P.Value[pd_annot$adj.P.Val <0.05]))
   ) +
   geom_vline(linetype="dashed",xintercept = 0.03) +
-  geom_vline(linetype="dashed",xintercept = -0.03)+ 
+  geom_vline(linetype="dashed",xintercept = -0.03)+
   ggtitle("PD Diagnosis")
 ```
 
@@ -761,17 +761,17 @@ ggplot(pd_annot,aes(logFC,-log10(P.Value)))+
 library(qqman)
 ```
 
-    ## 
+    ##
 
     ## For example usage please run: vignette('qqman')
 
-    ## 
+    ##
 
     ## Citation appreciated but not required:
 
     ## Turner, S.D. qqman: an R package for visualizing GWAS results using Q-Q and manhattan plots. biorXiv DOI: 10.1101/005165 (2014).
 
-    ## 
+    ##
 
 ``` r
 qqman::qq(pd_res$P.Value)
@@ -951,35 +951,35 @@ Loading in multiple imputation data
 library(mice)
 ```
 
-    ## 
+    ##
     ## Attaching package: 'mice'
 
     ## The following objects are masked from 'package:SummarizedExperiment':
-    ## 
+    ##
     ##     cbind, rbind
 
     ## The following objects are masked from 'package:DelayedArray':
-    ## 
+    ##
     ##     cbind, rbind
 
     ## The following objects are masked from 'package:IRanges':
-    ## 
+    ##
     ##     cbind, rbind
 
     ## The following objects are masked from 'package:S4Vectors':
-    ## 
+    ##
     ##     cbind, rbind
 
     ## The following objects are masked from 'package:BiocGenerics':
-    ## 
+    ##
     ##     cbind, rbind
 
     ## The following object is masked from 'package:stats':
-    ## 
+    ##
     ##     filter
 
     ## The following objects are masked from 'package:base':
-    ## 
+    ##
     ##     cbind, rbind
 
 ``` r
@@ -1032,36 +1032,36 @@ library(missForest)
 
     ## Type rfNews() to see new features/changes/bug fixes.
 
-    ## 
+    ##
     ## Attaching package: 'randomForest'
 
     ## The following object is masked from 'package:minfi':
-    ## 
+    ##
     ##     combine
 
     ## The following object is masked from 'package:Biobase':
-    ## 
+    ##
     ##     combine
 
     ## The following object is masked from 'package:BiocGenerics':
-    ## 
+    ##
     ##     combine
 
     ## The following object is masked from 'package:dplyr':
-    ## 
+    ##
     ##     combine
 
     ## The following object is masked from 'package:ggplot2':
-    ## 
+    ##
     ##     margin
 
     ## Loading required package: itertools
 
-    ## 
+    ##
     ## Attaching package: 'itertools'
 
     ## The following object is masked from 'package:matrixStats':
-    ## 
+    ##
     ##     product
 
 ``` r
@@ -1081,7 +1081,7 @@ pest_forest <- missForest(to_impute)
 pest_forest$OOBerror
 ```
 
-    ##       PFC 
+    ##       PFC
     ## 0.0264794
 
 ``` r
@@ -1270,7 +1270,7 @@ Checking correlation between exposures:
 
 ``` r
 library(pheatmap)
-cor(reg_w_all_pesticide[,..exposures_ind]) %>% 
+cor(reg_w_all_pesticide[,..exposures_ind]) %>%
   pheatmap(main="Correlation between exposures")
 ```
 
@@ -1278,16 +1278,16 @@ cor(reg_w_all_pesticide[,..exposures_ind]) %>%
 
 ``` r
   #melt() %>%
-  #ggplot(aes(Var1,Var2,fill=value)) + geom_tile() + scale_fill_viridis_c()+ 
+  #ggplot(aes(Var1,Var2,fill=value)) + geom_tile() + scale_fill_viridis_c()+
   #theme(axis.text.x=element_text(angle=90,hjust=1,vjust=1))
-cor(reg_w_all_pesticide[PD == "CASE",..exposures_ind]) %>% 
+cor(reg_w_all_pesticide[PD == "CASE",..exposures_ind]) %>%
   pheatmap(main="Correlation between exposures cases only")
 ```
 
     ## Error in cor(reg_w_all_pesticide[PD == "CASE", ..exposures_ind]): object 'reg_w_all_pesticide' not found
 
 ``` r
-cor(reg_w_all_pesticide[PD == "CONTROL",..exposures_ind]) %>% 
+cor(reg_w_all_pesticide[PD == "CONTROL",..exposures_ind]) %>%
   pheatmap(main="Correlation between exposures controls only")
 ```
 
@@ -1446,12 +1446,12 @@ Generate PRS using `plink2 --score`:
 ~/plink2 --bfile ~/genotype_qc/DIGPD_case_QC/all_imputed_r2_30_rsid\
   --score pd_prs_file.txt list-variants\
   --out digpd_control_prs
-  
+
 ~/plink2 --bfile ~/genotype_qc/DIGPD_control_QC/all_imputed_r2_30_rsid\
   --score pd_prs_file.txt list-variants\
   --out digpd_case_prs
-  
-  
+
+
 ```
 
     ## PLINK v2.00a3LM AVX2 Intel (27 Jul 2020)       www.cog-genomics.org/plink/2.0/
@@ -1461,7 +1461,7 @@ Generate PRS using `plink2 --score`:
     ##   --bfile /home1/NEURO/casazza/genotype_qc/DIGPD_merged_post_imputation_QC/raw_data.imputed.r2_90.hard_call.maf_mismatch
     ##   --out digpd_prs
     ##   --score pd_prs_file.txt list-variants
-    ## 
+    ##
     ## Start time: Mon Apr 12 19:16:35 2021
     ## 257543 MiB RAM detected; reserving 128771 MiB for main workspace.
     ## Using up to 192 threads (change this with --threads).
@@ -1483,7 +1483,7 @@ Generate PRS using `plink2 --score`:
     ##   --bfile /home1/NEURO/casazza/genotype_qc/DIGPD_case_QC/all_imputed_r2_30_rsid
     ##   --out digpd_control_prs
     ##   --score pd_prs_file.txt list-variants
-    ## 
+    ##
     ## Start time: Mon Apr 12 19:16:37 2021
     ## 257543 MiB RAM detected; reserving 128771 MiB for main workspace.
     ## Using up to 192 threads (change this with --threads).
@@ -1498,7 +1498,7 @@ Generate PRS using `plink2 --score`:
     ##   --bfile /home1/NEURO/casazza/genotype_qc/DIGPD_control_QC/all_imputed_r2_30_rsid
     ##   --out digpd_case_prs
     ##   --score pd_prs_file.txt list-variants
-    ## 
+    ##
     ## Start time: Mon Apr 12 19:16:37 2021
     ## 257543 MiB RAM detected; reserving 128771 MiB for main workspace.
     ## Using up to 192 threads (change this with --threads).
@@ -1531,19 +1531,19 @@ ggplot(all_digpd_data,aes(PD,SCORE1_AVG)) + geom_boxplot()+ geom_jitter(height=0
 ![plot of chunk unnamed-chunk-35](figure/unnamed-chunk-35-1.png)
 
 ``` r
-t.test(all_digpd_data$SCORE1_AVG[all_digpd_data$PD == "CASE"],all_digpd_data$SCORE1_AVG[all_digpd_data$PD == "CONTROL"], alternative = "greater") 
+t.test(all_digpd_data$SCORE1_AVG[all_digpd_data$PD == "CASE"],all_digpd_data$SCORE1_AVG[all_digpd_data$PD == "CONTROL"], alternative = "greater")
 ```
 
-    ## 
+    ##
     ##  Welch Two Sample t-test
-    ## 
+    ##
     ## data:  all_digpd_data$SCORE1_AVG[all_digpd_data$PD == "CASE"] and all_digpd_data$SCORE1_AVG[all_digpd_data$PD == "CONTROL"]
     ## t = 4.3354, df = 291.68, p-value = 1.003e-05
     ## alternative hypothesis: true difference in means is greater than 0
     ## 95 percent confidence interval:
     ##  0.001030246         Inf
     ## sample estimates:
-    ##     mean of x     mean of y 
+    ##     mean of x     mean of y
     ## -0.0002357258 -0.0018990484
 
 ### PRS DIGPD PD associations
@@ -1554,32 +1554,32 @@ fit1 <- glm(PD_fixed ~ SCORE1_AVG + sex  +PC1 + PC2 + PC3, data=all_digpd_data,f
 summary(fit1)
 ```
 
-    ## 
+    ##
     ## Call:
-    ## glm(formula = PD_fixed ~ SCORE1_AVG + sex + PC1 + PC2 + PC3, 
+    ## glm(formula = PD_fixed ~ SCORE1_AVG + sex + PC1 + PC2 + PC3,
     ##     family = "binomial", data = all_digpd_data, control = list(maxit = 50))
-    ## 
-    ## Deviance Residuals: 
-    ##     Min       1Q   Median       3Q      Max  
-    ## -1.8817  -1.2958   0.7333   0.8827   1.2787  
-    ## 
+    ##
+    ## Deviance Residuals:
+    ##     Min       1Q   Median       3Q      Max
+    ## -1.8817  -1.2958   0.7333   0.8827   1.2787
+    ##
     ## Coefficients:
-    ##              Estimate Std. Error z value Pr(>|z|)    
+    ##              Estimate Std. Error z value Pr(>|z|)
     ## (Intercept)   1.05603    0.18352   5.754 8.69e-09 ***
     ## SCORE1_AVG  118.72365   29.74477   3.991 6.57e-05 ***
-    ## sexMALE      -0.25483    0.22623  -1.126    0.260    
-    ## PC1          -0.16975    1.19435  -0.142    0.887    
-    ## PC2          -0.43683    1.17803  -0.371    0.711    
-    ## PC3           0.04933    1.38546   0.036    0.972    
+    ## sexMALE      -0.25483    0.22623  -1.126    0.260
+    ## PC1          -0.16975    1.19435  -0.142    0.887
+    ## PC2          -0.43683    1.17803  -0.371    0.711
+    ## PC3           0.04933    1.38546   0.036    0.972
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
+    ##
     ## (Dispersion parameter for binomial family taken to be 1)
-    ## 
+    ##
     ##     Null deviance: 506.08  on 405  degrees of freedom
     ## Residual deviance: 488.35  on 400  degrees of freedom
     ## AIC: 500.35
-    ## 
+    ##
     ## Number of Fisher Scoring iterations: 4
 
 ``` r
@@ -1587,31 +1587,31 @@ fit1_null <- glm(PD_fixed ~ sex +PC1 + PC2 + PC3, data=all_digpd_data,family="bi
 summary(fit1_null)
 ```
 
-    ## 
+    ##
     ## Call:
-    ## glm(formula = PD_fixed ~ sex + PC1 + PC2 + PC3, family = "binomial", 
+    ## glm(formula = PD_fixed ~ sex + PC1 + PC2 + PC3, family = "binomial",
     ##     data = all_digpd_data, control = list(maxit = 50))
-    ## 
-    ## Deviance Residuals: 
-    ##     Min       1Q   Median       3Q      Max  
-    ## -1.5757  -1.4855   0.8340   0.8973   0.8999  
-    ## 
+    ##
+    ## Deviance Residuals:
+    ##     Min       1Q   Median       3Q      Max
+    ## -1.5757  -1.4855   0.8340   0.8973   0.8999
+    ##
     ## Coefficients:
-    ##             Estimate Std. Error z value Pr(>|z|)    
+    ##             Estimate Std. Error z value Pr(>|z|)
     ## (Intercept)  0.88082    0.17051   5.166 2.39e-07 ***
-    ## sexMALE     -0.17693    0.21984  -0.805    0.421    
-    ## PC1          0.06349    1.18959   0.053    0.957    
-    ## PC2         -0.20218    1.17344  -0.172    0.863    
-    ## PC3          0.04497    1.31920   0.034    0.973    
+    ## sexMALE     -0.17693    0.21984  -0.805    0.421
+    ## PC1          0.06349    1.18959   0.053    0.957
+    ## PC2         -0.20218    1.17344  -0.172    0.863
+    ## PC3          0.04497    1.31920   0.034    0.973
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
+    ##
     ## (Dispersion parameter for binomial family taken to be 1)
-    ## 
+    ##
     ##     Null deviance: 506.08  on 405  degrees of freedom
     ## Residual deviance: 505.41  on 401  degrees of freedom
     ## AIC: 515.41
-    ## 
+    ##
     ## Number of Fisher Scoring iterations: 4
 
 ``` r
@@ -1619,28 +1619,28 @@ nagelkerke(fit1,null=fit1_null)
 ```
 
     ## $Models
-    ##                                                                                                        
+    ##
     ## Model: "glm, PD_fixed ~ SCORE1_AVG + sex + PC1 + PC2 + PC3, binomial, all_digpd_data, list(maxit = 50)"
-    ## Null:  "glm, PD_fixed ~ sex + PC1 + PC2 + PC3, binomial, all_digpd_data, list(maxit = 50)"             
-    ## 
+    ## Null:  "glm, PD_fixed ~ sex + PC1 + PC2 + PC3, binomial, all_digpd_data, list(maxit = 50)"
+    ##
     ## $Pseudo.R.squared.for.model.vs.null
     ##                              Pseudo.R.squared
     ## McFadden                            0.0337664
     ## Cox and Snell (ML)                  0.0411633
     ## Nagelkerke (Cragg and Uhler)        0.0578120
-    ## 
+    ##
     ## $Likelihood.ratio.test
     ##  Df.diff LogLik.diff  Chisq    p.value
     ##       -1      -8.533 17.066 3.6103e-05
-    ## 
+    ##
     ## $Number.of.observations
-    ##           
+    ##
     ## Model: 406
     ## Null:  406
-    ## 
+    ##
     ## $Messages
     ## [1] "Note: For models fit with REML, these statistics are based on refitting with ML"
-    ## 
+    ##
     ## $Warnings
     ## [1] "None"
 
@@ -1653,33 +1653,33 @@ fit2 <- glm(PD_fixed ~ SCORE1_AVG*sex + PC1+PC2+PC3, data = all_digpd_data, fami
 summary(fit2)
 ```
 
-    ## 
+    ##
     ## Call:
-    ## glm(formula = PD_fixed ~ SCORE1_AVG * sex + PC1 + PC2 + PC3, 
+    ## glm(formula = PD_fixed ~ SCORE1_AVG * sex + PC1 + PC2 + PC3,
     ##     family = "binomial", data = all_digpd_data)
-    ## 
-    ## Deviance Residuals: 
-    ##     Min       1Q   Median       3Q      Max  
-    ## -1.8899  -1.2927   0.7305   0.8820   1.2866  
-    ## 
+    ##
+    ## Deviance Residuals:
+    ##     Min       1Q   Median       3Q      Max
+    ## -1.8899  -1.2927   0.7305   0.8820   1.2866
+    ##
     ## Coefficients:
-    ##                     Estimate Std. Error z value Pr(>|z|)    
+    ##                     Estimate Std. Error z value Pr(>|z|)
     ## (Intercept)          1.05137    0.19153   5.489 4.04e-08 ***
-    ## SCORE1_AVG         116.15002   42.91901   2.706   0.0068 ** 
-    ## sexMALE             -0.24764    0.24206  -1.023   0.3063    
-    ## PC1                 -0.17537    1.19656  -0.147   0.8835    
-    ## PC2                 -0.44147    1.17952  -0.374   0.7082    
-    ## PC3                  0.04104    1.38825   0.030   0.9764    
-    ## SCORE1_AVG:sexMALE   4.95147   59.68958   0.083   0.9339    
+    ## SCORE1_AVG         116.15002   42.91901   2.706   0.0068 **
+    ## sexMALE             -0.24764    0.24206  -1.023   0.3063
+    ## PC1                 -0.17537    1.19656  -0.147   0.8835
+    ## PC2                 -0.44147    1.17952  -0.374   0.7082
+    ## PC3                  0.04104    1.38825   0.030   0.9764
+    ## SCORE1_AVG:sexMALE   4.95147   59.68958   0.083   0.9339
     ## ---
     ## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
-    ## 
+    ##
     ## (Dispersion parameter for binomial family taken to be 1)
-    ## 
+    ##
     ##     Null deviance: 506.08  on 405  degrees of freedom
     ## Residual deviance: 488.34  on 399  degrees of freedom
     ## AIC: 502.34
-    ## 
+    ##
     ## Number of Fisher Scoring iterations: 4
 
 ``` r
@@ -1692,15 +1692,15 @@ fit3 <- glm(PD_fixed~SCORE1_AVG*smoking +sex+ PC1+PC2+PC3, data=all_digpd_data, 
 summary(fit3)
 ```
 
-    ## 
+    ##
     ## Call:
-    ## glm(formula = PD_fixed ~ SCORE1_AVG * smoking + sex + PC1 + PC2 + 
+    ## glm(formula = PD_fixed ~ SCORE1_AVG * smoking + sex + PC1 + PC2 +
     ##     PC3, family = "binomial", data = all_digpd_data)
-    ## 
-    ## Deviance Residuals: 
-    ##       Min         1Q     Median         3Q        Max  
-    ## 2.409e-06  2.409e-06  2.409e-06  2.409e-06  2.409e-06  
-    ## 
+    ##
+    ## Deviance Residuals:
+    ##       Min         1Q     Median         3Q        Max
+    ## 2.409e-06  2.409e-06  2.409e-06  2.409e-06  2.409e-06
+    ##
     ## Coefficients:
     ##                      Estimate Std. Error z value Pr(>|z|)
     ## (Intercept)         2.657e+01  5.728e+04       0        1
@@ -1711,14 +1711,14 @@ summary(fit3)
     ## PC2                -1.633e-06  2.297e+05       0        1
     ## PC3                -4.558e-06  2.591e+05       0        1
     ## SCORE1_AVG:smoking  1.014e-04  8.009e+06       0        1
-    ## 
+    ##
     ## (Dispersion parameter for binomial family taken to be 1)
-    ## 
+    ##
     ##     Null deviance: 0.0000e+00  on 268  degrees of freedom
     ## Residual deviance: 1.5606e-09  on 261  degrees of freedom
     ##   (137 observations deleted due to missingness)
     ## AIC: 16
-    ## 
+    ##
     ## Number of Fisher Scoring iterations: 25
 
 ``` r
@@ -1731,15 +1731,15 @@ fit4 <- glm(PD_fixed~SCORE1_AVG*pesticides +sex+ PC1+PC2+PC3, data=all_digpd_dat
 summary(fit4)
 ```
 
-    ## 
+    ##
     ## Call:
-    ## glm(formula = PD_fixed ~ SCORE1_AVG * pesticides + sex + PC1 + 
+    ## glm(formula = PD_fixed ~ SCORE1_AVG * pesticides + sex + PC1 +
     ##     PC2 + PC3, family = "binomial", data = all_digpd_data)
-    ## 
-    ## Deviance Residuals: 
-    ##       Min         1Q     Median         3Q        Max  
-    ## 2.409e-06  2.409e-06  2.409e-06  2.409e-06  2.409e-06  
-    ## 
+    ##
+    ## Deviance Residuals:
+    ##       Min         1Q     Median         3Q        Max
+    ## 2.409e-06  2.409e-06  2.409e-06  2.409e-06  2.409e-06
+    ##
     ## Coefficients:
     ##                         Estimate Std. Error z value Pr(>|z|)
     ## (Intercept)            2.657e+01  3.748e+04   0.001    0.999
@@ -1750,14 +1750,14 @@ summary(fit4)
     ## PC2                    7.821e-07  2.342e+05   0.000    1.000
     ## PC3                    7.970e-06  2.797e+05   0.000    1.000
     ## SCORE1_AVG:pesticides -1.282e-04  1.508e+07   0.000    1.000
-    ## 
+    ##
     ## (Dispersion parameter for binomial family taken to be 1)
-    ## 
+    ##
     ##     Null deviance: 0.0000e+00  on 248  degrees of freedom
     ## Residual deviance: 1.4446e-09  on 241  degrees of freedom
     ##   (157 observations deleted due to missingness)
     ## AIC: 16
-    ## 
+    ##
     ## Number of Fisher Scoring iterations: 25
 
 ## DIGPD PRS methylation associations

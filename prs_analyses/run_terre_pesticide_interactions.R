@@ -7,7 +7,7 @@ load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE/TERRE_betas_combat.R
 
 terre_prs <- fread("terre_prs.sscore")
 terre_pcs <- fread("~/genotype_qc/TERRE_QC/raw_data.geno.maf.mind.sex_check.het_filter.ibd_filter.eigenvec")
-terre_metadata <- read.csv("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv") %>% 
+terre_metadata <- read.csv("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv") %>%
   mutate(
     FID = gsub("(PAE_[0-9]*_[1-9]*)_.*","\\1",FID),
     IID = gsub("(PAE_[0-9]*_[1-9]*)_.*","\\1",IID)

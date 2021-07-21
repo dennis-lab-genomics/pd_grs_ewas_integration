@@ -54,4 +54,3 @@ pesticide_interactions[GxEq < 0.25][order(GxEq)]
 ## 7: 0.23539614
 ## 8: 0.23539614
 ```
-

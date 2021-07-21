@@ -40,7 +40,7 @@ pre_mids <- pre_mids[pre_mids$num %in% mapping$patient & !is.na(mapping$IID[matc
 pest_mids <- suppressWarnings(as.mids(pre_mids, .imp = "X_imputation_", .id = "num"))
 
 
-fit_interaction <- function(row){
+fit_interaction <- function(row) {
   df <- data.frame(
     y = unlist(methy[row$cpg, -c(1), on = "cpg"])
   )
@@ -54,7 +54,9 @@ fit_interaction <- function(row){
   tmp_df$GxE <- tmp_df$G * tmp_df$E
   df_mids <- suppressWarnings(as.mids(tmp_df))
   fit <- with(df_mids, lm(y ~ G + E + GxE + V3 + V4 + V5 + age + head_trauma + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5))
-  stats <- summary(pool(fit)) %>% select(-df) %>% column_to_rownames(var="term")
+  stats <- summary(pool(fit)) %>%
+    select(-df) %>%
+    column_to_rownames(var = "term")
   G <- stats["G", ]
   E <- stats["E", ]
   GxE <- stats["GxE", ]
@@ -68,13 +70,16 @@ manifest <- expand_grid(cpg = probe_pos$gene, env = envs)
 
 results <- mclapply(
   1:nrow(manifest),
-  function(i){
+  function(i) {
     tryCatch(
-      fit_interaction(manifest[i,]),
-      error = function(e){print(e); data.table()}
+      fit_interaction(manifest[i, ]),
+      error = function(e) {
+        print(e)
+        data.table()
+      }
     )
   },
-  mc.cores=num_cores
+  mc.cores = num_cores
 )
 
-fwrite(rbindlist(results), "prs_interaction_result.txt.gz", sep='\t', row.names=F, quote=F)
+fwrite(rbindlist(results), "prs_interaction_result.txt.gz", sep = "\t", row.names = F, quote = F)

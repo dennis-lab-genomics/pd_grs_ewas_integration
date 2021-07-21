@@ -107,30 +107,30 @@ fwrite(betas_sub %>% as.data.frame() %>%rownames_to_column("cpg"),"digpd_data/me
 ```
 ### Sex-stratified data
 ```{r}
-write_delim(t(cbind(terre_meta[,c("V3","V4","V5","age","head_trauma","men","CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5")])) %>% as.data.frame() %>% rownames_to_column("id"),"terre_data/covariates_CTP.txt")
-write_delim(t(cbind(terre_meta[,c("V3","V4","V5","PD","age","head_trauma","men","CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5")])) %>% as.data.frame() %>% rownames_to_column("id"),"terre_data/covariates_CTP_PD.txt")
+write_delim(t(cbind(digpd_meta[,c("U1","U2","U3","Age","men","CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5")])) %>% as.data.frame() %>% rownames_to_column("id"),"digpd_data/covariates_CTP.txt")
+write_delim(t(cbind(digpd_meta[,c("U1","U2","U3","PD","Age","men","CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5")])) %>% as.data.frame() %>% rownames_to_column("id"),"digpd_data/covariates_CTP_PD.txt")
 
-write_delim(t(cbind(terre_meta[terre_meta$men == 1,c("V3","V4","V5","PD","age","head_trauma","CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5")])) %>% as.data.frame() %>% rownames_to_column("id"),"terre_data/male_covariates_PD_CTP.txt")
-write_delim(t(cbind(terre_meta[terre_meta$men == 0,c("V3","V4","V5","PD","age","head_trauma","CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5")])) %>% as.data.frame() %>% rownames_to_column("id"),"terre_data/female_covariates_PD_CTP.txt")
+write_delim(t(cbind(digpd_meta[digpd_meta$men == 1,c("U1","U2","U3","PD","Age","CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5")])) %>% as.data.frame() %>% rownames_to_column("id"),"digpd_data/male_covariates_PD_CTP.txt")
+write_delim(t(cbind(digpd_meta[digpd_meta$men == 0,c("U1","U2","U3","PD","Age","CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5")])) %>% as.data.frame() %>% rownames_to_column("id"),"digpd_data/female_covariates_PD_CTP.txt")
 
 methy_annot <- fread("~/MethylationEPIC_v-1-0_B4.csv", skip = 7)
 
 #SNP POS
-write_delim(genotype[,.(SNP,CHR=paste0("chr",CHR),POS)],"terre_data/snp_pos.txt")
+write_delim(genotype[,.(SNP,CHR=paste0("chr",CHR),POS)],"digpd_data/snp_pos.txt")
 #SNPs
 geno_vars <- colnames(genotype)[-c(1,3:6)]
-geno_vars_m <- geno_vars[-(1 + which(terre_meta$men == 0))]
-geno_vars_f <- geno_vars[-(1 + which(terre_meta$men == 1))]
-fwrite(genotype[,..geno_vars],"terre_data/all_imputed_matrixeQTL.txt",sep = " ",quote = F)
-fwrite(genotype[,..geno_vars_f],"terre_data/female_all_imputed_matrixeQTL.txt",sep = " ",quote = F)
-fwrite(genotype[,..geno_vars_m],"terre_data/male_all_imputed_matrixeQTL.txt",sep = " ",quote = F)
+geno_vars_m <- geno_vars[-(1 + which(digpd_meta$men == 0))]
+geno_vars_f <- geno_vars[-(1 + which(digpd_meta$men == 1))]
+fwrite(genotype[,..geno_vars],"digpd_data/all_imputed_matrixeQTL.txt",sep = " ",quote = F)
+fwrite(genotype[,..geno_vars_f],"digpd_data/female_all_imputed_matrixeQTL.txt",sep = " ",quote = F)
+fwrite(genotype[,..geno_vars_m],"digpd_data/male_all_imputed_matrixeQTL.txt",sep = " ",quote = F)
 
 #Methy POS
-fwrite(methy_annot[Name %in% rownames(betas_combat),.(geneid=Name, chr=paste0("chr",CHR),s1=MAPINFO,s2=MAPINFO)], "terre_data/probe_pos.txt",sep = " ",quote=F)
+fwrite(methy_annot[Name %in% rownames(betas_sub),.(geneid=Name, chr=paste0("chr",CHR),s1=MAPINFO,s2=MAPINFO)], "digpd_data/probe_pos.txt",sep = " ",quote=F)
 #methy
-fwrite(betas_combat %>% as.data.frame() %>%rownames_to_column("cpg"),"terre_data/methylation_combat.txt",sep=" ",quote=F)
-fwrite(betas_combat[,terre_meta$men == 1] %>% as.data.frame() %>%rownames_to_column("cpg"),"terre_data/male_methylation_combat.txt",sep=" ",quote=F)
-fwrite(betas_combat[,terre_meta$men == 0] %>% as.data.frame() %>%rownames_to_column("cpg"),"terre_data/female_methylation_combat.txt",sep=" ",quote=F)
+fwrite(betas_sub %>% as.data.frame() %>%rownames_to_column("cpg"),"digpd_data/methylation_combat.txt",sep=" ",quote=F)
+fwrite(betas_sub[,digpd_meta$men == 1] %>% as.data.frame() %>%rownames_to_column("cpg"),"digpd_data/male_methylation_combat.txt",sep=" ",quote=F)
+fwrite(betas_sub[,digpd_meta$men == 0] %>% as.data.frame() %>%rownames_to_column("cpg"),"digpd_data/female_methylation_combat.txt",sep=" ",quote=F)
 ```
 
 #Checking number of PCs
@@ -154,4 +154,3 @@ a1
 ```{r}
 cowplot::plot_grid(a1,a2,labels="AUTO")
 ```
-

@@ -13,10 +13,12 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 # PD risk score data and matching
 ```{r}
-risk_scores <- read_xlsx("~/pd_risk_score/Supplementary materials/Table S2. Detailed summary statistics on all nominated risk variants, known and novel_.xlsx") %>% mutate(CHR = as.numeric(CHR), COUNTED = toupper(`Effect allele`), ALT = toupper(`Other allele`), POS = BP) %>% filter(!is.na(CHR))
-risk_scores %>% select(SNP,COUNTED, `Beta, all studies`) %>%
+risk_scores <- read_xlsx("~/pd_risk_score/Supplementary materials/Table S2. Detailed summary statistics on all nominated risk variants, known and novel_.xlsx") %>%
+  mutate(CHR = as.numeric(CHR), COUNTED = toupper(`Effect allele`), ALT = toupper(`Other allele`), POS = BP) %>%
+  filter(!is.na(CHR))
+risk_scores %>%
+  select(SNP, COUNTED, `Beta, all studies`) %>%
   write_delim("pd_prs_file.txt", col_names = FALSE)
-
 ```
 
 # TERRE PRS Analysis
@@ -30,160 +32,225 @@ Generate PRS using `plink2 --score`:
 ```{r}
 terre_prs <- fread("terre_prs.sscore")
 terre_pcs <- fread("~/genotype_qc/TERRE_QC/raw_data.geno.maf.mind.sex_check.het_filter.ibd_filter.eigenvec")
-terre_metadata <- read.csv("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv") %>% 
+terre_metadata <- read.csv("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv") %>%
   mutate(
-    FID = gsub("(PAE_[0-9]*_[1-9]*)_.*","\\1",FID),
-    IID = gsub("(PAE_[0-9]*_[1-9]*)_.*","\\1",IID)
+    FID = gsub("(PAE_[0-9]*_[1-9]*)_.*", "\\1", FID),
+    IID = gsub("(PAE_[0-9]*_[1-9]*)_.*", "\\1", IID)
   )
-all_data <- terre_prs %>% left_join(terre_metadata, by=c("IID")) %>% left_join(terre_pcs,by=c("IID"= "V1"))
+all_data <- terre_prs %>%
+  left_join(terre_metadata, by = c("IID")) %>%
+  left_join(terre_pcs, by = c("IID" = "V1"))
 ```
 ## Association analysis
 ```{r}
-fit1 <- glm(PD ~ SCORE1_AVG + V3 + V4 + V5, data=all_data,family="binomial")
+fit1 <- glm(PD ~ SCORE1_AVG + V3 + V4 + V5, data = all_data, family = "binomial")
 summary(fit1)
-fit2 <- glm(PD ~ SCORE1_AVG*men + V3+V4+V5, data = all_data, family="binomial")
+fit2 <- glm(PD ~ SCORE1_AVG * men + V3 + V4 + V5, data = all_data, family = "binomial")
 summary(fit2)
-fit3 <- glm(PD~SCORE1_AVG*smoking + V3+V4+V5, data=all_data, family="binomial")
+fit3 <- glm(PD ~ SCORE1_AVG * smoking + V3 + V4 + V5, data = all_data, family = "binomial")
 summary(fit3)
-fit4 <- glm(PD~SCORE1_AVG*pesticides + V3+V4+V5, data=all_data, family="binomial")
+fit4 <- glm(PD ~ SCORE1_AVG * pesticides + V3 + V4 + V5, data = all_data, family = "binomial")
 summary(fit4)
 
-fit_null <- glm(PD ~ SCORE1_AVG, data=all_data, family="binomial")
+fit_null <- glm(PD ~ SCORE1_AVG, data = all_data, family = "binomial")
 summary(fit_null)
 ```
 
 ```{r}
-ggplot(all_data %>% mutate(PD= ifelse(PD,"CASE","CONTROL")),aes(as.factor(PD),SCORE1_AVG)) +geom_boxplot()+ geom_jitter(height=0, width=0.1)+ labs(y="PRS", x = "PD Status")
-ggplot(all_data,aes(factor(men),SCORE1_AVG)) +geom_boxplot()+ geom_jitter(height=0, width=0.1) 
-t.test(all_data$SCORE1_AVG[as.logical(all_data$PD)],all_data$SCORE1_AVG[!as.logical(all_data$PD)],alternative = "greater")
-t.test(all_data$SCORE1_AVG[as.logical(all_data$men)],all_data$SCORE1_AVG[!as.logical(all_data$men)])
+ggplot(all_data %>% mutate(PD = ifelse(PD, "CASE", "CONTROL")), aes(as.factor(PD), SCORE1_AVG)) +
+  geom_boxplot() +
+  geom_jitter(height = 0, width = 0.1) +
+  labs(y = "PRS", x = "PD Status")
+ggplot(all_data, aes(factor(men), SCORE1_AVG)) +
+  geom_boxplot() +
+  geom_jitter(height = 0, width = 0.1)
+t.test(all_data$SCORE1_AVG[as.logical(all_data$PD)], all_data$SCORE1_AVG[!as.logical(all_data$PD)], alternative = "greater")
+t.test(all_data$SCORE1_AVG[as.logical(all_data$men)], all_data$SCORE1_AVG[!as.logical(all_data$men)])
 ```
 
 ## PRS vs DNAm
 
 ```{r}
 # load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE/TERRE_betas_CTC.RData")# terre_betas_CTC
-load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE/TERRE_betas_combat.RData")# betas_sub
+load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE/TERRE_betas_combat.RData") # betas_sub
 ```
 Let's check how the data looks for a random subject:
 ```{r}
-ggplot(betas_sub[,c(1,2,3,4,5)] %>% as.data.table(keep.rownames = T) %>% melt(id.vars="rn",value.name = "betas", variable.name="subject"),aes(betas,color=subject)) + geom_density()
+ggplot(betas_sub[, c(1, 2, 3, 4, 5)] %>% as.data.table(keep.rownames = T) %>% melt(id.vars = "rn", value.name = "betas", variable.name = "subject"), aes(betas, color = subject)) +
+  geom_density()
 ```
 
 ### Match DNA, PRS, and metadata
 ```{r}
-reg_all_data <- all_data[na.omit(match(colnames(betas_sub),all_data$patient)),]
-reg_all_data$sex <- ifelse(reg_all_data$men,"Male","Female")
-reg_all_data$PD <- ifelse(reg_all_data$PD,"CASE","CONTROL")
-betas_sub <- betas_sub[,colnames(betas_sub) %in% reg_all_data$patient]
+reg_all_data <- all_data[na.omit(match(colnames(betas_sub), all_data$patient)), ]
+reg_all_data$sex <- ifelse(reg_all_data$men, "Male", "Female")
+reg_all_data$PD <- ifelse(reg_all_data$PD, "CASE", "CONTROL")
+betas_sub <- betas_sub[, colnames(betas_sub) %in% reg_all_data$patient]
 all(colnames(betas_sub) == reg_all_data$patient)
 ```
 ### TERRE PRS regression vs methylation
 
 #### Differential methylation with PRS vs PD
 ```{r}
-na_row <- !apply(reg_all_data[,c("SCORE1_AVG","age","plate","sex")],1,function(x)any(is.na(x)))
-design_prs <- model.matrix(~1+SCORE1_AVG+age+plate+sex+V3+V4+V5, data=reg_all_data[na_row,])
-prs_fit <- lmFit(betas_sub[,na_row],design_prs)
+na_row <- !apply(reg_all_data[, c("SCORE1_AVG", "age", "plate", "sex")], 1, function(x) any(is.na(x)))
+design_prs <- model.matrix(~ 1 + SCORE1_AVG + age + plate + sex + V3 + V4 + V5, data = reg_all_data[na_row, ])
+prs_fit <- lmFit(betas_sub[, na_row], design_prs)
 prs_fit <- eBayes(prs_fit)
-design_pd <- model.matrix(~1+PD+age+plate+sex+V3+V4+V5, data=reg_all_data[na_row,])
-pd_fit <- lmFit(betas_sub[,na_row],design_pd)
+design_pd <- model.matrix(~ 1 + PD + age + plate + sex + V3 + V4 + V5, data = reg_all_data[na_row, ])
+pd_fit <- lmFit(betas_sub[, na_row], design_pd)
 pd_fit <- eBayes(pd_fit)
-pd_res <- topTable(pd_fit,coef=2,number = Inf)
-prs_res <- topTable(prs_fit,coef=2,number = Inf)
+pd_res <- topTable(pd_fit, coef = 2, number = Inf)
+prs_res <- topTable(prs_fit, coef = 2, number = Inf)
 ```
 ```{r}
 library(ggrepel)
-annot <- fread("~/MethylationEPIC_v-1-0_B4.csv",skip = 7)
-ggplot(pd_res,aes(logFC,-log10(P.Value)))+ geom_point()
-prs_annot <- prs_res %>%rownames_to_column("probe") %>% left_join(annot,by=c("probe"="Name"))%>% mutate(gene = gsub(";.*","",UCSC_RefGene_Name)) %>% mutate(gene= ifelse(gene == "",probe,gene))
-ggplot(prs_annot,aes(logFC,-log10(P.Value)))+ geom_point() + geom_text_repel(data=subset(prs_annot,adj.P.Val < 0.05),mapping=aes(logFC,-log10(P.Value),label=gene))
+annot <- fread("~/MethylationEPIC_v-1-0_B4.csv", skip = 7)
+ggplot(pd_res, aes(logFC, -log10(P.Value))) +
+  geom_point()
+prs_annot <- prs_res %>%
+  rownames_to_column("probe") %>%
+  left_join(annot, by = c("probe" = "Name")) %>%
+  mutate(gene = gsub(";.*", "", UCSC_RefGene_Name)) %>%
+  mutate(gene = ifelse(gene == "", probe, gene))
+ggplot(prs_annot, aes(logFC, -log10(P.Value))) +
+  geom_point() +
+  geom_text_repel(data = subset(prs_annot, adj.P.Val < 0.05), mapping = aes(logFC, -log10(P.Value), label = gene))
 ```
 ## analysis for Pesticides
 ```{r}
 pesticide <- fread("/home1/NEURO/SHARE_DECIPHER/TERRE_pesticides/pesticides_imputed.csv")
-reg_w_pesticide <- reg_all_data %>% left_join(pesticide %>% select(num,h_pico) %>% unique(), by=c("patient"="num"))
-na_row <- !apply(reg_all_data[,c("SCORE1_AVG","age","plate","sex","pesticides")],1,function(x)any(is.na(x)))
-na_row_pico <- !apply(reg_w_pesticide[,c("SCORE1_AVG","age","plate","sex","h_pico")],1,function(x)any(is.na(x)))
-design_pest <- model.matrix(~1+SCORE1_AVG*pesticides+age+plate+sex+V3+V4+V5, data=reg_all_data[na_row,])
-design_pico <- model.matrix(~1+SCORE1_AVG*h_pico+age+plate+sex+V3+V4+V5, data = reg_w_pesticide[na_row_pico,])
-betas_sub_pico <- betas_sub[,reg_w_pesticide[na_row_pico,]$patient]
-fit_pest <- eBayes(lmFit(betas_sub[,na_row],design = design_pest))
-fit_pico <- eBayes(lmFit(betas_sub_pico,design=design_pico))
+reg_w_pesticide <- reg_all_data %>% left_join(pesticide %>% select(num, h_pico) %>% unique(), by = c("patient" = "num"))
+na_row <- !apply(reg_all_data[, c("SCORE1_AVG", "age", "plate", "sex", "pesticides")], 1, function(x) any(is.na(x)))
+na_row_pico <- !apply(reg_w_pesticide[, c("SCORE1_AVG", "age", "plate", "sex", "h_pico")], 1, function(x) any(is.na(x)))
+design_pest <- model.matrix(~ 1 + SCORE1_AVG * pesticides + age + plate + sex + V3 + V4 + V5, data = reg_all_data[na_row, ])
+design_pico <- model.matrix(~ 1 + SCORE1_AVG * h_pico + age + plate + sex + V3 + V4 + V5, data = reg_w_pesticide[na_row_pico, ])
+betas_sub_pico <- betas_sub[, reg_w_pesticide[na_row_pico, ]$patient]
+fit_pest <- eBayes(lmFit(betas_sub[, na_row], design = design_pest))
+fit_pico <- eBayes(lmFit(betas_sub_pico, design = design_pico))
 
-na_row <- !apply(reg_all_data[,c("SCORE1_AVG","age","plate","sex","pesticides_work")],1,function(x)any(is.na(x)))
-design_pest_work <- model.matrix(~1+SCORE1_AVG*pesticides_work+age+plate+sex+V3+V4+V5, data=reg_all_data[na_row,])
-fit_pest_work <- eBayes(lmFit(betas_sub[,na_row],design = design_pest_work))
+na_row <- !apply(reg_all_data[, c("SCORE1_AVG", "age", "plate", "sex", "pesticides_work")], 1, function(x) any(is.na(x)))
+design_pest_work <- model.matrix(~ 1 + SCORE1_AVG * pesticides_work + age + plate + sex + V3 + V4 + V5, data = reg_all_data[na_row, ])
+fit_pest_work <- eBayes(lmFit(betas_sub[, na_row], design = design_pest_work))
 ```
 ```{r}
-res_pest <- topTable(fit_pest,coef = 10,number = Inf) 
-res_pest_work <- topTable(fit_pest_work,coef=10,number = Inf)
-res_pico <- topTable(fit_pico, coef=10,number = Inf)
-ggplot(res_pest,aes(logFC,-log10(P.Value)))+ geom_point()
-ggplot(res_pest_work,aes(logFC,-log10(P.Value)))+ geom_point()
-ggplot(res_pico,aes(logFC,-log10(P.Value)))+ geom_point()
-res_pest %>% rownames_to_column("probe") %>% filter(P.Value < (0.05/ n())) %>% left_join(annot %>% select(Name,CHR,UCSC_RefGene_Name,Relation_to_UCSC_CpG_Island,MAPINFO), by=c("probe"="Name")) %>% filter(P.Value < (0.05/n()))
-res_pest_work %>% rownames_to_column("probe") %>% filter(P.Value < (0.05/ n())) %>% left_join(annot %>% select(Name,CHR,UCSC_RefGene_Name,Relation_to_UCSC_CpG_Island,MAPINFO), by=c("probe"="Name"))%>%filter(P.Value < (0.05/n()))
-res_pico %>% rownames_to_column("probe") %>% filter(P.Value < (0.05/ n())) %>% left_join(annot %>% select(Name,CHR,UCSC_RefGene_Name,Relation_to_UCSC_CpG_Island,MAPINFO), by=c("probe"="Name"))%>%filter(P.Value < (0.05/n()))
+res_pest <- topTable(fit_pest, coef = 10, number = Inf)
+res_pest_work <- topTable(fit_pest_work, coef = 10, number = Inf)
+res_pico <- topTable(fit_pico, coef = 10, number = Inf)
+ggplot(res_pest, aes(logFC, -log10(P.Value))) +
+  geom_point()
+ggplot(res_pest_work, aes(logFC, -log10(P.Value))) +
+  geom_point()
+ggplot(res_pico, aes(logFC, -log10(P.Value))) +
+  geom_point()
+res_pest %>%
+  rownames_to_column("probe") %>%
+  filter(P.Value < (0.05 / n())) %>%
+  left_join(annot %>% select(Name, CHR, UCSC_RefGene_Name, Relation_to_UCSC_CpG_Island, MAPINFO), by = c("probe" = "Name")) %>%
+  filter(P.Value < (0.05 / n()))
+res_pest_work %>%
+  rownames_to_column("probe") %>%
+  filter(P.Value < (0.05 / n())) %>%
+  left_join(annot %>% select(Name, CHR, UCSC_RefGene_Name, Relation_to_UCSC_CpG_Island, MAPINFO), by = c("probe" = "Name")) %>%
+  filter(P.Value < (0.05 / n()))
+res_pico %>%
+  rownames_to_column("probe") %>%
+  filter(P.Value < (0.05 / n())) %>%
+  left_join(annot %>% select(Name, CHR, UCSC_RefGene_Name, Relation_to_UCSC_CpG_Island, MAPINFO), by = c("probe" = "Name")) %>%
+  filter(P.Value < (0.05 / n()))
 ```
 Checking all exposures:
 ```{r}
 library(caret)
-reg_w_all_pesticide <- reg_all_data %>% left_join(pesticide %>% unique(), by=c("patient"="num")) %>% unique() %>% filter(`_imputation_` == 1) %>% select(patient,SCORE1_AVG,age,plate,sex,V3,V4,V5,ins:gardening) %>% mutate_at(vars(ins:gardening),as.factor) %>% select_if(~length(unique(na.omit(.))) > 1) %>% filter_all(all_vars(!is.na(.)))
+reg_w_all_pesticide <- reg_all_data %>%
+  left_join(pesticide %>% unique(), by = c("patient" = "num")) %>%
+  unique() %>%
+  filter(`_imputation_` == 1) %>%
+  select(patient, SCORE1_AVG, age, plate, sex, V3, V4, V5, ins:gardening) %>%
+  mutate_at(vars(ins:gardening), as.factor) %>%
+  select_if(~ length(unique(na.omit(.))) > 1) %>%
+  filter_all(all_vars(!is.na(.)))
 pest_cols <- colnames(reg_w_all_pesticide %>% select(ins:gardening))
 res_all_pest <- list()
-for(pest_col in pest_cols){
-  tmp_df <- cbind(reg_w_all_pesticide %>% select(patient,SCORE1_AVG,age,plate,sex,V3,V4,V5),pest_col=reg_w_all_pesticide[,pest_col])
-  design_all_pest <- model.matrix(~SCORE1_AVG*pest_col+.-patient, data=tmp_df)
-  fit_all_pest <- eBayes(lmFit(betas_sub[,reg_w_all_pesticide$patient],design_all_pest))
-  res_all_pest[[pest_col]] <- topTable(fit_all_pest,coef=10)
+for (pest_col in pest_cols) {
+  tmp_df <- cbind(reg_w_all_pesticide %>% select(patient, SCORE1_AVG, age, plate, sex, V3, V4, V5), pest_col = reg_w_all_pesticide[, pest_col])
+  design_all_pest <- model.matrix(~ SCORE1_AVG * pest_col + . - patient, data = tmp_df)
+  fit_all_pest <- eBayes(lmFit(betas_sub[, reg_w_all_pesticide$patient], design_all_pest))
+  res_all_pest[[pest_col]] <- topTable(fit_all_pest, coef = 10)
 }
 ```
 Sifting through each of these tables for hits:
 ```{r}
-top_10_w_sig_pest <- rbindlist(lapply(res_all_pest[which(sapply(res_all_pest, function(df) min(df$adj.P.Val) < 0.05))],function(df)rownames_to_column(df,"probe")),idcol="pesticide")
-top_10_w_sig_pest%>% left_join(annot %>% select(Name,CHR,UCSC_RefGene_Name,Relation_to_UCSC_CpG_Island,MAPINFO), by=c("probe"="Name")) %>% mutate(gene = gsub(";.*","",UCSC_RefGene_Name)) %>% filter(adj.P.Val <0.05) %>% select(pesticide,probe,gene,CHR,MAPINFO,P.Value, adj.P.Val) %>% write_delim()
+top_10_w_sig_pest <- rbindlist(lapply(res_all_pest[which(sapply(res_all_pest, function(df) min(df$adj.P.Val) < 0.05))], function(df) rownames_to_column(df, "probe")), idcol = "pesticide")
+top_10_w_sig_pest %>%
+  left_join(annot %>% select(Name, CHR, UCSC_RefGene_Name, Relation_to_UCSC_CpG_Island, MAPINFO), by = c("probe" = "Name")) %>%
+  mutate(gene = gsub(";.*", "", UCSC_RefGene_Name)) %>%
+  filter(adj.P.Val < 0.05) %>%
+  select(pesticide, probe, gene, CHR, MAPINFO, P.Value, adj.P.Val) %>%
+  write_delim()
 ```
 Grabbing full results for all of the pesticides that show a significant interaction with the PRS:
 ```{r}
 sig_pesticides <- unlist(top_10_w_sig_pest %>% select(pesticide)) %>% unique()
 sig_pesticides_full <- list()
-for(pest_col in sig_pesticides){
-  tmp_df <- cbind(reg_w_all_pesticide %>% select(patient,SCORE1_AVG,age,plate,sex,V3,V4,V5),pest_col=reg_w_all_pesticide[,pest_col])
-  design_all_pest <- model.matrix(~SCORE1_AVG*pest_col+.-patient, data=tmp_df)
-  fit_all_pest <- eBayes(lmFit(betas_sub[,reg_w_all_pesticide$patient],design_all_pest))
-  sig_pesticides_full[[pest_col]] <- topTable(fit_all_pest,coef=10,number = Inf)
+for (pest_col in sig_pesticides) {
+  tmp_df <- cbind(reg_w_all_pesticide %>% select(patient, SCORE1_AVG, age, plate, sex, V3, V4, V5), pest_col = reg_w_all_pesticide[, pest_col])
+  design_all_pest <- model.matrix(~ SCORE1_AVG * pest_col + . - patient, data = tmp_df)
+  fit_all_pest <- eBayes(lmFit(betas_sub[, reg_w_all_pesticide$patient], design_all_pest))
+  sig_pesticides_full[[pest_col]] <- topTable(fit_all_pest, coef = 10, number = Inf)
 }
 ```
 #### print out table
 ```{r}
-master_pest_interaction_table <- rbindlist(lapply(sig_pesticides_full, function(x)x %>% rownames_to_column(var="probe")%>% filter(adj.P.Val < 0.05)  %>%left_join(annot %>% select(Name,CHR,UCSC_RefGene_Name,Relation_to_UCSC_CpG_Island,MAPINFO), by=c("probe"="Name")) %>% mutate(gene = gsub(";.*","",UCSC_RefGene_Name)) %>% mutate(gene= ifelse(gene == "",probe,gene))), idcol="pesticide")
-for(i in 1:nrow(master_pest_interaction_table)){
+master_pest_interaction_table <- rbindlist(lapply(sig_pesticides_full, function(x) {
+  x %>%
+    rownames_to_column(var = "probe") %>%
+    filter(adj.P.Val < 0.05) %>%
+    left_join(annot %>% select(Name, CHR, UCSC_RefGene_Name, Relation_to_UCSC_CpG_Island, MAPINFO), by = c("probe" = "Name")) %>%
+    mutate(gene = gsub(";.*", "", UCSC_RefGene_Name)) %>%
+    mutate(gene = ifelse(gene == "", probe, gene))
+}), idcol = "pesticide")
+for (i in 1:nrow(master_pest_interaction_table)) {
   cpg <- master_pest_interaction_table$probe[i]
   pest <- master_pest_interaction_table$pesticide[i]
-  tmp_df <- cbind(avg_beta = as.numeric(betas_sub[cpg,reg_w_all_pesticide$patient]),reg_w_all_pesticide) %>% as.data.frame()
-  p <- ggplot(tmp_df,aes_string("SCORE1_AVG","avg_beta",color=pest)) + geom_point() + geom_smooth(method="lm") + labs(x = "PRS")
+  tmp_df <- cbind(avg_beta = as.numeric(betas_sub[cpg, reg_w_all_pesticide$patient]), reg_w_all_pesticide) %>% as.data.frame()
+  p <- ggplot(tmp_df, aes_string("SCORE1_AVG", "avg_beta", color = pest)) +
+    geom_point() +
+    geom_smooth(method = "lm") +
+    labs(x = "PRS")
   print(p)
 }
 ```
 
 ```{r}
 library(ggrepel)
-for(pest_col in sig_pesticides){
-  annot_data <- sig_pesticides_full[[pest_col]] %>% rownames_to_column(var="probe")%>% left_join(annot %>% select(Name,CHR,UCSC_RefGene_Name,Relation_to_UCSC_CpG_Island,MAPINFO), by=c("probe"="Name")) %>% mutate(gene = gsub(";.*","",UCSC_RefGene_Name)) %>% mutate(gene= ifelse(gene == "",probe,gene))
-  p <- ggplot(annot_data, aes(logFC, -log10(P.Value))) + geom_point() + ggtitle(pest_col) + geom_text_repel(data=subset(annot_data,adj.P.Val < 0.05),mapping=aes(logFC,-log10(P.Value),label=gene))
+for (pest_col in sig_pesticides) {
+  annot_data <- sig_pesticides_full[[pest_col]] %>%
+    rownames_to_column(var = "probe") %>%
+    left_join(annot %>% select(Name, CHR, UCSC_RefGene_Name, Relation_to_UCSC_CpG_Island, MAPINFO), by = c("probe" = "Name")) %>%
+    mutate(gene = gsub(";.*", "", UCSC_RefGene_Name)) %>%
+    mutate(gene = ifelse(gene == "", probe, gene))
+  p <- ggplot(annot_data, aes(logFC, -log10(P.Value))) +
+    geom_point() +
+    ggtitle(pest_col) +
+    geom_text_repel(data = subset(annot_data, adj.P.Val < 0.05), mapping = aes(logFC, -log10(P.Value), label = gene))
   print(p)
 }
 ```
 manhattan for multi-hit plots
 ```{r}
-multi_hit <- c("naclo4","h_carb","h_autres")
-for(hit in multi_hit){
-  annot_data <- sig_pesticides_full[[hit]] %>% rownames_to_column(var="probe")%>% left_join(annot %>% select(Name,CHR,UCSC_RefGene_Name,Relation_to_UCSC_CpG_Island,MAPINFO), by=c("probe"="Name")) %>% mutate(gene = gsub(";.*","",UCSC_RefGene_Name)) %>% mutate(gene= ifelse(gene == "",probe,gene))
-  manhattan(annot_data %>% mutate(P=P.Value,SNP=gene, CHR=as.numeric(recode(CHR,X="23",Y="24",MT="26")),BP=MAPINFO),chrlabs = c(1:22,"X","Y"),annotateTop = F,annotatePval = 5e-6)
-
+multi_hit <- c("naclo4", "h_carb", "h_autres")
+for (hit in multi_hit) {
+  annot_data <- sig_pesticides_full[[hit]] %>%
+    rownames_to_column(var = "probe") %>%
+    left_join(annot %>% select(Name, CHR, UCSC_RefGene_Name, Relation_to_UCSC_CpG_Island, MAPINFO), by = c("probe" = "Name")) %>%
+    mutate(gene = gsub(";.*", "", UCSC_RefGene_Name)) %>%
+    mutate(gene = ifelse(gene == "", probe, gene))
+  manhattan(annot_data %>% mutate(P = P.Value, SNP = gene, CHR = as.numeric(recode(CHR, X = "23", Y = "24", MT = "26")), BP = MAPINFO), chrlabs = c(1:22, "X", "Y"), annotateTop = F, annotatePval = 5e-6)
 }
 ```
 ```{r}
-ggplot(reg_all_data,aes(SCORE1_AVG,betas_sub["cg20163478",],color = sex)) + geom_point() + geom_smooth(method="lm") + labs(y = "cg20163478 Methylation", x="PD PRS")
+ggplot(reg_all_data, aes(SCORE1_AVG, betas_sub["cg20163478", ], color = sex)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(y = "cg20163478 Methylation", x = "PD PRS")
 ```

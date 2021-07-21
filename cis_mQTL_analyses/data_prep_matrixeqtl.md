@@ -20,7 +20,7 @@ colnames(genotype) <- gsub(".*_(PAE.*)","\\1",colnames(genotype))
 colnames(genotype)
 ```
 
-    ##   [1] "CHR"       "SNP"       "(C)M"      "POS"       "COUNTED"   "ALT"      
+    ##   [1] "CHR"       "SNP"       "(C)M"      "POS"       "COUNTED"   "ALT"
     ##   [7] "PAE_015_1" "PAE_015_2" "PAE_015_3" "PAE_037_1" "PAE_037_2" "PAE_037_3"
     ##  [13] "PAE_037_4" "PAE_038_1" "PAE_038_2" "PAE_038_3" "PAE_041_1" "PAE_041_2"
     ##  [19] "PAE_041_3" "PAE_041_4" "PAE_043_1" "PAE_043_2" "PAE_043_3" "PAE_043_4"

@@ -18,170 +18,212 @@ knitr::opts_chunk$set(cache = TRUE)
 
 ```{r}
 ntests <- 126287251
-mQTL_results <- fread("terre_data/cis_all_impute_mQTL_results_CTP.txt.gz",key="gene")
+mQTL_results <- fread("terre_data/cis_all_impute_mQTL_results_CTP.txt.gz", key = "gene")
 ntests_digpd <- 71513917
 mQTL_results_digpd <- fread("digpd_data/cis_all_impute_mQTL_results_9_methy_PC.txt.gz")
 ```
 ```{r}
-mQTL_results[FDR <0.05,.(total=.N,cpgs=uniqueN(gene))]
-mQTL_results[`p-value` <(0.05 / ntests),.(total=.N,cpgs=uniqueN(gene))]
+mQTL_results[FDR < 0.05, .(total = .N, cpgs = uniqueN(gene))]
+mQTL_results[`p-value` < (0.05 / ntests), .(total = .N, cpgs = uniqueN(gene))]
 hist(mQTL_results$`p-value`)
 qq(mQTL_results$`p-value`)
 ```
 
 ```{r}
-mQTL_results_digpd[FDR <0.05,.(total=.N,cpgs=uniqueN(gene))]
-mQTL_results_digpd[`p-value` <(0.05 / ntests),.(total=.N,cpgs=uniqueN(gene))]
+mQTL_results_digpd[FDR < 0.05, .(total = .N, cpgs = uniqueN(gene))]
+mQTL_results_digpd[`p-value` < (0.05 / ntests), .(total = .N, cpgs = uniqueN(gene))]
 hist(mQTL_results_digpd$`p-value`)
 qq(mQTL_results_digpd$`p-value`)
 ```
 ### Checking replication
 ```{r}
-to_check_replication <- merge(mQTL_results[`p-value` < (0.05 / .N)],mQTL_results_digpd,by = c("SNP", "gene"))
+to_check_replication <- merge(mQTL_results[`p-value` < (0.05 / .N)], mQTL_results_digpd, by = c("SNP", "gene"))
 ```
 
 $\pi_1$ statistics
 ```{r}
 uniqueN(to_check_replication[`p-value.y` < (0.05 / nrow(mQTL_results))]$gene)
-uniqueN(to_check_replication[`p-value.y` < (0.05 / nrow(mQTL_results))]$gene) /53845
+uniqueN(to_check_replication[`p-value.y` < (0.05 / nrow(mQTL_results))]$gene) / 53845
 ```
 
 ## Colocalization with parkinson's loci
 ```{r}
 probe_pos <- fread("terre_data/probe_pos.txt")
-snp_pos <- fread("terre_data/snp_pos.txt",key="SNP")
-methy <- fread("~/cis_mQTL_analyses/terre_data/methylation_combat.txt",key="cpg")
-sum_stats <- fread("~/nallsEtAl2019_excluding23andMe_allVariants.tab.gz", key= "SNP")
-risk_scores <- read_xlsx("~/pd_risk_score/Supplementary materials/Table S2. Detailed summary statistics on all nominated risk variants, known and novel_.xlsx") %>% mutate(CHR = as.numeric(CHR), COUNTED = toupper(`Effect allele`), ALT = toupper(`Other allele`), POS = BP) %>% filter(!is.na(CHR))
-mQTL_results <- fread("terre_data/cis_all_impute_mQTL_results_9_methy_PC.txt",key="gene")
+snp_pos <- fread("terre_data/snp_pos.txt", key = "SNP")
+methy <- fread("~/cis_mQTL_analyses/terre_data/methylation_combat.txt", key = "cpg")
+sum_stats <- fread("~/nallsEtAl2019_excluding23andMe_allVariants.tab.gz", key = "SNP")
+risk_scores <- read_xlsx("~/pd_risk_score/Supplementary materials/Table S2. Detailed summary statistics on all nominated risk variants, known and novel_.xlsx") %>%
+  mutate(CHR = as.numeric(CHR), COUNTED = toupper(`Effect allele`), ALT = toupper(`Other allele`), POS = BP) %>%
+  filter(!is.na(CHR))
+mQTL_results <- fread("terre_data/cis_all_impute_mQTL_results_9_methy_PC.txt", key = "gene")
 
 # Grab CpG sites within 1MB of risk loci
-probes_1mb <- function(row){
-  probe_pos[chr == paste0("chr",row$CHR) & s1 >= row$POS - 1e6 & s1 <= row$POS + 1e6]$geneid
+probes_1mb <- function(row) {
+  probe_pos[chr == paste0("chr", row$CHR) & s1 >= row$POS - 1e6 & s1 <= row$POS + 1e6]$geneid
 }
 
-localize_per_locus <- function(i,mQTL_results=mQTL_results, snp_pos=snp_pos,has_methy=TRUE,N1=245){
-  all_probes <- unlist(probes_1mb(risk_scores[i,]))
+localize_per_locus <- function(i, mQTL_results = mQTL_results, snp_pos = snp_pos, has_methy = TRUE, N1 = 245) {
+  all_probes <- unlist(probes_1mb(risk_scores[i, ]))
   probe_res <- mclapply(
     1:length(all_probes),
-    function(j){
-      snp_set <- mQTL_results[all_probes[j],on="gene"][!duplicated(SNP)]
-      coords <- snp_pos[snp_set$SNP,on="SNP"][!duplicated(SNP)]
-      tmp_stats <- sum_stats[paste0(coords$CHR,":",coords$POS),on="SNP"]
-      if(has_methy){
-        mqtl_pval <- data.frame(beta=snp_set$beta,varbeta=snp_set$beta/ snp_set$`t-stat`,N=N1,snp=paste0(coords$CHR,":",coords$POS),sdY = sd(methy[all_probes[j],-c(1),on="cpg"]),type="quant",stringsAsFactors = F)
-      }else{
-        mqtl_pval <- data.frame(beta=snp_set$beta,N=N1,snp=paste0(coords$CHR,":",coords$POS),MAF=tmp_stats$freq,pvalues = snp_set$`p-value`, type="quant",stringsAsFactors = F)
-      
+    function(j) {
+      snp_set <- mQTL_results[all_probes[j], on = "gene"][!duplicated(SNP)]
+      coords <- snp_pos[snp_set$SNP, on = "SNP"][!duplicated(SNP)]
+      tmp_stats <- sum_stats[paste0(coords$CHR, ":", coords$POS), on = "SNP"]
+      if (has_methy) {
+        mqtl_pval <- data.frame(beta = snp_set$beta, varbeta = snp_set$beta / snp_set$`t-stat`, N = N1, snp = paste0(coords$CHR, ":", coords$POS), sdY = sd(methy[all_probes[j], -c(1), on = "cpg"]), type = "quant", stringsAsFactors = F)
+      } else {
+        mqtl_pval <- data.frame(beta = snp_set$beta, N = N1, snp = paste0(coords$CHR, ":", coords$POS), MAF = tmp_stats$freq, pvalues = snp_set$`p-value`, type = "quant", stringsAsFactors = F)
       }
-      gwas_pval <- data.frame(pvalues=tmp_stats$p,N=tmp_stats$N_cases + tmp_stats$N_controls,s =tmp_stats$N_cases/(tmp_stats$N_cases + tmp_stats$N_controls),snp=tmp_stats$SNP,type="cc",MAF=tmp_stats$freq,stringsAsFactors = F)
-      mqtl_pval <- as.list(mqtl_pval[!is.na(gwas_pval$pvalues),])
+      gwas_pval <- data.frame(pvalues = tmp_stats$p, N = tmp_stats$N_cases + tmp_stats$N_controls, s = tmp_stats$N_cases / (tmp_stats$N_cases + tmp_stats$N_controls), snp = tmp_stats$SNP, type = "cc", MAF = tmp_stats$freq, stringsAsFactors = F)
+      mqtl_pval <- as.list(mqtl_pval[!is.na(gwas_pval$pvalues), ])
       mqtl_pval$N <- unique(mqtl_pval$N)[1]
       mqtl_pval$type <- unique(mqtl_pval$type)[1]
-      gwas_pval <- as.list(gwas_pval[!is.na(gwas_pval$pvalues),])
+      gwas_pval <- as.list(gwas_pval[!is.na(gwas_pval$pvalues), ])
       gwas_pval$N <- unique(gwas_pval$N)[1]
       gwas_pval$type <- unique(gwas_pval$type)[1]
       print(j)
-      if (length(gwas_pval$snp) != 0 | length(mqtl_pval$snp != 0)){
-      res <- coloc.abf(mqtl_pval, gwas_pval)
-        return(cbind(t(data.frame(res$summary)), data.frame(probe=all_probes[j],locus=risk_scores$`Locus Number`[i],locus_snp = risk_scores$SNP[i])))
-      }else{
+      if (length(gwas_pval$snp) != 0 | length(mqtl_pval$snp != 0)) {
+        res <- coloc.abf(mqtl_pval, gwas_pval)
+        return(cbind(t(data.frame(res$summary)), data.frame(probe = all_probes[j], locus = risk_scores$`Locus Number`[i], locus_snp = risk_scores$SNP[i])))
+      } else {
         return(data.frame())
       }
     },
-    mc.cores=8
+    mc.cores = 8
   )
   return(rbindlist(probe_res))
 }
-system.time(res1 <- rbindlist(mclapply(1:nrow(risk_scores),function(i)localize_per_locus(i,mQTL_results = mQTL_results, snp_pos = snp_pos, has_methy=TRUE,N1 = 245),mc.cores = 4)))
-system.time(res1_pval <- rbindlist(mclapply(1:nrow(risk_scores),function(i)localize_per_locus(i,mQTL_results = mQTL_results, snp_pos = snp_pos, has_methy=FALSE,N1 = 245),mc.cores = 4)))
-fwrite(res1_pval,"mqtl_pd_snp_colocalization.txt", sep="\t",row.names=F,quote=F)
+system.time(res1 <- rbindlist(mclapply(1:nrow(risk_scores), function(i) localize_per_locus(i, mQTL_results = mQTL_results, snp_pos = snp_pos, has_methy = TRUE, N1 = 245), mc.cores = 4)))
+system.time(res1_pval <- rbindlist(mclapply(1:nrow(risk_scores), function(i) localize_per_locus(i, mQTL_results = mQTL_results, snp_pos = snp_pos, has_methy = FALSE, N1 = 245), mc.cores = 4)))
+fwrite(res1_pval, "mqtl_pd_snp_colocalization.txt", sep = "\t", row.names = F, quote = F)
 ```
 ## Plot out results
 ```{r}
-res1 %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3)
-res1_pval %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3)%>% filter(PP3_4 > 0.99, PP_4div3 > 5) 
-res1_pval %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3)%>% filter(PP3_4 > 0.99, PP_4div3 > 5)  %>% distinct(probe,locus)
-res1_pval %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3)%>% filter(PP3_4 > 0.99, PP_4div3 > 5)  %>% distinct(probe)
-res1_pval %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3)%>% filter(PP3_4 > 0.99, PP_4div3 > 5)  %>% distinct(locus)
+res1 %>%
+  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
+  arrange(-PP3_4, -PP_4div3)
+res1_pval %>%
+  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
+  arrange(-PP3_4, -PP_4div3) %>%
+  filter(PP3_4 > 0.99, PP_4div3 > 5)
+res1_pval %>%
+  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
+  arrange(-PP3_4, -PP_4div3) %>%
+  filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
+  distinct(probe, locus)
+res1_pval %>%
+  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
+  arrange(-PP3_4, -PP_4div3) %>%
+  filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
+  distinct(probe)
+res1_pval %>%
+  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
+  arrange(-PP3_4, -PP_4div3) %>%
+  filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
+  distinct(locus)
 ```
 ```{r}
-res1_pval %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3)%>% filter(PP3_4 > 0.99, PP_4div3 > 5)  %>% write_delim("mqtl_pd_snp_colocalized_blood.txt")
+res1_pval %>%
+  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
+  arrange(-PP3_4, -PP_4div3) %>%
+  filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
+  write_delim("mqtl_pd_snp_colocalized_blood.txt")
 ```
 
 little evidence of colocalization, let's try this analysis on top mQTL CpGs instead:
 ```{r}
-all_probes <- mQTL_results[`p-value` < 0.05 / (ntests),.(unique(gene))]$V1
+all_probes <- mQTL_results[`p-value` < 0.05 / (ntests), .(unique(gene))]$V1
 probe_res <- mclapply(
   1:length(all_probes),
-  function(j){
-    snp_set <- mQTL_results[all_probes[j],on="gene"][!duplicated(SNP)]
-    coords <- snp_pos[snp_set$SNP,on="SNP"][!duplicated(SNP)]
-    mqtl_pval <- data.frame(beta=snp_set$beta,varbeta=snp_set$beta/ snp_set$`t-stat`,N=245,snp=paste0(coords$CHR,":",coords$POS),sdY = sd(methy[all_probes[j],-c(1),on="cpg"]),type="quant",stringsAsFactors = F)
-    tmp_stats <- sum_stats[mqtl_pval$snp,on="SNP"]
-    gwas_pval <- data.frame(pvalues=tmp_stats$p,N=tmp_stats$N_cases + tmp_stats$N_controls,s =tmp_stats$N_cases/(tmp_stats$N_cases + tmp_stats$N_controls),snp=tmp_stats$SNP,type="cc",MAF=tmp_stats$freq,stringsAsFactors = F)
-    mqtl_pval <- as.list(mqtl_pval[!is.na(gwas_pval$pvalues),])
+  function(j) {
+    snp_set <- mQTL_results[all_probes[j], on = "gene"][!duplicated(SNP)]
+    coords <- snp_pos[snp_set$SNP, on = "SNP"][!duplicated(SNP)]
+    mqtl_pval <- data.frame(beta = snp_set$beta, varbeta = snp_set$beta / snp_set$`t-stat`, N = 245, snp = paste0(coords$CHR, ":", coords$POS), sdY = sd(methy[all_probes[j], -c(1), on = "cpg"]), type = "quant", stringsAsFactors = F)
+    tmp_stats <- sum_stats[mqtl_pval$snp, on = "SNP"]
+    gwas_pval <- data.frame(pvalues = tmp_stats$p, N = tmp_stats$N_cases + tmp_stats$N_controls, s = tmp_stats$N_cases / (tmp_stats$N_cases + tmp_stats$N_controls), snp = tmp_stats$SNP, type = "cc", MAF = tmp_stats$freq, stringsAsFactors = F)
+    mqtl_pval <- as.list(mqtl_pval[!is.na(gwas_pval$pvalues), ])
     mqtl_pval$N <- unique(mqtl_pval$N)[1]
     mqtl_pval$type <- unique(mqtl_pval$type)[1]
-    gwas_pval <- as.list(gwas_pval[!is.na(gwas_pval$pvalues),])
+    gwas_pval <- as.list(gwas_pval[!is.na(gwas_pval$pvalues), ])
     gwas_pval$N <- unique(gwas_pval$N)[1]
     gwas_pval$type <- unique(gwas_pval$type)[1]
     print(j)
-    if (length(gwas_pval$snp) != 0 | length(mqtl_pval$snp != 0)){
+    if (length(gwas_pval$snp) != 0 | length(mqtl_pval$snp != 0)) {
       res <- coloc.abf(mqtl_pval, gwas_pval)
-      return(cbind(t(data.frame(res$summary)), data.frame(probe=all_probes[j])))
-    }else{
+      return(cbind(t(data.frame(res$summary)), data.frame(probe = all_probes[j])))
+    } else {
       return(data.frame())
     }
   },
-  mc.cores=64
+  mc.cores = 64
 )
 
 probe_res <- rbindlist(probe_res)
 
-fwrite(probe_res,"mqtl_pd_probe_colocalization.txt", sep="\t",row.names=F,quote=F)
+fwrite(probe_res, "mqtl_pd_probe_colocalization.txt", sep = "\t", row.names = F, quote = F)
 ```
 
 ```{r}
-probe_res %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3)
-
+probe_res %>%
+  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
+  arrange(-PP3_4, -PP_4div3)
 ```
 ## check against brain mQTLs
 ```{r}
 mQTLs_brain <- fread("~/mQTLs_all.txt.gz")
-pos_brain <- unique(mQTLs_brain[,.(SNP=SNPid,CHR=paste0("chr",SNPchromosome),POS=SNPpos)])
-setkey(pos_brain,"SNP")
-mQTLs_brain <- mQTLs_brain[,.(
-    SNP=SNPid, 
-    gene=featureName,
-    beta=SpearmanRho,
-    `p-value`=pValue
-  )]
-setkey(mQTLs_brain,"gene")
+pos_brain <- unique(mQTLs_brain[, .(SNP = SNPid, CHR = paste0("chr", SNPchromosome), POS = SNPpos)])
+setkey(pos_brain, "SNP")
+mQTLs_brain <- mQTLs_brain[, .(
+  SNP = SNPid,
+  gene = featureName,
+  beta = SpearmanRho,
+  `p-value` = pValue
+)]
+setkey(mQTLs_brain, "gene")
 
 coloc_brain <- rbindlist(
   lapply(
     1:nrow(risk_scores),
-    function(i){
+    function(i) {
       localize_per_locus(
         i,
-        mQTL_results=mQTLs_brain,
-        snp_pos=pos_brain,
-        N1=468,
-        has_methy=FALSE
+        mQTL_results = mQTLs_brain,
+        snp_pos = pos_brain,
+        N1 = 468,
+        has_methy = FALSE
       )
     }
   )
 )
 ```
 ```{r}
-coloc_brain %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3) %>% filter(PP3_4 > 0.99, PP_4div3 > 5)
-coloc_brain %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3) %>% filter(PP3_4 > 0.99, PP_4div3 > 5) %>% distinct(probe,locus)
-coloc_brain %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3) %>% filter(PP3_4 > 0.99, PP_4div3 > 5) %>% distinct(probe)
-coloc_brain %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3) %>% filter(PP3_4 > 0.99, PP_4div3 > 5) %>% distinct(locus)
+coloc_brain %>%
+  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
+  arrange(-PP3_4, -PP_4div3) %>%
+  filter(PP3_4 > 0.99, PP_4div3 > 5)
+coloc_brain %>%
+  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
+  arrange(-PP3_4, -PP_4div3) %>%
+  filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
+  distinct(probe, locus)
+coloc_brain %>%
+  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
+  arrange(-PP3_4, -PP_4div3) %>%
+  filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
+  distinct(probe)
+coloc_brain %>%
+  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
+  arrange(-PP3_4, -PP_4div3) %>%
+  filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
+  distinct(locus)
 ```
 ```{r}
-coloc_brain %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3) %>% filter(PP3_4 > 0.99, PP_4div3 > 5) %>% write_delim("mqtl_pd_snp_colocalized_brain.txt")
+coloc_brain %>%
+  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
+  arrange(-PP3_4, -PP_4div3) %>%
+  filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
+  write_delim("mqtl_pd_snp_colocalized_brain.txt")
 ```
 ## Visualizing colocalization
 ```{r,fig.height=8.5, fig.height=11}
@@ -189,77 +231,84 @@ library(EnsDb.Hsapiens.v86)
 edb <- EnsDb.Hsapiens.v86
 res1_pval <- fread("mqtl_pd_snp_colocalized_blood.txt")
 coloc_brain <- fread("mqtl_pd_snp_colocalized_brain.txt")
-blood_cpg <- res1_pval %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3)%>% dplyr::filter(PP3_4 > 0.99, PP_4div3 > 5)
-brain_cpg <- coloc_brain %>% mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf/PP.H3.abf) %>% arrange(-PP3_4,-PP_4div3)%>% dplyr::filter(PP3_4 > 0.99, PP_4div3 > 5)
+blood_cpg <- res1_pval %>%
+  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
+  arrange(-PP3_4, -PP_4div3) %>%
+  dplyr::filter(PP3_4 > 0.99, PP_4div3 > 5)
+brain_cpg <- coloc_brain %>%
+  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
+  arrange(-PP3_4, -PP_4div3) %>%
+  dplyr::filter(PP3_4 > 0.99, PP_4div3 > 5)
 
 top_blood <- as.character(blood_cpg[locus %in% c("69.0")]$probe)
 top_brain <- as.character(brain_cpg[locus %in% c("69.0")]$probe)
-top_coloc_loci <- unique(c(top_blood,top_brain))
+top_coloc_loci <- unique(c(top_blood, top_brain))
 
 top_2_blood <- as.character(blood_cpg[locus %in% c("70.0")]$probe)
 top_2_brain <- as.character(brain_cpg[locus %in% c("70.0")]$probe)
-top_2_coloc_loci <- unique(c(top_2_blood,top_2_brain))
+top_2_coloc_loci <- unique(c(top_2_blood, top_2_brain))
 
-plot_cpgs_overlap <- function(cpgs, blood_highlight, brain_highlight){
+plot_cpgs_overlap <- function(cpgs, blood_highlight, brain_highlight) {
   # gather all SNPs as chr#:pos
-  unified_pos <- merge(pos_brain,snp_pos,by =c("CHR","POS"),all=TRUE)
-  cpg_coord <- probe_pos[cpgs,on="geneid"]
-  blood_coord <- probe_pos[blood_highlight,on="geneid"]
-  brain_coord <- probe_pos[brain_highlight,on="geneid"]
-  cpg_snps <- unified_pos[CHR == cpg_coord$chr & POS > min(cpg_coord$s1) -75e3 & POS < max(cpg_coord$s2) + 75e3]
+  unified_pos <- merge(pos_brain, snp_pos, by = c("CHR", "POS"), all = TRUE)
+  cpg_coord <- probe_pos[cpgs, on = "geneid"]
+  blood_coord <- probe_pos[blood_highlight, on = "geneid"]
+  brain_coord <- probe_pos[brain_highlight, on = "geneid"]
+  cpg_snps <- unified_pos[CHR == cpg_coord$chr & POS > min(cpg_coord$s1) - 75e3 & POS < max(cpg_coord$s2) + 75e3]
   cgi <- UcscTrack(
-      genome = "hg19", chromosome = unique(cpg_coord$chr), from = min(cpg_snps$POS),
-      to = max(cpg_snps$POS), track = "cpgIslandExt", trackType = "AnnotationTrack", 
-      start = "chromStart", end = "chromEnd", id = "name", shape = "box", fill = "#006400", 
-      name = "CpG Islands"
+    genome = "hg19", chromosome = unique(cpg_coord$chr), from = min(cpg_snps$POS),
+    to = max(cpg_snps$POS), track = "cpgIslandExt", trackType = "AnnotationTrack",
+    start = "chromStart", end = "chromEnd", id = "name", shape = "box", fill = "#006400",
+    name = "CpG Islands"
   )
   reg <- UcscTrack(
-      genome = "hg19", chromosome = unique(cpg_coord$chr), from = min(cpg_snps$POS), 
-      to = max(cpg_snps$POS), track = "Broad ChromHMM", trackType = "AnnotationTrack", 
-      start = "chromStart", end = "chromEnd", feature = "name", shape = "box",
-      name = "Broad ChromHMM Annotation", groupAnnotation="group", group="name",just.group="left",collapse=TRUE,mergeGroups=TRUE,
-      `1_Active_Promoter`	 = 	"red"	,
-      `2_Weak_Promoter`	 = 	"salmon"	,
-      `3_Poised_Promoter`	 = 	"purple"	,
-      `4_Strong_Enhancer`	 = 	"orange"	,
-      `6_Weak_Enhancer`	 = 	"orange"	,
-      `7_Weak_Enhancer`	 = 	"yellow"	,
-      `8_Insulator`	 = 	"yellow"	,
-      `9_Txn_Transition`	 = 	"lightblue"	,
-      `10_Txn_Elongation`	 = 	"darkgreen"	,
-      `11_Weak_Txn`	 = 	"lightgreen"	,
-      `12_Repressed`	 = 	"gray"	,
-      `13_Heterochrom/lo`	 = 	"lightgray"	,
-      `15_Repetitive/CNV`	 = 	"lightgray"
+    genome = "hg19", chromosome = unique(cpg_coord$chr), from = min(cpg_snps$POS),
+    to = max(cpg_snps$POS), track = "Broad ChromHMM", trackType = "AnnotationTrack",
+    start = "chromStart", end = "chromEnd", feature = "name", shape = "box",
+    name = "Broad ChromHMM Annotation", groupAnnotation = "group", group = "name", just.group = "left", collapse = TRUE, mergeGroups = TRUE,
+    `1_Active_Promoter` = "red",
+    `2_Weak_Promoter` = "salmon",
+    `3_Poised_Promoter` = "purple",
+    `4_Strong_Enhancer` = "orange",
+    `6_Weak_Enhancer` = "orange",
+    `7_Weak_Enhancer` = "yellow",
+    `8_Insulator` = "yellow",
+    `9_Txn_Transition` = "lightblue",
+    `10_Txn_Elongation` = "darkgreen",
+    `11_Weak_Txn` = "lightgreen",
+    `12_Repressed` = "gray",
+    `13_Heterochrom/lo` = "lightgray",
+    `15_Repetitive/CNV` = "lightgray"
   )
   gr <- GeneRegionTrack(
-          getGeneRegionTrackForGviz(
-              edb, chromosome = gsub("chr","",unique(cpg_coord$chr)),
-          start = min(cpg_snps$POS), end=max(cpg_snps$POS)
-      )
+    getGeneRegionTrackForGviz(
+      edb,
+      chromosome = gsub("chr", "", unique(cpg_coord$chr)),
+      start = min(cpg_snps$POS), end = max(cpg_snps$POS)
+    )
   )
   dat <- DataTrack(
-      start = cpg_snps$POS,
-      width=1,
-      data = rbind(
-          -log10(mQTLs_brain[.(cpg_snps$SNP.x,cpgs), on=c("SNP","gene")]$`p-value`), 
-          -log10(mQTL_results[.(cpg_snps$SNP.y,cpgs), on =c("SNP","gene")]$`p-value`),
-          -log10(sum_stats[paste0(cpg_snps$CHR,":",cpg_snps$POS),on="SNP"]$p)
-      ),
-      chromosome = unique(cpg_coord$chr),
-      genome="hg19",
-      groups= c("Brain mQTL","Blood mQTL","GWAS")
+    start = cpg_snps$POS,
+    width = 1,
+    data = rbind(
+      -log10(mQTLs_brain[.(cpg_snps$SNP.x, cpgs), on = c("SNP", "gene")]$`p-value`),
+      -log10(mQTL_results[.(cpg_snps$SNP.y, cpgs), on = c("SNP", "gene")]$`p-value`),
+      -log10(sum_stats[paste0(cpg_snps$CHR, ":", cpg_snps$POS), on = "SNP"]$p)
+    ),
+    chromosome = unique(cpg_coord$chr),
+    genome = "hg19",
+    groups = c("Brain mQTL", "Blood mQTL", "GWAS")
   )
   plotTracks(
-        HighlightTrack(
-            list(reg,cgi,dat,gr), start=c(blood_coord$s1,brain_coord$s1),width=75e3,
-          fill=c(rep("pink",nrow(blood_coord)),rep("lightblue",nrow(brain_coord)))
-        ), 
-        collapseTranscripts="meta", transcriptAnnotation="symbol",cex=0.5
+    HighlightTrack(
+      list(reg, cgi, dat, gr),
+      start = c(blood_coord$s1, brain_coord$s1), width = 75e3,
+      fill = c(rep("pink", nrow(blood_coord)), rep("lightblue", nrow(brain_coord)))
+    ),
+    collapseTranscripts = "meta", transcriptAnnotation = "symbol", cex = 0.5
   )
 }
-#TODO Plot CGI as a track and highlight actual positions of CpGs
-plot_cpgs_overlap(top_coloc_loci,top_blood,top_brain)
-plot_cpgs_overlap(top_2_coloc_loci,top_2_blood,top_2_brain)
+# TODO Plot CGI as a track and highlight actual positions of CpGs
+plot_cpgs_overlap(top_coloc_loci, top_blood, top_brain)
+plot_cpgs_overlap(top_2_coloc_loci, top_2_blood, top_2_brain)
 ```
-

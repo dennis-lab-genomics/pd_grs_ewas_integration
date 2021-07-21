@@ -36,7 +36,7 @@ Generate PRS using `plink2 --score`:
 ```{r}
 terre_prs <- fread("terre_prs.sscore")
 terre_pcs <- fread("~/genotype_qc/TERRE_QC/raw_data.geno.maf.mind.sex_check.het_filter.ibd_filter.eigenvec")
-terre_metadata <- read.csv("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv") %>% 
+terre_metadata <- read.csv("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv") %>%
   mutate(
     FID = gsub("(PAE_[0-9]*_[1-9]*)_.*","\\1",FID),
     IID = gsub("(PAE_[0-9]*_[1-9]*)_.*","\\1",IID)
@@ -51,7 +51,7 @@ pd_h2 <- function(R2O,case_prop,prevalence=0.22){
   thd <- -1 * qnorm(K,0,1)
   zv <- dnorm(thd) #z (normal density)
   mv <- zv/K #mean liability for case
-  theta <- mv*(P-K)/(1-K)*(mv*(P-K)/(1-K)-thd) #θ in equation 
+  theta <- mv*(P-K)/(1-K)*(mv*(P-K)/(1-K)-thd) #θ in equation
   cv <- K*(1-K)/zv^2*K*(1-K)/(P*(1-P)) #C in
   return(R2O*cv/(1+R2O*theta*cv))
 }
@@ -78,7 +78,7 @@ summary(fit_null)
 
 ```{r}
 ggplot(all_data %>% mutate(PD= ifelse(PD,"CASE","CONTROL")),aes(as.factor(PD),SCORE1_AVG)) +geom_boxplot()+ geom_jitter(height=0, width=0.1)+ labs(y="Polygenic Risk Score", x = "Parkinson's Diagnosis") + ggtitle(bquote('Nagelkerke Pseudo-'*R^2*': 0.0611' ))
-ggplot(all_data,aes(factor(men),SCORE1_AVG)) +geom_boxplot()+ geom_jitter(height=0, width=0.1) 
+ggplot(all_data,aes(factor(men),SCORE1_AVG)) +geom_boxplot()+ geom_jitter(height=0, width=0.1)
 t.test(all_data$SCORE1_AVG[as.logical(all_data$PD)],all_data$SCORE1_AVG[!as.logical(all_data$PD)],alternative = "greater")
 t.test(all_data$SCORE1_AVG[as.logical(all_data$men)],all_data$SCORE1_AVG[!as.logical(all_data$men)])
 ```
@@ -194,8 +194,8 @@ pd_annot <- pd_res %>%rownames_to_column("probe") %>% left_join(annot,by=c("prob
 
 prs_annot <- prs_res %>%rownames_to_column("probe") %>% left_join(annot,by=c("probe"="Name"))%>% mutate(gene = gsub(";.*","",UCSC_RefGene_Name)) %>% mutate(gene= ifelse(gene == "",probe,gene))
 
-ggplot(prs_annot,aes(logFC,-log10(P.Value)))+ 
-  geom_point() + 
+ggplot(prs_annot,aes(logFC,-log10(P.Value)))+
+  geom_point() +
   geom_text_repel(
     data=prs_annot%>% filter(abs(logFC) > 0.03 & adj.P.Val < 0.05),
     color="dodgerblue",
@@ -213,7 +213,7 @@ ggplot(prs_annot,aes(logFC,-log10(P.Value)))+
     yintercept = min(-log10(prs_annot$P.Value[prs_annot$adj.P.Val <0.05]))
   ) +
   geom_vline(linetype="dashed",xintercept = 0.03) +
-  geom_vline(linetype="dashed",xintercept = -0.03)+ 
+  geom_vline(linetype="dashed",xintercept = -0.03)+
   ggtitle("Cases and Controls")
 # prs_annot[prs_annot$adj.P.Val <0.05,c("gene","CHR","MAPINFO","logFC","P.Value","UCSC_RefGene_Name")] %>% mutate(UCSC_RefGene_Name = sapply(UCSC_RefGene_Name,function(x)split(x)[1]))
 prs_highlight <- subset(prs_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03)
@@ -226,7 +226,7 @@ ggplot(case_annot,aes(logFC,-log10(P.Value)))+
     mapping=aes(logFC,-log10(P.Value),label=gene)
   ) +
   geom_point(
-    data=subset(case_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03 & !probe %in% prs_highlight$probe), 
+    data=subset(case_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03 & !probe %in% prs_highlight$probe),
     color = "red",
     mapping=aes(logFC,-log10(P.Value))
   ) +
@@ -236,23 +236,23 @@ ggplot(case_annot,aes(logFC,-log10(P.Value)))+
     mapping=aes(logFC,-log10(P.Value),label=gene)
   ) +
   geom_point(
-    data=case_annot %>% filter(probe %in% prs_highlight$probe),#subset(case_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03), 
+    data=case_annot %>% filter(probe %in% prs_highlight$probe),#subset(case_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03),
     color = "green",
     mapping=aes(logFC,-log10(P.Value))
   ) +
-  labs(x = quote(Delta~beta~Methylation)) + 
-  theme_minimal() + 
+  labs(x = quote(Delta~beta~Methylation)) +
+  theme_minimal() +
   geom_hline(
     linetype="dashed",
     yintercept = min(-log10(case_annot$P.Value[case_annot$adj.P.Val <0.05]))
   ) +
   geom_vline(linetype="dashed",xintercept = 0.03) +
-  geom_vline(linetype="dashed",xintercept = -0.03) + 
+  geom_vline(linetype="dashed",xintercept = -0.03) +
   ggtitle("Cases")
 # case_annot[case_annot$adj.P.Val <0.05,c("gene","CHR","MAPINFO","logFC","P.Value","UCSC_RefGene_Name")] %>% mutate(UCSC_RefGene_Name = sapply(UCSC_RefGene_Name,function(x)split(x)[1]))
 
 control_annot <- control_res %>%rownames_to_column("probe") %>% left_join(annot,by=c("probe"="Name"))%>% mutate(gene = gsub(";.*","",UCSC_RefGene_Name)) %>% mutate(gene= ifelse(gene == "",probe,gene))
-ggplot(control_annot,aes(logFC,-log10(P.Value)))+ 
+ggplot(control_annot,aes(logFC,-log10(P.Value)))+
   geom_point() +
   geom_text_repel(
     data=subset(control_annot,adj.P.Val < 0.05& abs(logFC) > 0.03 & !probe %in% prs_highlight$probe),
@@ -274,23 +274,23 @@ ggplot(control_annot,aes(logFC,-log10(P.Value)))+
     color = "green",
     mapping=aes(logFC,-log10(P.Value))
   ) +
-  labs(x = quote(Delta~beta~Methylation)) + 
+  labs(x = quote(Delta~beta~Methylation)) +
   theme_minimal() + geom_hline(linetype="dashed",yintercept = min(-log10(control_annot$P.Value[control_annot$adj.P.Val <0.05]))) +
   geom_vline(linetype="dashed",xintercept = 0.03) +
-  geom_vline(linetype="dashed",xintercept = -0.03)+ 
+  geom_vline(linetype="dashed",xintercept = -0.03)+
   ggtitle("Controls")
 
 # control_annot[control_annot$adj.P.Val <0.05,c("gene","CHR","MAPINFO","logFC","P.Value","UCSC_RefGene_Name")] %>% mutate(UCSC_RefGene_Name = sapply(UCSC_RefGene_Name,function(x)split(x)[1]))
 
 
-ggplot(pd_annot,aes(logFC,-log10(P.Value)))+ 
-  geom_point() + 
+ggplot(pd_annot,aes(logFC,-log10(P.Value)))+
+  geom_point() +
     geom_text_repel(
     data=pd_annot %>% filter(probe %in% prs_highlight$probe),#subset(pd_annot,adj.P.Val < 0.05& abs(logFC) > 0.03),
     color="dodgerblue",
     mapping=aes(logFC,-log10(P.Value),label=gene)
   ) +
-  geom_point() + 
+  geom_point() +
   geom_text_repel(
     data=pd_annot %>%filter(abs(logFC) > 0.03 & adj.P.Val < 0.05) %>% top_n(25,adj.P.Val),#subset(pd_annot,adj.P.Val < 0.05& abs(logFC) > 0.03),
     color="dodgerblue",
@@ -313,7 +313,7 @@ ggplot(pd_annot,aes(logFC,-log10(P.Value)))+
     yintercept = min(-log10(pd_annot$P.Value[pd_annot$adj.P.Val <0.05]))
   ) +
   geom_vline(linetype="dashed",xintercept = 0.03) +
-  geom_vline(linetype="dashed",xintercept = -0.03)+ 
+  geom_vline(linetype="dashed",xintercept = -0.03)+
   ggtitle("PD Diagnosis")
 ```
 
@@ -518,14 +518,14 @@ exposures_ind <- names(prs_vs_pest[prs_vs_pest > 0.05])
 Checking correlation between exposures:
 ```{r}
 library(pheatmap)
-cor(reg_w_all_pesticide[,..exposures_ind]) %>% 
+cor(reg_w_all_pesticide[,..exposures_ind]) %>%
   pheatmap(main="Correlation between exposures")
   #melt() %>%
-  #ggplot(aes(Var1,Var2,fill=value)) + geom_tile() + scale_fill_viridis_c()+ 
+  #ggplot(aes(Var1,Var2,fill=value)) + geom_tile() + scale_fill_viridis_c()+
   #theme(axis.text.x=element_text(angle=90,hjust=1,vjust=1))
-cor(reg_w_all_pesticide[PD == "CASE",..exposures_ind]) %>% 
+cor(reg_w_all_pesticide[PD == "CASE",..exposures_ind]) %>%
   pheatmap(main="Correlation between exposures cases only")
-cor(reg_w_all_pesticide[PD == "CONTROL",..exposures_ind]) %>% 
+cor(reg_w_all_pesticide[PD == "CONTROL",..exposures_ind]) %>%
   pheatmap(main="Correlation between exposures controls only")
 ```
 
@@ -594,12 +594,12 @@ Generate PRS using `plink2 --score`:
 ~/plink2 --bfile ~/genotype_qc/DIGPD_case_QC/all_imputed_r2_30_rsid\
   --score pd_prs_file.txt list-variants\
   --out digpd_control_prs
-  
+
 ~/plink2 --bfile ~/genotype_qc/DIGPD_control_QC/all_imputed_r2_30_rsid\
   --score pd_prs_file.txt list-variants\
   --out digpd_case_prs
-  
-  
+
+
 ```
 ## Loading in and preparing data
 ```{r}
@@ -619,7 +619,7 @@ all_digpd_data <- digpd_prs %>% left_join(digpd_metadata, by=c("IID")) %>% left_
 
 ```{r}
 ggplot(all_digpd_data,aes(PD,SCORE1_AVG)) + geom_boxplot()+ geom_jitter(height=0, width=0.1)+ labs(x= "Parkinson's Diagnosis", y = "Polygenic Risk Score") +ggtitle(bquote('Nagelkerke Pseudo-'*R^2*':0.0578120' ))
-t.test(all_digpd_data$SCORE1_AVG[all_digpd_data$PD == "CASE"],all_digpd_data$SCORE1_AVG[all_digpd_data$PD == "CONTROL"], alternative = "greater") 
+t.test(all_digpd_data$SCORE1_AVG[all_digpd_data$PD == "CASE"],all_digpd_data$SCORE1_AVG[all_digpd_data$PD == "CONTROL"], alternative = "greater")
 
 ```
 
@@ -708,4 +708,3 @@ manhattan(prs_annot_digpd %>% mutate(P=P.Value,SNP=gene, CHR=as.numeric(recode(C
 ```{r}
 qq(pd_annot_digpd$P.Value,main="DIGPD Parkinson's EWAS")
 ```
-
