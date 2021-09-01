@@ -100,9 +100,12 @@ fwrite(res1_pval, "mqtl_pd_snp_colocalization.txt", sep = "\t", row.names = F, q
 ```
 ## Plot out results
 ```{r}
-res1 %>%
-  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
-  arrange(-PP3_4, -PP_4div3)
+if (file.exists("mqtl_pd_snp_colocalization.txt")) {
+  res1_pval <- fread("mqtl_pd_snp_colocalization.txt")
+}
+# res1 %>%
+#   mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
+#   arrange(-PP3_4, -PP_4div3)
 res1_pval %>%
   mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
   arrange(-PP3_4, -PP_4div3) %>%
@@ -121,7 +124,8 @@ res1_pval %>%
   mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
   arrange(-PP3_4, -PP_4div3) %>%
   filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
-  distinct(locus)
+  left_join(probe_pos, by = c("probe" = "geneid")) %>%
+  distinct(locus, chr)
 ```
 ```{r}
 res1_pval %>%
@@ -131,7 +135,7 @@ res1_pval %>%
   write_delim("mqtl_pd_snp_colocalized_blood.txt")
 ```
 
-little evidence of colocalization, let's try this analysis on top mQTL CpGs instead:
+modest evidence of colocalization between parkinson's loci and mQTL in blood of TERRE cohort, let's try this analysis on top mQTL CpGs instead:
 ```{r}
 all_probes <- mQTL_results[`p-value` < 0.05 / (ntests), .(unique(gene))]$V1
 probe_res <- mclapply(
@@ -165,6 +169,10 @@ fwrite(probe_res, "mqtl_pd_probe_colocalization.txt", sep = "\t", row.names = F,
 ```
 
 ```{r}
+if (file.exists("mqtl_pd_probe_colocalization.txt")) {
+  probe_res <- fread("mqtl_pd_probe_colocalization.txt")
+}
+
 probe_res %>%
   mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
   arrange(-PP3_4, -PP_4div3)
@@ -198,6 +206,7 @@ coloc_brain <- rbindlist(
 )
 ```
 ```{r}
+
 coloc_brain %>%
   mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
   arrange(-PP3_4, -PP_4div3) %>%
@@ -261,25 +270,25 @@ plot_cpgs_overlap <- function(cpgs, blood_highlight, brain_highlight) {
     start = "chromStart", end = "chromEnd", id = "name", shape = "box", fill = "#006400",
     name = "CpG Islands"
   )
-  reg <- UcscTrack(
-    genome = "hg19", chromosome = unique(cpg_coord$chr), from = min(cpg_snps$POS),
-    to = max(cpg_snps$POS), track = "Broad ChromHMM", trackType = "AnnotationTrack",
-    start = "chromStart", end = "chromEnd", feature = "name", shape = "box",
-    name = "Broad ChromHMM Annotation", groupAnnotation = "group", group = "name", just.group = "left", collapse = TRUE, mergeGroups = TRUE,
-    `1_Active_Promoter` = "red",
-    `2_Weak_Promoter` = "salmon",
-    `3_Poised_Promoter` = "purple",
-    `4_Strong_Enhancer` = "orange",
-    `6_Weak_Enhancer` = "orange",
-    `7_Weak_Enhancer` = "yellow",
-    `8_Insulator` = "yellow",
-    `9_Txn_Transition` = "lightblue",
-    `10_Txn_Elongation` = "darkgreen",
-    `11_Weak_Txn` = "lightgreen",
-    `12_Repressed` = "gray",
-    `13_Heterochrom/lo` = "lightgray",
-    `15_Repetitive/CNV` = "lightgray"
-  )
+  # reg <- UcscTrack(
+  #   genome = "hg19", chromosome = unique(cpg_coord$chr), from = min(cpg_snps$POS),
+  #   to = max(cpg_snps$POS), track = "Broad ChromHMM", trackType = "AnnotationTrack",
+  #   start = "chromStart", end = "chromEnd", feature = "name", shape = "box",
+  #   name = "Broad ChromHMM Annotation", groupAnnotation = "group", group = "name", just.group = "left", collapse = TRUE, mergeGroups = TRUE,
+  #   `1_Active_Promoter` = "red",
+  #   `2_Weak_Promoter` = "salmon",
+  #   `3_Poised_Promoter` = "purple",
+  #   `4_Strong_Enhancer` = "orange",
+  #   `6_Weak_Enhancer` = "orange",
+  #   `7_Weak_Enhancer` = "yellow",
+  #   `8_Insulator` = "yellow",
+  #   `9_Txn_Transition` = "lightblue",
+  #   `10_Txn_Elongation` = "darkgreen",
+  #   `11_Weak_Txn` = "lightgreen",
+  #   `12_Repressed` = "gray",
+  #   `13_Heterochrom/lo` = "lightgray",
+  #   `15_Repetitive/CNV` = "lightgray"
+  # )
   gr <- GeneRegionTrack(
     getGeneRegionTrackForGviz(
       edb,
@@ -301,7 +310,8 @@ plot_cpgs_overlap <- function(cpgs, blood_highlight, brain_highlight) {
   )
   plotTracks(
     HighlightTrack(
-      list(reg, cgi, dat, gr),
+      # list(reg, cgi, dat, gr),
+      list(dat, gr),
       start = c(blood_coord$s1, brain_coord$s1), width = 75e3,
       fill = c(rep("pink", nrow(blood_coord)), rep("lightblue", nrow(brain_coord)))
     ),
@@ -312,3 +322,35 @@ plot_cpgs_overlap <- function(cpgs, blood_highlight, brain_highlight) {
 plot_cpgs_overlap(top_coloc_loci, top_blood, top_brain)
 plot_cpgs_overlap(top_2_coloc_loci, top_2_blood, top_2_brain)
 ```
+```{r}
+library(ggbio)
+library(biovizBase)
+library(Homo.sapiens)
+mQTLs_brain <- fread("~/mQTLs_all.txt.gz")
+setkey(mQTLs_brain, "featureName")
+
+mQTL_results_pos <- mQTL_results[snp_pos, on = .(SNP)][probe_pos[, .(geneid, s1, s2)], on = .(gene = geneid)]
+
+gr.brain_cpg <- transformDfToGr(na.omit(mQTLs_brain[top_blood, .(CHR = SNPchromosome, BP = SNPpos, P = pValue), on = "featureName"]), seqnames = "CHR", start = "BP", width = 1)
+gr.brain_cpg$group <- "brain"
+gr.blood_cpg <- transformDfToGr(na.omit(mQTL_results_pos[top_blood, .(CHR = as.numeric(gsub("chr", "", CHR)), BP = as.numeric(POS), P = `p-value`), on = "gene"]), seqnames = "CHR", start = "BP", width = 1)
+gr.blood_cpg$group <- "blood"
+chr_pattern <- "chr(.*):(.*)"
+gwas_locus_1 <- sum_stats[, .(
+  CHR = as.numeric(gsub(chr_pattern, "\\1", SNP)),
+  BP = as.numeric(gsub(chr_pattern, "\\2", SNP)),
+  P = p
+)][CHR == gr.brain_cpg$CHR[1] & BP > gr.brain_cpg$BP[1] & BP < gr.brain_cpg$BP[length(gr.brain_cpg)]]
+gr.pd_gwas <- transformDfToGr(gwas_locus_1, seqnames = "CHR", start = "BP", width = 1)
+gr.pd_gwas$group <- "Parkinson's"
+associations <- c(gr.blood_cpg, gr.brain_cpg, gr.pd_gwas)
+seqlevelsStyle(associations) <- "UCSC"
+genes <- subsetByOverlaps(genes(Homo.sapiens, columns = "SYMBOL"), associations)
+p1 <- autoplot(c(gr.blood_cpg, gr.pd_gwas), geom = "point", coord = "genome", aes(color = group, y = -log10(P)))
+p3 <- autoplot(gr.brain_cpg, geom = "point", coord = "genome", aes(y = -log10(P)))
+p4 <- autoplot(gr.pd_gwas, geom = "point", coord = "genome", aes(y = -log10(P)))
+p2 <- autoplot(Homo.sapiens, which = associations, columns = "SYMBOL", coord = "genome")
+tracks(p1, gene = p2)
+```
+
+#@TODO FIX ISSUE WITH BRAIN RANGE
