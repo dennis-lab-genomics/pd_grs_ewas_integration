@@ -5,8 +5,12 @@ output: github_document
 
 ```{r setup, include=FALSE}
 library(tidyverse)
+library(ggrepel)
 library(data.table)
 library(knitr)
+library(limma)
+library(foreach)
+library(doParallel)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 # Step 0: Prepare covariates and input files
@@ -49,14 +53,123 @@ Rscript /home1/NEURO/casazza/PRSice.R \
 
 ```
 # Step 2: Evaluate output
-```{r, out.width="10%"}
+```{r, out.width="400px"}
 include_graphics("TERRE_PRSice_BARPLOT_2021-11-02.png")
 include_graphics("TERRE_PRSice_HIGH-RES_PLOT_2021-11-02.png")
 include_graphics("TERRE_PRSice_QUANTILES_PLOT_2021-11-02.png")
 ```
-
+## Plotting PRSice Data on my own
+```{r}
+prsice_meta <- fread("prsice_data/TERRE_PRSice.prsice")
+ggplot(prsice_meta, aes(Threshold, R2, color = -log10(P))) +
+  geom_point()
+```
 
 # Step 3 run linear model at different thresholds for SNP inclusion
 ```{r}
+load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE_processed_2021/betas_combat.RData") # betas_sub
+# Assign genotyping ID to data
+original_covars <- fread("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv")[, .(patient, IID = gsub("_PAE.*", "", IID))]
+colnames(betas_combat) <- original_covars$IID[match(colnames(betas_combat), original_covars$patient)]
+betas_combat <- betas_combat[, colnames(betas_combat) %in% covariate$IID]
+```
+Let's check how the data looks for the first 5 subjects:
+```{r}
+ggplot(betas_combat[, 1:5] %>% as.data.table(keep.rownames = T) %>% melt(id.vars = "rn", value.name = "betas", variable.name = "subject"), aes(betas, color = subject)) +
+  geom_density()
+```
 
+### Match DNA, PRS, and metadata
+```{r}
+prsice_all <- fread("prsice_data/TERRE_PRSice.all_score")[match(colnames(betas_combat), IID), .(FID, IID, `Pt_0.0219001`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+covariate <- covariate[match(colnames(betas_combat), IID)]
+all(covariate$IID == colnames(betas_combat))
+all(covariate$IID == prsice_all$IID)
+```
+### Run limma
+
+```{r}
+mvalues <- lumi::beta2m(betas_combat)
+prs_mat <- prsice_all[, -c(1, 2)]
+cov_mat <- covariate[, -c(1, 2)]
+```
+
+```{r}
+registerDoParallel(ncol(prs_mat) / 2)
+hits <- foreach(prs_thresh = colnames(prs_mat)) %dopar% {
+  design_prs <- model.matrix(~., data = cbind(prs_mat[, ..prs_thresh], cov_mat))
+  prs_fit <- lmFit(mvalues, design_prs)
+  prs_fit <- eBayes(prs_fit)
+  topTable(prs_fit, coef = 2, adjust.method = "bonf", p.value = 0.05, number = Inf, genelist = rownames(mvalues))
+}
+names(hits) <- colnames(prs_mat)
+hits_by_thresh_bonf <- rbindlist(hits, idcol = "threshold", fill = TRUE)
+```
+```{r}
+hits_by_thresh_bonf[, .(hits = .N), by = threshold]
+ggplot(hits_by_thresh_bonf[, .(hits = .N), by = threshold], aes(threshold, hits)) +
+  geom_point() +
+  geom_line()
+```
+```{r}
+
+hits <- foreach(prs_thresh = colnames(prs_mat)) %dopar% {
+  design_prs <- model.matrix(~., data = cbind(prs_mat[, ..prs_thresh], cov_mat))
+  prs_fit <- lmFit(mvalues, design_prs)
+  prs_fit <- eBayes(prs_fit)
+  topTable(prs_fit, coef = 2, adjust.method = "BH", p.value = 0.05, number = Inf, genelist = rownames(mvalues))
+}
+names(hits) <- colnames(prs_mat)
+hits_by_thresh_fdr <- rbindlist(hits, idcol = "threshold", fill = TRUE)
+```
+```{r}
+hits_by_thresh_fdr[, .(hits = .N), by = threshold]
+ggplot(hits_by_thresh_fdr[, .(hits = .N), by = threshold], aes(threshold, hits)) +
+  geom_point() +
+  geom_line()
+```
+
+```{r}
+hits_by_thresh_bonf[threshold == "Pt_5e-08"]
+```
+```{r}
+library(missMethyl)
+gometh(hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, array.type = "EPIC", all.cpg = rownames(mvalues))
+```
+
+```{r}
+top_design_prs <- model.matrix(~., data = cbind(prs_mat[, `Pt_5e-08`], cov_mat))
+top_prs_fit <- lmFit(mvalues, top_design_prs)
+top_prs_fit <- eBayes(top_prs_fit)
+top_prs_hits <- topTable(top_prs_fit, coef = 2, adjust.method = "bonf", number = Inf, genelist = rownames(mvalues))
+```
+```{r}
+manifest <- IlluminaHumanMethylationEPICanno.ilm10b4.hg19::Other %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "name")
+prs_annot <- data.table(top_prs_hits)[manifest, gene := gsub(";.*", "", UCSC_RefGene_Name), on = c(ID = "name")]
+ggplot(prs_annot, aes(logFC, -log10(P.Value))) +
+  geom_point() +
+  geom_text_repel(
+    data = prs_annot %>% filter(abs(logFC) > 0.03 & adj.P.Val < 0.05),
+    color = "dodgerblue",
+    mapping = aes(logFC, -log10(P.Value), label = gene)
+  ) +
+  geom_point(
+    data = subset(prs_annot, adj.P.Val < 0.05 & abs(logFC) > 0.03),
+    color = "green",
+    mapping = aes(logFC, -log10(P.Value))
+  ) +
+  labs(x = quote(Delta ~ beta ~ Methylation)) +
+  theme_minimal() +
+  geom_hline(
+    linetype = "dashed",
+    yintercept = min(-log10(prs_annot$P.Value[prs_annot$adj.P.Val < 0.05]))
+  ) +
+  geom_vline(linetype = "dashed", xintercept = 0.03) +
+  geom_vline(linetype = "dashed", xintercept = -0.03)
+```
+
+```{r}
+manifest <- IlluminaHumanMethylationEPICanno.ilm10b4.hg19::Other
 ```
