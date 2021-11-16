@@ -6,25 +6,27 @@ library(mice)
 num_cores <- 32L
 setDTthreads(num_cores)
 probe_pos <- fread("~/prs_ewas_integration/cis_mQTL_analyses/terre_data/probe_pos.txt")
-methy <- fread(
+methy <- fread( # @TODO MVALUES!
   "~/prs_ewas_integration/cis_mQTL_analyses/terre_data/methylation_combat.txt",
   key = "cpg"
 )
 probe_pos <- probe_pos[geneid %chin% methy$cpg]
 
-shared_covariates <- data.table::transpose(
-  na.omit(
-    fread(
-      "~/prs_ewas_integration/cis_mQTL_analyses/terre_data/covariates_CTP_PD.txt",
-      fill = TRUE
-    )
-  ),
-  make.names = "id"
-)
+# shared_covariates <- data.table::transpose(
+#   na.omit(
+#     fread(
+#       "~/prs_ewas_integration/cis_mQTL_analyses/terre_data/covariates_CTP_PD.txt",
+#       fill = TRUE
+#     )
+#   ),
+#   make.names = "id"
+# )
+shared_covariates <- fread("~/prs_ewas_integration/prs_analyses/prsice_data/TERRE.covariate")
 env_data <- fread("/home1/NEURO/SHARE_DECIPHER/TERRE_pesticides/pesticides.csv")
 mapping <- fread("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv")
-terre_prs <- fread("terre_prs.sscore")
-
+# terre_prs <- fread("terre_prs.sscore")
+terre_prs <- fread("prsice_data/TERRE_PRSice.all_score", select = c(1, 2, 3))
+colnames(terre_prs) <- c("FID", "IID", "SCORE1_AVG")
 mapping$IID <- gsub("_PAE.*", "", mapping$IID)
 env_data$num <- mapping$IID[match(env_data$num, mapping$patient)]
 env_data <- env_data[!is.na(num)]
@@ -53,7 +55,7 @@ fit_interaction <- function(row) {
   tmp_df$G <- terre_prs$SCORE1_AVG[ix]
   tmp_df$GxE <- tmp_df$G * tmp_df$E
   df_mids <- suppressWarnings(as.mids(tmp_df))
-  fit <- with(df_mids, lm(y ~ G + E + GxE + V3 + V4 + V5 + age + head_trauma + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5))
+  fit <- with(df_mids, lm(y ~ G + E + GxE + V3 + V4 + V5 + age + men + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10))
   stats <- summary(pool(fit)) %>%
     select(-df) %>%
     column_to_rownames(var = "term")
@@ -82,4 +84,4 @@ results <- mclapply(
   mc.cores = num_cores
 )
 
-fwrite(rbindlist(results), "prs_interaction_result.txt.gz", sep = "\t", row.names = F, quote = F)
+fwrite(rbindlist(results), "prs_interaction_result_prsice.txt.gz", sep = "\t", row.names = F, quote = F)
