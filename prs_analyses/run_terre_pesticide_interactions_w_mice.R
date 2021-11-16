@@ -6,10 +6,12 @@ library(mice)
 num_cores <- 32L
 setDTthreads(num_cores)
 probe_pos <- fread("~/prs_ewas_integration/cis_mQTL_analyses/terre_data/probe_pos.txt")
-methy <- fread( # @TODO MVALUES!
+methy <- fread(
   "~/prs_ewas_integration/cis_mQTL_analyses/terre_data/methylation_combat.txt",
   key = "cpg"
 )
+for (j in 2:ncol(methy)) set(methy, j = j, value = lumi::beta2m(methy[[j]]))
+
 probe_pos <- probe_pos[geneid %chin% methy$cpg]
 
 # shared_covariates <- data.table::transpose(
