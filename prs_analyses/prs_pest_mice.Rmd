@@ -18,7 +18,8 @@ knitr::opts_chunk$set(echo = TRUE)
 Before I suspect I was combining effects from limma incorrectly. So I re-rolled the regressions using mice and lm as the mice package seems to be intended to be used. Let's check inflation now within each pesticide:
 
 ```{r}
-pesticide_interactions <- fread("prs_interaction_result.txt.gz")
+pesticide_interactions <- fread("prs_interaction_result_prsice.txt.gz")
+plots <- list()
 for (cur_env in unique(pesticide_interactions$env)) {
   plots[[cur_env]] <- as.grob(~ qq(pesticide_interactions[pesticide_interactions$env == cur_env, ]$GxEp, main = cur_env))
 }
@@ -30,11 +31,15 @@ do.call(plot_grid, plots)
 ## Filtering sumstats based on within-exposure FDR
 ```{r}
 manifest <- fread("~/MethylationEPIC_v-1-0_B4.csv", skip = 7, fill = TRUE)
-pesticide_interactions[, c("GxEq") := .(p.adjust(GxEp, method = "BH")), by = "env"]
+pesticide_interactions[, c("GxEq") := .(p.adjust(GxEp, method = "bonf")), by = "env"]
 sig_interactions <- pesticide_interactions[GxEq < 0.25][order(GxEq)]
+sig_interactions
 ```
 ```{r}
 merge(sig_interactions, manifest, by.x = "cpg", by.y = "Name")[, .(cpg, env, GxEp, GxEq, Relation_to_UCSC_CpG_Island, UCSC_RefGene_Name)][order(GxEq)]
 
 merge(sig_interactions, manifest, by.x = "cpg", by.y = "Name")[, .(cpg, env, GxEp, GxEq, Relation_to_UCSC_CpG_Island, UCSC_RefGene_Name)][order(GxEq)] %>% write.csv(quote = F)
+```
+```{r}
+pesticide_interactions[order(GxEp)]
 ```

@@ -180,8 +180,16 @@ probe_res %>%
 ## check against brain mQTLs
 ```{r}
 mQTLs_brain <- fread("~/mQTLs_all.txt.gz")
-pos_brain <- unique(mQTLs_brain[, .(SNP = SNPid, CHR = paste0("chr", SNPchromosome), POS = SNPpos)])
-setkey(pos_brain, "SNP")
+
+if (file.exists("pos_brain.txt.gz")) {
+  pos_brain <- fread("pos_brain.txt.gz")
+  setkey(pos_brain, "SNP")
+} else {
+  pos_brain <- unique(mQTLs_brain[, .(SNP = SNPid, CHR = paste0("chr", SNPchromosome), POS = SNPpos)])
+  setkey(pos_brain, "SNP")
+  fwrite(pos_brain, "pos_brain.txt.gz")
+}
+
 mQTLs_brain <- mQTLs_brain[, .(
   SNP = SNPid,
   gene = featureName,
@@ -234,10 +242,14 @@ coloc_brain %>%
   filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
   write_delim("mqtl_pd_snp_colocalized_brain.txt")
 ```
+
+
 ## Visualizing colocalization
-```{r,fig.height=8.5, fig.height=11}
-library(EnsDb.Hsapiens.v86)
-edb <- EnsDb.Hsapiens.v86
+
+### Load data
+```{r}
+library(EnsDb.Hsapiens.v75)
+
 res1_pval <- fread("mqtl_pd_snp_colocalized_blood.txt")
 coloc_brain <- fread("mqtl_pd_snp_colocalized_brain.txt")
 blood_cpg <- res1_pval %>%
@@ -256,13 +268,28 @@ top_coloc_loci <- unique(c(top_blood, top_brain))
 top_2_blood <- as.character(blood_cpg[locus %in% c("70.0")]$probe)
 top_2_brain <- as.character(brain_cpg[locus %in% c("70.0")]$probe)
 top_2_coloc_loci <- unique(c(top_2_blood, top_2_brain))
+probe_pos <- fread("terre_data/probe_pos.txt")
+snp_pos <- fread("terre_data/snp_pos.txt", key = "SNP")
+pos_brain <- fread("pos_brain.txt.gz")
+setkey(pos_brain, "SNP")
+sum_stats <- fread("~/nallsEtAl2019_excluding23andMe_allVariants.tab.gz", key = "SNP")
 
-plot_cpgs_overlap <- function(cpgs, blood_highlight, brain_highlight) {
+if (file.exists("mqtl_results_trunc.txt.gz")) {
+  mQTL_results_trunc <- fread("mqtl_results_trunc.txt.gz")
+  mQTLs_brain_trunc <- fread("mqtl_brain_trunc.txt.gz")
+} else {
+  fwrite(mQTL_results[gene %in% union(top_coloc_loci, top_2_coloc_loci)], "mqtl_results_trunc.txt.gz")
+  fwrite(mQTLs_brain[gene %in% union(top_coloc_loci, top_2_coloc_loci)], "mqtl_brain_trunc.txt.gz")
+}
+edb <- EnsDb.Hsapiens.v75
+unified_pos <- merge(pos_brain, snp_pos, by = c("CHR", "POS"), all = TRUE)
+```
+### Plot
+```{r,fig.height=8.5, fig.height=11}
+
+plot_cpgs_overlap <- function(cpgs) {
   # gather all SNPs as chr#:pos
-  unified_pos <- merge(pos_brain, snp_pos, by = c("CHR", "POS"), all = TRUE)
   cpg_coord <- probe_pos[cpgs, on = "geneid"]
-  blood_coord <- probe_pos[blood_highlight, on = "geneid"]
-  brain_coord <- probe_pos[brain_highlight, on = "geneid"]
   cpg_snps <- unified_pos[CHR == cpg_coord$chr & POS > min(cpg_coord$s1) - 75e3 & POS < max(cpg_coord$s2) + 75e3]
   cgi <- UcscTrack(
     genome = "hg19", chromosome = unique(cpg_coord$chr), from = min(cpg_snps$POS),
@@ -270,38 +297,20 @@ plot_cpgs_overlap <- function(cpgs, blood_highlight, brain_highlight) {
     start = "chromStart", end = "chromEnd", id = "name", shape = "box", fill = "#006400",
     name = "CpG Islands"
   )
-  # reg <- UcscTrack(
-  #   genome = "hg19", chromosome = unique(cpg_coord$chr), from = min(cpg_snps$POS),
-  #   to = max(cpg_snps$POS), track = "Broad ChromHMM", trackType = "AnnotationTrack",
-  #   start = "chromStart", end = "chromEnd", feature = "name", shape = "box",
-  #   name = "Broad ChromHMM Annotation", groupAnnotation = "group", group = "name", just.group = "left", collapse = TRUE, mergeGroups = TRUE,
-  #   `1_Active_Promoter` = "red",
-  #   `2_Weak_Promoter` = "salmon",
-  #   `3_Poised_Promoter` = "purple",
-  #   `4_Strong_Enhancer` = "orange",
-  #   `6_Weak_Enhancer` = "orange",
-  #   `7_Weak_Enhancer` = "yellow",
-  #   `8_Insulator` = "yellow",
-  #   `9_Txn_Transition` = "lightblue",
-  #   `10_Txn_Elongation` = "darkgreen",
-  #   `11_Weak_Txn` = "lightgreen",
-  #   `12_Repressed` = "gray",
-  #   `13_Heterochrom/lo` = "lightgray",
-  #   `15_Repetitive/CNV` = "lightgray"
-  # )
   gr <- GeneRegionTrack(
     getGeneRegionTrackForGviz(
       edb,
+      featureIs = "gene_biotype",
       chromosome = gsub("chr", "", unique(cpg_coord$chr)),
-      start = min(cpg_snps$POS), end = max(cpg_snps$POS)
+      start = min(cpg_snps$POS), end = max(cpg_snps$POS),
     )
   )
   dat <- DataTrack(
     start = cpg_snps$POS,
     width = 1,
     data = rbind(
-      -log10(mQTLs_brain[.(cpg_snps$SNP.x, cpgs), on = c("SNP", "gene")]$`p-value`),
-      -log10(mQTL_results[.(cpg_snps$SNP.y, cpgs), on = c("SNP", "gene")]$`p-value`),
+      -log10(mQTLs_brain_trunc[.(cpg_snps$SNP.x, cpgs), on = c("SNP", "gene")]$`p-value`),
+      -log10(mQTL_results_trunc[.(cpg_snps$SNP.y, cpgs), on = c("SNP", "gene")]$`p-value`),
       -log10(sum_stats[paste0(cpg_snps$CHR, ":", cpg_snps$POS), on = "SNP"]$p)
     ),
     chromosome = unique(cpg_coord$chr),
@@ -309,18 +318,14 @@ plot_cpgs_overlap <- function(cpgs, blood_highlight, brain_highlight) {
     groups = c("Brain mQTL", "Blood mQTL", "GWAS")
   )
   plotTracks(
-    HighlightTrack(
-      # list(reg, cgi, dat, gr),
-      list(dat, gr),
-      start = c(blood_coord$s1, brain_coord$s1), width = 75e3,
-      fill = c(rep("pink", nrow(blood_coord)), rep("lightblue", nrow(brain_coord)))
-    ),
+    list(dat, cgi, gr),
     collapseTranscripts = "meta", transcriptAnnotation = "symbol", cex = 0.5
   )
 }
 # TODO Plot CGI as a track and highlight actual positions of CpGs
-plot_cpgs_overlap(top_coloc_loci, top_blood, top_brain)
-plot_cpgs_overlap(top_2_coloc_loci, top_2_blood, top_2_brain)
+# plot_cpgs_overlap(top_coloc_loci)
+# plot_cpgs_overlap(top_2_coloc_loci)
+plot_cpgs_overlap(union(top_coloc_loci, top_2_coloc_loci))
 ```
 ```{r}
 library(ggbio)

@@ -62,7 +62,13 @@ include_graphics("TERRE_PRSice_QUANTILES_PLOT_2021-11-02.png")
 ```{r}
 prsice_meta <- fread("prsice_data/TERRE_PRSice.prsice")
 ggplot(prsice_meta, aes(Threshold, R2, color = -log10(P))) +
-  geom_point()
+  geom_point(size = 1) +
+  labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("-log"["10"] ~ "(P)")) +
+  theme_minimal()
+ggplot(prsice_meta[Threshold <= 0.5], aes(Threshold, Num_SNP, color = -log10(P))) +
+  geom_point() +
+  scale_y_continuous(breaks = c(seq(0, 1e5, 2.5e4), seq(2e5, 6e5, 1e5))) +
+  theme_minimal()
 ```
 
 # Step 3 run linear model at different thresholds for SNP inclusion
@@ -106,32 +112,13 @@ names(hits) <- colnames(prs_mat)
 hits_by_thresh_bonf <- rbindlist(hits, idcol = "threshold", fill = TRUE)
 ```
 ```{r}
-hits_by_thresh_bonf[, .(hits = .N), by = threshold]
-ggplot(hits_by_thresh_bonf[, .(hits = .N), by = threshold], aes(threshold, hits)) +
-  geom_point() +
-  geom_line()
-```
-```{r}
-
-hits <- foreach(prs_thresh = colnames(prs_mat)) %dopar% {
-  design_prs <- model.matrix(~., data = cbind(prs_mat[, ..prs_thresh], cov_mat))
-  prs_fit <- lmFit(mvalues, design_prs)
-  prs_fit <- eBayes(prs_fit)
-  topTable(prs_fit, coef = 2, adjust.method = "BH", p.value = 0.05, number = Inf, genelist = rownames(mvalues))
-}
-names(hits) <- colnames(prs_mat)
-hits_by_thresh_fdr <- rbindlist(hits, idcol = "threshold", fill = TRUE)
-```
-```{r}
-hits_by_thresh_fdr[, .(hits = .N), by = threshold]
-ggplot(hits_by_thresh_fdr[, .(hits = .N), by = threshold], aes(threshold, hits)) +
-  geom_point() +
-  geom_line()
+ggplot(hits_by_thresh_bonf[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
+  geom_text(vjust = -0.25) +
+  geom_col() +
+  labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +
+  theme_minimal()
 ```
 
-```{r}
-hits_by_thresh_bonf[threshold == "Pt_5e-08"]
-```
 ```{r}
 library(missMethyl)
 gometh(hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, array.type = "EPIC", all.cpg = rownames(mvalues))
@@ -142,6 +129,11 @@ top_design_prs <- model.matrix(~., data = cbind(prs_mat[, `Pt_5e-08`], cov_mat))
 top_prs_fit <- lmFit(mvalues, top_design_prs)
 top_prs_fit <- eBayes(top_prs_fit)
 top_prs_hits <- topTable(top_prs_fit, coef = 2, adjust.method = "bonf", number = Inf, genelist = rownames(mvalues))
+
+top_design_prs_gxe <- model.matrix(~., data = cbind(prs_mat[, `Pt_5e-08`], cov_mat))
+top_prs_fit_gxe <- lmFit(mvalues, top_design_prs_gxe)
+top_prs_fit_gxe <- eBayes(top_prs_fit_gxe)
+top_prs_hits_gxe <- topTable(top_prs_fit_gxe, coef = 2, adjust.method = "bonf", number = Inf, genelist = rownames(mvalues))
 ```
 ```{r}
 manifest <- IlluminaHumanMethylationEPICanno.ilm10b4.hg19::Other %>%
@@ -150,26 +142,58 @@ manifest <- IlluminaHumanMethylationEPICanno.ilm10b4.hg19::Other %>%
 prs_annot <- data.table(top_prs_hits)[manifest, gene := gsub(";.*", "", UCSC_RefGene_Name), on = c(ID = "name")]
 ggplot(prs_annot, aes(logFC, -log10(P.Value))) +
   geom_point() +
-  geom_text_repel(
-    data = prs_annot %>% filter(abs(logFC) > 0.03 & adj.P.Val < 0.05),
-    color = "dodgerblue",
-    mapping = aes(logFC, -log10(P.Value), label = gene)
-  ) +
   geom_point(
     data = subset(prs_annot, adj.P.Val < 0.05 & abs(logFC) > 0.03),
     color = "green",
     mapping = aes(logFC, -log10(P.Value))
   ) +
-  labs(x = quote(Delta ~ beta ~ Methylation)) +
-  theme_minimal() +
   geom_hline(
     linetype = "dashed",
     yintercept = min(-log10(prs_annot$P.Value[prs_annot$adj.P.Val < 0.05]))
   ) +
   geom_vline(linetype = "dashed", xintercept = 0.03) +
-  geom_vline(linetype = "dashed", xintercept = -0.03)
+  geom_vline(linetype = "dashed", xintercept = -0.03) +
+  geom_text_repel(
+    data = prs_annot %>% filter(abs(logFC) > 0.03 & adj.P.Val < 0.05, P.Value < 1e-10),
+    color = "dodgerblue",
+    mapping = aes(logFC, -log10(P.Value), label = ifelse(gene != "", gene, ID)),
+    size = 3,
+    max.overlaps = 20
+  ) +
+  labs(y = bquote("log"[10] ~ "(P)"), x = quote(Delta ~ beta ~ Methylation)) +
+  theme_minimal()
 ```
 
+# Manhattan plot vs GWAS manhattan plot
 ```{r}
-manifest <- IlluminaHumanMethylationEPICanno.ilm10b4.hg19::Other
+library(qqman)
+cpg_pos <- IlluminaHumanMethylationEPICanno.ilm10b4.hg19::Locations %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "name")
+copy_annot <- prs_annot[cpg_pos, on = c(ID = "name")] %>%
+  filter(chr != "chrX|chrY") %>%
+  mutate(chr = as.numeric(gsub("chr", "", chr)))
+manhattan(copy_annot[, .(SNP = gene, CHR = chr, BP = pos, P = P.Value)],
+  annotatePval = max(prs_annot$P.Value[prs_annot$adj.P.Val < 0.05]),
+  annotateTop = TRUE,
+  genomewideline = min(-log10(prs_annot$P.Value[prs_annot$adj.P.Val < 0.05])),
+  suggestiveline = FALSE
+)
+manhattan(copy_annot[chr == 17, .(SNP = gene, CHR = chr, BP = pos, P = P.Value)],
+  annotatePval = max(prs_annot$P.Value[prs_annot$adj.P.Val < 0.05]),
+  annotateTop = FALSE,
+  genomewideline = min(-log10(prs_annot$P.Value[prs_annot$adj.P.Val < 0.05])),
+  suggestiveline = FALSE
+)
+```
+```{r}
+GWAS <- fread("~/nalls_PD.QC.gz")
+```
+```{r}
+manhattan(GWAS,
+  annotatePval = 5e-8,
+  bp = "POS",
+  p = "p",
+  suggestiveline = FALSE
+)
 ```
