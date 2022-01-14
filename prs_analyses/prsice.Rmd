@@ -300,7 +300,7 @@ display_venn(list(both = hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, male =
 display_venn(list(both = hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, male = hits_by_thresh_bonf_nalls_male[threshold == "Pt_5e-08"]$ID, female = hits_by_thresh_bonf_nalls_female[threshold == "Pt_5e-08"]$ID), fill = c("gray", "blue", "pink"))
 ```
 
-```{r}
+```{r,eval=FALSE}
 library(missMethyl)
 gometh(hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, array.type = "EPIC", all.cpg = rownames(mvalues))
 ```
