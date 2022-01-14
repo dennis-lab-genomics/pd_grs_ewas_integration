@@ -40,6 +40,7 @@ Rscript /home1/NEURO/casazza/PRSice.R \
     --base-info INFO:0.8 \
     --base-maf MAF:0.01 \
     --cov TERRE.covariate \
+    --binary-target T\
     --beta  \
     --out TERRE_PRSice \
     -q 5\
@@ -51,23 +52,89 @@ Rscript /home1/NEURO/casazza/PRSice.R \
     --target /home1/NEURO/casazza/genotype_qc/TERRE_QC/all_imputed_r2_30_rsid_hard_call \
     --thread 32
 
+Rscript /home1/NEURO/casazza/PRSice.R \
+    --prsice /home1/NEURO/casazza/PRSice_linux\
+    --base /home1/NEURO/casazza/nalls_PD.QC.gz\
+    --base-info INFO:0.8 \
+    --base-maf MAF:0.01 \
+    --cov TERRE.covariate \
+    --binary-target T\
+    --beta  \
+    --out TERRE_PRSice_nalls_male \
+    -q 5\
+    --all-score\
+    --pheno TERRE.pheno \
+    --snp SNP \
+    --stat b \
+    --pvalue p\
+    --target /home1/NEURO/casazza/genotype_qc/TERRE_QC/all_imputed_r2_30_rsid_hard_call_male \
+    --thread 32
+
+Rscript /home1/NEURO/casazza/PRSice.R \
+    --prsice /home1/NEURO/casazza/PRSice_linux\
+    --base /home1/NEURO/casazza/nalls_PD.QC.gz\
+    --base-info INFO:0.8 \
+    --base-maf MAF:0.01 \
+    --cov TERRE.covariate \
+    --binary-target T\
+    --beta  \
+    --out TERRE_PRSice_nalls_female \
+    -q 5\
+    --all-score\
+    --pheno TERRE.pheno \
+    --snp SNP \
+    --stat b \
+    --pvalue p\
+    --target /home1/NEURO/casazza/genotype_qc/TERRE_QC/all_imputed_r2_30_rsid_hard_call_female \
+    --thread 32
 ```
 # Step 2: Evaluate output
 ```{r, out.width="400px"}
-include_graphics("TERRE_PRSice_BARPLOT_2021-11-02.png")
-include_graphics("TERRE_PRSice_HIGH-RES_PLOT_2021-11-02.png")
-include_graphics("TERRE_PRSice_QUANTILES_PLOT_2021-11-02.png")
+include_graphics("prsice_images/TERRE_PRSice_BARPLOT_2021-11-02.png")
+include_graphics("prsice_images/TERRE_PRSice_HIGH-RES_PLOT_2021-11-02.png")
+include_graphics("prsice_images/TERRE_PRSice_QUANTILES_PLOT_2021-11-02.png")
+
+include_graphics("prsice_images/TERRE_PRSice_nalls_male_BARPLOT_2022-01-13.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_male_HIGH-RES_PLOT_2022-01-13.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_male_QUANTILES_PLOT_2022-01-13.png")
+
+include_graphics("prsice_images/TERRE_PRSice_nalls_female_BARPLOT_2022-01-13.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_female_HIGH-RES_PLOT_2022-01-13.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_female_QUANTILES_PLOT_2022-01-13.png")
 ```
 ## Plotting PRSice Data on my own
 ```{r}
-prsice_meta <- fread("prsice_data/TERRE_PRSice.prsice")
-ggplot(prsice_meta, aes(Threshold, R2, color = -log10(P))) +
-  geom_point(size = 1) +
-  labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("-log"["10"] ~ "(P)")) +
-  theme_minimal()
-ggplot(prsice_meta[Threshold <= 0.5], aes(Threshold, Num_SNP, color = -log10(P))) +
+library(ggnewscale)
+prsice_male_meta <- fread("prsice_nalls_male_data/TERRE_PRSice_nalls_male.prsice")
+ggplot(prsice_male_meta[Threshold <= 0.5], aes(Threshold, Num_SNP, color = -log10(P))) +
   geom_point() +
   scale_y_continuous(breaks = c(seq(0, 1e5, 2.5e4), seq(2e5, 6e5, 1e5))) +
+  theme_minimal()
+
+prsice_female_meta <- fread("prsice_nalls_female_data/TERRE_PRSice_nalls_female.prsice")
+ggplot(prsice_female_meta[Threshold <= 0.5], aes(Threshold, Num_SNP, color = -log10(P))) +
+  geom_point() +
+  scale_y_continuous(breaks = c(seq(0, 1e5, 2.5e4), seq(2e5, 6e5, 1e5))) +
+  theme_minimal()
+
+prsice_meta <- fread("prsice_data/TERRE_PRSice.prsice")
+ggplot(mapping = aes(Threshold, R2, color = -log10(P))) +
+  geom_point(data = prsice_female_meta, size = 1) +
+  scale_color_gradient(low = "darkred", high = "pink") +
+  new_scale_color() +
+  geom_point(data = prsice_male_meta, size = 1, aes(color = -log10(P))) +
+  scale_color_gradient(low = "darkblue", high = "lightblue2") +
+  labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("-log"["10"] ~ "(P)")) +
+  theme_minimal()
+ggplot(mapping = aes(Threshold, R2, color = -log10(P))) +
+  geom_point(data = prsice_female_meta, size = 1) +
+  scale_color_gradient(low = "darkred", high = "pink") +
+  new_scale_color() +
+  geom_point(data = prsice_male_meta, size = 1, aes(color = -log10(P))) +
+  scale_color_gradient(low = "darkblue", high = "lightblue2") +
+  new_scale_color() +
+  geom_point(data = prsice_meta, size = 1, aes(color = -log10(P))) +
+  labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("-log"["10"] ~ "(P)")) +
   theme_minimal()
 ```
 
@@ -91,6 +158,35 @@ prsice_all <- fread("prsice_data/TERRE_PRSice.all_score")[match(colnames(betas_c
 covariate <- covariate[match(colnames(betas_combat), IID)]
 all(covariate$IID == colnames(betas_combat))
 all(covariate$IID == prsice_all$IID)
+
+covariate_male <- covariate[men == 1] %>% select(-men)
+betas_male <- betas_combat[, covariate_male$IID]
+prsice_male_all <- prsice_all[match(colnames(betas_male), IID), .(FID, IID, `Pt_0.0219001`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+covariate_male <- covariate_male[match(colnames(betas_male), IID)]
+all(covariate_male$IID == colnames(betas_male))
+all(covariate_male$IID == prsice_male_all$IID)
+
+covariate_female <- covariate[men == 0] %>% select(-men)
+betas_female <- betas_combat[, covariate_female$IID]
+prsice_female_all <- prsice_all[match(colnames(betas_female), IID), .(FID, IID, `Pt_0.0219001`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+covariate_female <- covariate_female[match(colnames(betas_female), IID)]
+all(covariate_female$IID == colnames(betas_female))
+all(covariate_female$IID == prsice_female_all$IID)
+
+
+covariate_male <- covariate[men == 1] %>% select(-men)
+betas_male <- betas_combat[, covariate_male$IID]
+prsice_male_nalls_all <- fread("prsice_nalls_male_data/TERRE_PRSice_nalls_male.all_score")[match(colnames(betas_male), IID), .(FID, IID, `Pt_0.0219001`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+covariate_male <- covariate_male[match(colnames(betas_male), IID)]
+all(covariate_male$IID == colnames(betas_male))
+all(covariate_male$IID == prsice_male_nalls_all$IID)
+
+covariate_female <- covariate[men == 0] %>% select(-men)
+betas_female <- betas_combat[, covariate_female$IID]
+prsice_female_nalls_all <- fread("prsice_nalls_female_data/TERRE_PRSice_nalls_female.all_score")[match(colnames(betas_female), IID), .(FID, IID, `Pt_0.0219001`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+covariate_female <- covariate_female[match(colnames(betas_female), IID)]
+all(covariate_female$IID == colnames(betas_female))
+all(covariate_female$IID == prsice_female_nalls_all$IID)
 ```
 ### Run limma
 
@@ -98,6 +194,17 @@ all(covariate$IID == prsice_all$IID)
 mvalues <- lumi::beta2m(betas_combat)
 prs_mat <- prsice_all[, -c(1, 2)]
 cov_mat <- covariate[, -c(1, 2)]
+
+mvalues_male <- lumi::beta2m(betas_male)
+prs_mat_male <- prsice_male_all[, -c(1, 2)]
+cov_mat_male <- covariate_male[, -c(1, 2)]
+
+mvalues_female <- lumi::beta2m(betas_female)
+prs_mat_female <- prsice_female_all[, -c(1, 2)]
+cov_mat_female <- covariate_female[, -c(1, 2)]
+
+prs_mat_nalls_male <- prsice_male_nalls_all[, -c(1, 2)]
+prs_mat_nalls_female <- prsice_female_nalls_all[, -c(1, 2)]
 ```
 
 ```{r}
@@ -110,6 +217,46 @@ hits <- foreach(prs_thresh = colnames(prs_mat)) %dopar% {
 }
 names(hits) <- colnames(prs_mat)
 hits_by_thresh_bonf <- rbindlist(hits, idcol = "threshold", fill = TRUE)
+
+registerDoParallel(ncol(prs_mat_male) / 2)
+hits_male <- foreach(prs_thresh = colnames(prs_mat_male)) %dopar% {
+  design_prs_male <- model.matrix(~., data = cbind(prs_mat_male[, ..prs_thresh], cov_mat_male))
+  prs_fit_male <- lmFit(mvalues_male, design_prs_male)
+  prs_fit_male <- eBayes(prs_fit_male)
+  topTable(prs_fit_male, coef = 2, adjust.method = "bonf", p.value = 0.05, number = Inf, genelist = rownames(mvalues_male))
+}
+names(hits_male) <- colnames(prs_mat_male)
+hits_by_thresh_bonf_male <- rbindlist(hits_male, idcol = "threshold", fill = TRUE)
+
+registerDoParallel(ncol(prs_mat_female) / 2)
+hits_female <- foreach(prs_thresh = colnames(prs_mat_female)) %dopar% {
+  design_prs_female <- model.matrix(~., data = cbind(prs_mat_female[, ..prs_thresh], cov_mat_female))
+  prs_fit_female <- lmFit(mvalues_female, design_prs_female)
+  prs_fit_female <- eBayes(prs_fit_female)
+  topTable(prs_fit_female, coef = 2, adjust.method = "bonf", p.value = 0.05, number = Inf, genelist = rownames(mvalues_female))
+}
+names(hits_female) <- colnames(prs_mat_female)
+hits_by_thresh_bonf_female <- rbindlist(hits_female, idcol = "threshold", fill = TRUE)
+
+registerDoParallel(ncol(prs_mat_male) / 2)
+hits_nalls_male <- foreach(prs_thresh = colnames(prs_mat_nalls_male)) %dopar% {
+  design_prs_nalls_male <- model.matrix(~., data = cbind(prs_mat_nalls_male[, ..prs_thresh], cov_mat_male))
+  prs_fit_nalls_male <- lmFit(mvalues_male, design_prs_nalls_male)
+  prs_fit_nalls_male <- eBayes(prs_fit_nalls_male)
+  topTable(prs_fit_nalls_male, coef = 2, adjust.method = "bonf", p.value = 0.05, number = Inf, genelist = rownames(mvalues_male))
+}
+names(hits_nalls_male) <- colnames(prs_mat_nalls_male)
+hits_by_thresh_bonf_nalls_male <- rbindlist(hits_nalls_male, idcol = "threshold", fill = TRUE)
+
+registerDoParallel(ncol(prs_mat_female) / 2)
+hits_nalls_female <- foreach(prs_thresh = colnames(prs_mat_nalls_female)) %dopar% {
+  design_prs_nalls_female <- model.matrix(~., data = cbind(prs_mat_nalls_female[, ..prs_thresh], cov_mat_female))
+  prs_fit_nalls_female <- lmFit(mvalues_female, design_prs_nalls_female)
+  prs_fit_nalls_female <- eBayes(prs_fit_nalls_female)
+  topTable(prs_fit_nalls_female, coef = 2, adjust.method = "bonf", p.value = 0.05, number = Inf, genelist = rownames(mvalues_female))
+}
+names(hits_nalls_female) <- colnames(prs_mat_nalls_female)
+hits_by_thresh_bonf_nalls_female <- rbindlist(hits_nalls_female, idcol = "threshold", fill = TRUE)
 ```
 ```{r}
 ggplot(hits_by_thresh_bonf[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
@@ -117,6 +264,40 @@ ggplot(hits_by_thresh_bonf[, .(hits = .N), by = threshold] %>% mutate(threshold 
   geom_col() +
   labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +
   theme_minimal()
+
+ggplot(hits_by_thresh_bonf_male[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
+  geom_text(vjust = -0.25) +
+  geom_col() +
+  labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +
+  theme_minimal()
+ggplot(hits_by_thresh_bonf_female[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
+  geom_text(vjust = -0.25) +
+  geom_col() +
+  labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +
+  theme_minimal()
+hits_by_thresh_bonf_nalls_male[, .(hits = .N), by = threshold]
+ggplot(hits_by_thresh_bonf_nalls_male[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
+  geom_text(vjust = -0.25) +
+  geom_col() +
+  labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +
+  theme_minimal()
+hits_by_thresh_bonf_nalls_female[, .(hits = .N), by = threshold]
+ggplot(hits_by_thresh_bonf_nalls_female[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
+  geom_text(vjust = -0.25) +
+  geom_col() +
+  labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +
+  theme_minimal()
+```
+```{r}
+display_venn <- function(x, ...) {
+  library(VennDiagram)
+  grid.newpage()
+  venn_object <- venn.diagram(x, filename = NULL, ...)
+  grid.draw(venn_object)
+}
+display_venn(list(both = hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, male = hits_by_thresh_bonf_male[threshold == "Pt_5e-08"]$ID, female = hits_by_thresh_bonf_female[threshold == "Pt_5e-08"]$ID), fill = c("gray", "blue", "pink"))
+
+display_venn(list(both = hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, male = hits_by_thresh_bonf_nalls_male[threshold == "Pt_5e-08"]$ID, female = hits_by_thresh_bonf_nalls_female[threshold == "Pt_5e-08"]$ID), fill = c("gray", "blue", "pink"))
 ```
 
 ```{r}
@@ -147,6 +328,16 @@ ggplot(prs_annot, aes(logFC, -log10(P.Value))) +
     color = "green",
     mapping = aes(logFC, -log10(P.Value))
   ) +
+  geom_point(
+    data = subset(prs_annot, ID %in% hits_by_thresh_bonf_nalls_male[threshold == "Pt_5e-08"]$ID),
+    color = "lightblue2",
+    mapping = aes(logFC, -log10(P.Value))
+  ) +
+  geom_point(
+    data = subset(prs_annot, ID %in% hits_by_thresh_bonf_nalls_female[threshold == "Pt_5e-08"]$ID),
+    color = "pink",
+    mapping = aes(logFC, -log10(P.Value))
+  ) +
   geom_hline(
     linetype = "dashed",
     yintercept = min(-log10(prs_annot$P.Value[prs_annot$adj.P.Val < 0.05]))
@@ -165,7 +356,7 @@ ggplot(prs_annot, aes(logFC, -log10(P.Value))) +
 ```
 
 # Manhattan plot vs GWAS manhattan plot
-```{r}
+```{r,eval=FALSE}
 library(qqman)
 cpg_pos <- IlluminaHumanMethylationEPICanno.ilm10b4.hg19::Locations %>%
   as.data.frame() %>%
@@ -186,10 +377,10 @@ manhattan(copy_annot[chr == 17, .(SNP = gene, CHR = chr, BP = pos, P = P.Value)]
   suggestiveline = FALSE
 )
 ```
-```{r}
+```{r,eval=FALSE}
 GWAS <- fread("~/nalls_PD.QC.gz")
 ```
-```{r}
+```{r,eval=FALSE}
 manhattan(GWAS,
   annotatePval = 5e-8,
   bp = "POS",

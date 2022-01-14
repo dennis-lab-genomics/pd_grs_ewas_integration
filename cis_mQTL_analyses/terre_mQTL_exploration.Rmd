@@ -319,7 +319,7 @@ plot_cpgs_overlap <- function(cpgs) {
   )
   plotTracks(
     list(dat, cgi, gr),
-    collapseTranscripts = "meta", transcriptAnnotation = "symbol", cex = 0.5
+    collapseTranscripts = "meta", transcriptAnnotation = "symbol"
   )
 }
 # TODO Plot CGI as a track and highlight actual positions of CpGs
