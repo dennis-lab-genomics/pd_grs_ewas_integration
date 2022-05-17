@@ -1,6 +1,6 @@
 ---
 title: "PRS Analysis"
-output: github_document
+output: html_notebook
 ---
 
 ```{r setup, include=FALSE}
@@ -14,15 +14,19 @@ library(tidyr)
 library(tibble)
 library(magrittr)
 library(ggplot2)
+library(ggpubr)
+library(glue)
 library(data.table)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 # PD risk score data and matching
 ```{r, eval=FALSE}
-risk_scores <- read_xlsx("~/pd_risk_score/Supplementary materials/Table S2. Detailed summary statistics on all nominated risk variants, known and novel_.xlsx") %>% mutate(CHR = as.numeric(CHR), COUNTED = toupper(`Effect allele`), ALT = toupper(`Other allele`), POS = BP) %>% filter(!is.na(CHR))
-risk_scores %>% select(SNP,COUNTED, `Beta, all studies`) %>%
+risk_scores <- read_xlsx("~/pd_risk_score/Supplementary materials/Table S2. Detailed summary statistics on all nominated risk variants, known and novel_.xlsx") %>%
+  mutate(CHR = as.numeric(CHR), COUNTED = toupper(`Effect allele`), ALT = toupper(`Other allele`), POS = BP) %>%
+  filter(!is.na(CHR))
+risk_scores %>%
+  select(SNP, COUNTED, `Beta, all studies`) %>%
   write_delim("pd_prs_file.txt", col_names = FALSE)
-
 ```
 
 # TERRE PRS Analysis
@@ -38,292 +42,396 @@ terre_prs <- fread("terre_prs.sscore")
 terre_pcs <- fread("~/genotype_qc/TERRE_QC/raw_data.geno.maf.mind.sex_check.het_filter.ibd_filter.eigenvec")
 terre_metadata <- read.csv("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv") %>%
   mutate(
-    FID = gsub("(PAE_[0-9]*_[1-9]*)_.*","\\1",FID),
-    IID = gsub("(PAE_[0-9]*_[1-9]*)_.*","\\1",IID)
+    FID = gsub("(PAE_[0-9]*_[1-9]*)_.*", "\\1", FID),
+    IID = gsub("(PAE_[0-9]*_[1-9]*)_.*", "\\1", IID)
   )
-all_data <- terre_prs %>% left_join(terre_metadata, by=c("IID")) %>% left_join(terre_pcs,by=c("IID"= "V1"))
+all_data <- terre_prs %>%
+  left_join(terre_metadata, by = c("IID")) %>%
+  left_join(terre_pcs, by = c("IID" = "V1"))
 ```
 ## Association analysis
 ```{r}
-pd_h2 <- function(R2O,case_prop,prevalence=0.22){
+pd_h2 <- function(R2O, case_prop, prevalence = 0.22) {
   K <- prevalence
   P <- case_prop
-  thd <- -1 * qnorm(K,0,1)
-  zv <- dnorm(thd) #z (normal density)
-  mv <- zv/K #mean liability for case
-  theta <- mv*(P-K)/(1-K)*(mv*(P-K)/(1-K)-thd) #θ in equation
-  cv <- K*(1-K)/zv^2*K*(1-K)/(P*(1-P)) #C in
-  return(R2O*cv/(1+R2O*theta*cv))
+  thd <- -1 * qnorm(K, 0, 1)
+  zv <- dnorm(thd) # z (normal density)
+  mv <- zv / K # mean liability for case
+  theta <- mv * (P - K) / (1 - K) * (mv * (P - K) / (1 - K) - thd) # θ in equation
+  cv <- K * (1 - K) / zv^2 * K * (1 - K) / (P * (1 - P)) # C in
+  return(R2O * cv / (1 + R2O * theta * cv))
 }
-fit1 <- glm(PD ~ SCORE1_AVG + men + age + V3 + V4 + V5, data=all_data,family="binomial")
+# R2
+fit1 <- glm(PD ~ SCORE1_AVG + men + age + V3 + V4 + V5, data = all_data, family = "binomial")
 summary(fit1)
-fit1_null <- glm(PD ~  men + age + V3 + V4 + V5, data=all_data,family="binomial")
+fit1_null <- glm(PD ~ men + age + V3 + V4 + V5, data = all_data, family = "binomial")
 summary(fit1_null)
-nagelkerke(fit1,null=fit1_null)
-#liability R2
-lin1 <- lm(PD ~ SCORE1_AVG + men + age + V3 + V4 + V5, data=all_data)
-lin2 <- lm(PD ~ men + age + V3 + V4 + V5, data=all_data)
+(cross_r2 <- nagelkerke(fit1, null = fit1_null))
+# liability R2
+lin1 <- lm(PD ~ SCORE1_AVG + men + age + V3 + V4 + V5, data = all_data)
+lin2 <- lm(PD ~ men + age + V3 + V4 + V5, data = all_data)
 R2 <- (deviance(lin2) - deviance(lin1)) / deviance(lin2)
-h2 <- pd_h2(R2,sum(all_data$status)/nrow(all_data),0.01)
-fit2 <- glm(PD ~ SCORE1_AVG*men + V3+V4+V5, data = all_data, family="binomial")
+h2 <- pd_h2(R2, sum(all_data$status) / nrow(all_data), 5 / 1000)
+R2
+h2
+
+# Sex stratified R2
+fit1_male <- glm(PD ~ SCORE1_AVG + age + V3 + V4 + V5, data = all_data[men == 1, ], family = "binomial")
+summary(fit1_male)
+fit1_male_null <- glm(PD ~ age + V3 + V4 + V5, data = all_data[men == 1, ], family = "binomial")
+summary(fit1_male_null)
+(male_r2 <- nagelkerke(fit1_male, null = fit1_male_null))
+fit1_female <- glm(PD ~ SCORE1_AVG + age + V3 + V4 + V5, data = all_data[men == 0, ], family = "binomial")
+summary(fit1_female)
+fit1_female_null <- glm(PD ~ age + V3 + V4 + V5, data = all_data[men == 0, ], family = "binomial")
+summary(fit1_female_null)
+(female_r2 <- nagelkerke(fit1_female, null = fit1_female_null))
+# Additional tests
+fit2 <- glm(PD ~ SCORE1_AVG * men + V3 + V4 + V5, data = all_data, family = "binomial")
 summary(fit2)
-fit3 <- glm(PD~SCORE1_AVG*smoking + V3+V4+V5, data=all_data, family="binomial")
+fit3 <- glm(PD ~ SCORE1_AVG * smoking + V3 + V4 + V5, data = all_data, family = "binomial")
 summary(fit3)
-fit4 <- glm(PD~SCORE1_AVG*pesticides + V3+V4+V5, data=all_data, family="binomial")
+fit4 <- glm(PD ~ SCORE1_AVG * pesticides + V3 + V4 + V5, data = all_data, family = "binomial")
 summary(fit4)
 
-fit_null <- glm(PD ~ SCORE1_AVG, data=all_data, family="binomial")
+fit_null <- glm(PD ~ SCORE1_AVG, data = all_data, family = "binomial")
 summary(fit_null)
 ```
 
 ```{r}
-ggplot(all_data %>% mutate(PD= ifelse(PD,"CASE","CONTROL")),aes(as.factor(PD),SCORE1_AVG)) +geom_boxplot()+ geom_jitter(height=0, width=0.1)+ labs(y="Polygenic Risk Score", x = "Parkinson's Diagnosis") + ggtitle(bquote('Nagelkerke Pseudo-'*R^2*': 0.0611' ))
-ggplot(all_data,aes(factor(men),SCORE1_AVG)) +geom_boxplot()+ geom_jitter(height=0, width=0.1)
-t.test(all_data$SCORE1_AVG[as.logical(all_data$PD)],all_data$SCORE1_AVG[!as.logical(all_data$PD)],alternative = "greater")
-t.test(all_data$SCORE1_AVG[as.logical(all_data$men)],all_data$SCORE1_AVG[!as.logical(all_data$men)])
+to_plot <- all_data %>%
+  mutate(PD = ifelse(PD, "CASE", "CONTROL"), Sex = ifelse(men == 1, "Male", "Female")) %>%
+  mutate(Subjects = factor(paste(PD, Sex), levels = c("CONTROL Male", "CASE Male", "CONTROL Female", "CASE Female")))
+ggboxplot(
+  to_plot,
+  x = "Subjects",
+  y = "SCORE1_AVG",
+  color = "Sex",
+  add = "jitter",
+  add.params = list(width = 0.1)
+) +
+  stat_compare_means(
+    comparisons = list(
+      # c("CASE Male","CASE Female"),
+      # c("CONTROL Male", "CONTROL Female"),
+      c("CASE Male", "CONTROL Male"),
+      c("CASE Female", "CONTROL Female")
+    )
+  ) +
+  labs(y = "Polygenic Risk Score", x = "Parkinson's Diagnosis") +
+  scale_color_manual(values = c("Male" = "light blue", "Female" = "pink")) +
+  ggtitle(bquote("Nagelkerke Pseudo-" * R^2 * " Males 0.0611"))
+male_r2$Pseudo.R.squared.for.model.vs.null[3]
+ggboxplot(
+  to_plot,
+  x = "Sex",
+  y = "SCORE1_AVG",
+  color = "Sex",
+  add = "jitter",
+  add.params = list(width = 0.1)
+) +
+  stat_compare_means() +
+  labs(y = "Polygenic Risk Score", x = "Parkinson's Diagnosis") +
+  scale_color_manual(values = c("Male" = "light blue", "Female" = "pink"))
+
+ggboxplot(
+  to_plot,
+  x = "PD",
+  y = "SCORE1_AVG",
+  color = "Sex",
+  add = "jitter",
+  add.params = list(width = 0.1)
+) +
+  stat_compare_means() +
+  labs(y = "Polygenic Risk Score", x = "Parkinson's Diagnosis") +
+  scale_color_manual(values = c("Male" = "light blue", "Female" = "pink"))
 ```
 
 ## PRS vs DNAm
 
 ```{r}
 # load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE/TERRE_betas_CTC.RData")# terre_betas_CTC
-load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE_processed_2021/betas_combat.RData")# betas_sub
+load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE_processed_2021/betas_combat.RData") # betas_sub
 betas_sub <- betas_combat
 # load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE/TERRE_funnorm_processed/betas_combat.RData")
 # betas_sub<- betas_combat
 ```
 Let's check how the data looks for a random subject:
 ```{r}
-ggplot(betas_sub[,c(1,2,3,4,5)] %>% as.data.table(keep.rownames = T) %>% melt(id.vars="rn",value.name = "betas", variable.name="subject"),aes(betas,color=subject)) + geom_density()
+ggplot(betas_sub[, c(1, 2, 3, 4, 5)] %>% as.data.table(keep.rownames = T) %>% melt(id.vars = "rn", value.name = "betas", variable.name = "subject"), aes(betas, color = subject)) +
+  geom_density()
 ```
 
 ### Match DNA, PRS, and metadata
 ```{r}
-reg_all_data <- all_data[na.omit(match(colnames(betas_sub),all_data$patient)),]
-reg_all_data$sex <- ifelse(reg_all_data$men,"Male","Female")
-reg_all_data$PD <- ifelse(reg_all_data$PD,"CASE","CONTROL")
-betas_sub <- betas_sub[,colnames(betas_sub) %in% reg_all_data$patient]
+reg_all_data <- all_data[na.omit(match(colnames(betas_sub), all_data$patient)), ]
+reg_all_data$sex <- ifelse(reg_all_data$men, "Male", "Female")
+reg_all_data$PD <- ifelse(reg_all_data$PD, "CASE", "CONTROL")
+betas_sub <- betas_sub[, colnames(betas_sub) %in% reg_all_data$patient]
 all(colnames(betas_sub) == reg_all_data$patient)
 ```
 ### TERRE PRS regression vs methylation
 
 #### Differential methylation with PRS vs PD
 ```{r}
-na_row <- !apply(reg_all_data[,c("SCORE1_AVG","age","plate","sex")],1,function(x)any(is.na(x)))
-design_prs <- model.matrix(~1+SCORE1_AVG+age+plate+sex+V3+V4+V5, data=reg_all_data[na_row,])
-prs_fit <- lmFit(betas_sub[,na_row],design_prs)
+na_row <- !apply(reg_all_data[, c("SCORE1_AVG", "age", "plate", "sex")], 1, function(x) any(is.na(x)))
+design_prs <- model.matrix(~ 1 + SCORE1_AVG + age + plate + sex + V3 + V4 + V5, data = reg_all_data[na_row, ])
+prs_fit <- lmFit(betas_sub[, na_row], design_prs)
 prs_fit <- eBayes(prs_fit)
 # Cases only
-case_select <-na_row & reg_all_data$PD =="CASE"
-design_prs_case <- model.matrix(~1+SCORE1_AVG+age+plate+sex+V3+V4+V5, data=reg_all_data[case_select,])
-prs_fit_case <- lmFit(betas_sub[,case_select],design_prs_case)
+case_select <- na_row & reg_all_data$PD == "CASE"
+design_prs_case <- model.matrix(~ 1 + SCORE1_AVG + age + plate + sex + V3 + V4 + V5, data = reg_all_data[case_select, ])
+prs_fit_case <- lmFit(betas_sub[, case_select], design_prs_case)
 prs_fit_case <- eBayes(prs_fit_case)
 # Controls only
-control_select <-na_row & reg_all_data$PD =="CONTROL"
-design_prs_control <- model.matrix(~1+SCORE1_AVG+age+plate+sex+V3+V4+V5, data=reg_all_data[control_select,])
-prs_fit_control <- lmFit(betas_sub[,control_select],design_prs_control)
+control_select <- na_row & reg_all_data$PD == "CONTROL"
+design_prs_control <- model.matrix(~ 1 + SCORE1_AVG + age + plate + sex + V3 + V4 + V5, data = reg_all_data[control_select, ])
+prs_fit_control <- lmFit(betas_sub[, control_select], design_prs_control)
 prs_fit_control <- eBayes(prs_fit_control)
 
-design_pd <- model.matrix(~1+PD+age+plate+sex, data=reg_all_data[na_row,])
-pd_fit <- lmFit(betas_sub[,na_row],design_pd)
+design_pd <- model.matrix(~ 1 + PD + age + plate + sex, data = reg_all_data[na_row, ])
+pd_fit <- lmFit(betas_sub[, na_row], design_pd)
 pd_fit <- eBayes(pd_fit)
-pd_res <- topTable(pd_fit,coef=2,number = Inf)
-prs_res <- topTable(prs_fit,coef=2,number = Inf)
-control_res <- topTable(prs_fit_control,coef=2,number = Inf)
-case_res <- topTable(prs_fit_case,coef=2,number = Inf)
+pd_res <- topTable(pd_fit, coef = 2, number = Inf)
+prs_res <- topTable(prs_fit, coef = 2, number = Inf)
+control_res <- topTable(prs_fit_control, coef = 2, number = Inf)
+case_res <- topTable(prs_fit_case, coef = 2, number = Inf)
 ```
 ##### DMR analysis
 
 ```{r}
-prs_annotated <- cpg.annotate(datatype = "array", object = betas_sub[,na_row],analysis.type = "differential", design = design_prs, coef = 2,what = "Beta",arraytype = "EPIC",fdr = 0.05)
+prs_annotated <- cpg.annotate(datatype = "array", object = betas_sub[, na_row], analysis.type = "differential", design = design_prs, coef = 2, what = "Beta", arraytype = "EPIC", fdr = 0.05)
 prs_dmr_res <- dmrcate(prs_annotated, lambda = 1000, C = 2)
 
-pd_annotated <- cpg.annotate(datatype = "array", object = betas_sub[,na_row],analysis.type = "differential", design = design_pd, coef = 2,what = "Beta",arraytype = "EPIC",fdr=0.05)
+pd_annotated <- cpg.annotate(datatype = "array", object = betas_sub[, na_row], analysis.type = "differential", design = design_pd, coef = 2, what = "Beta", arraytype = "EPIC", fdr = 0.05)
 pd_dmr_res <- dmrcate(pd_annotated, lambda = 1000, C = 2)
-
 ```
 ```{r}
-prs_dmr <- extractRanges(prs_dmr_res, genome= "hg19")
+prs_dmr <- extractRanges(prs_dmr_res, genome = "hg19")
 annotation <- minfi::getAnnotation(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)
 ```
 
 ##### Plotting
 ```{r, fig.height=7,fig.width=15}
 library(cowplot)
-get_dmr_effects <- function(dmr,ix,chrom, limma_res){
-  dmr_coord <- as.data.frame(ranges(dmr))[ix,]
-  cpgs <- annotation[annotation$chr == chrom & annotation$pos >= dmr_coord$start & annotation$pos <= dmr_coord$end,]
-  res <- cbind(cpgs,limma_res[cpgs$Name,])
-  dmr_1 <- as.data.frame(res[!is.na(res$logFC),])
-  dmr_methy <- melt(betas_sub[dmr_1$Name,na_row],stringsAsFactors=FALSE)
-  to_plot <- merge(dmr_1,dmr_methy, by.x="Name", by.y = "Var1")
-  merge(to_plot,all_data,by.x="Var2",by.y="patient")
+get_dmr_effects <- function(dmr, ix, chrom, limma_res) {
+  dmr_coord <- as.data.frame(ranges(dmr))[ix, ]
+  cpgs <- annotation[annotation$chr == chrom & annotation$pos >= dmr_coord$start & annotation$pos <= dmr_coord$end, ]
+  res <- cbind(cpgs, limma_res[cpgs$Name, ])
+  dmr_1 <- as.data.frame(res[!is.na(res$logFC), ])
+  dmr_methy <- melt(betas_sub[dmr_1$Name, na_row], stringsAsFactors = FALSE)
+  to_plot <- merge(dmr_1, dmr_methy, by.x = "Name", by.y = "Var1")
+  merge(to_plot, all_data, by.x = "Var2", by.y = "patient")
 }
 
 
-get_dmr_res <- function(dmr,ix,chrom, limma_res){
-  dmr_coord <- as.data.frame(ranges(dmr))[ix,]
-  cpgs <- annotation[annotation$chr == chrom & annotation$pos >= dmr_coord$start & annotation$pos <= dmr_coord$end,]
-  res <- cbind(cpgs,limma_res[cpgs$Name,])
+get_dmr_res <- function(dmr, ix, chrom, limma_res) {
+  dmr_coord <- as.data.frame(ranges(dmr))[ix, ]
+  cpgs <- annotation[annotation$chr == chrom & annotation$pos >= dmr_coord$start & annotation$pos <= dmr_coord$end, ]
+  res <- cbind(cpgs, limma_res[cpgs$Name, ])
   return(as.data.frame(res))
 }
-to_plot <- get_dmr_effects(prs_dmr,1,"chr17",prs_res)
+to_plot <- get_dmr_effects(prs_dmr, 1, "chr17", prs_res)
 
-p1 <- ggplot(to_plot %>% mutate(SCORE1_AVG = scale(SCORE1_AVG)), aes(pos,value, color= SCORE1_AVG))+ geom_point() + scale_color_distiller(palette = "Spectral") + theme_minimal() + labs(color="Normalized PD PRS")
-p2 <- ggplot(to_plot %>% mutate(PD = ifelse(PD == 1,"CASE","CONTROL")), aes(pos,value, color= PD))+ geom_point() + scale_color_brewer(palette = "Dark2") + theme_minimal()+ stat_summary(aes(group=PD), fun.y=mean, geom="line") + labs(color="PD status")
+p1 <- ggplot(to_plot %>% mutate(SCORE1_AVG = scale(SCORE1_AVG)), aes(pos, value, color = SCORE1_AVG)) +
+  geom_point() +
+  scale_color_distiller(palette = "Spectral") +
+  theme_minimal() +
+  labs(color = "Normalized PD PRS")
+p2 <- ggplot(to_plot %>% mutate(PD = ifelse(PD == 1, "CASE", "CONTROL")), aes(pos, value, color = PD)) +
+  geom_point() +
+  scale_color_brewer(palette = "Dark2") +
+  theme_minimal() +
+  stat_summary(aes(group = PD), fun.y = mean, geom = "line") +
+  labs(color = "PD status")
 
 
-to_plot <- get_dmr_effects(prs_dmr,2,"chr17",prs_res)
+to_plot <- get_dmr_effects(prs_dmr, 2, "chr17", prs_res)
 
-p3 <- ggplot(to_plot %>% mutate(SCORE1_AVG = scale(SCORE1_AVG)), aes(pos,value, color= SCORE1_AVG))+ geom_point() + scale_color_distiller(palette = "Spectral") + theme_minimal()+ labs(color="Normalized PD PRS")
-p4 <- ggplot(to_plot %>% mutate(PD = ifelse(PD == 1,"CASE","CONTROL")), aes(pos,value, color= PD))+ geom_point() + scale_color_brewer(palette = "Dark2") + theme_minimal()+ stat_summary(aes(group=PD), fun.y=mean, geom="line") + labs(color="PD status")
+p3 <- ggplot(to_plot %>% mutate(SCORE1_AVG = scale(SCORE1_AVG)), aes(pos, value, color = SCORE1_AVG)) +
+  geom_point() +
+  scale_color_distiller(palette = "Spectral") +
+  theme_minimal() +
+  labs(color = "Normalized PD PRS")
+p4 <- ggplot(to_plot %>% mutate(PD = ifelse(PD == 1, "CASE", "CONTROL")), aes(pos, value, color = PD)) +
+  geom_point() +
+  scale_color_brewer(palette = "Dark2") +
+  theme_minimal() +
+  stat_summary(aes(group = PD), fun.y = mean, geom = "line") +
+  labs(color = "PD status")
 
-to_plot <- get_dmr_effects(prs_dmr,3,"chr17",prs_res)
+to_plot <- get_dmr_effects(prs_dmr, 3, "chr17", prs_res)
 
-p5 <- ggplot(to_plot %>% mutate(SCORE1_AVG = scale(SCORE1_AVG)), aes(pos,value, color= SCORE1_AVG))+ geom_point() + scale_color_distiller(palette = "Spectral") + theme_minimal()+ labs(color="PD PRS")
-p6 <-  ggplot(to_plot %>% mutate(PD = ifelse(PD == 1,"CASE","CONTROL")), aes(pos,value, color= PD))+ geom_point() + scale_color_brewer(palette = "Dark2") + theme_minimal()+ stat_summary(aes(group=PD), fun.y=mean, geom="line")  + labs(color="Normalized PD PRS")
+p5 <- ggplot(to_plot %>% mutate(SCORE1_AVG = scale(SCORE1_AVG)), aes(pos, value, color = SCORE1_AVG)) +
+  geom_point() +
+  scale_color_distiller(palette = "Spectral") +
+  theme_minimal() +
+  labs(color = "PD PRS")
+p6 <- ggplot(to_plot %>% mutate(PD = ifelse(PD == 1, "CASE", "CONTROL")), aes(pos, value, color = PD)) +
+  geom_point() +
+  scale_color_brewer(palette = "Dark2") +
+  theme_minimal() +
+  stat_summary(aes(group = PD), fun.y = mean, geom = "line") +
+  labs(color = "Normalized PD PRS")
 
-plot_grid(p1,p2,p3,p4,p5,p6,byrow = F)
+plot_grid(p1, p2, p3, p4, p5, p6, byrow = F)
 ```
 
 
 ```{r, eval=FALSE}
 library(ggrepel)
-annot <- fread("~/MethylationEPIC_v-1-0_B4.csv",skip = 7)
-pd_annot <- pd_res %>%rownames_to_column("probe") %>% left_join(annot,by=c("probe"="Name"))%>% mutate(gene = gsub(";.*","",UCSC_RefGene_Name)) %>% mutate(gene= ifelse(gene == "",probe,gene))
+annot <- fread("~/MethylationEPIC_v-1-0_B4.csv", skip = 7)
+pd_annot <- pd_res %>%
+  rownames_to_column("probe") %>%
+  left_join(annot, by = c("probe" = "Name")) %>%
+  mutate(gene = gsub(";.*", "", UCSC_RefGene_Name)) %>%
+  mutate(gene = ifelse(gene == "", probe, gene))
 
-prs_annot <- prs_res %>%rownames_to_column("probe") %>% left_join(annot,by=c("probe"="Name"))%>% mutate(gene = gsub(";.*","",UCSC_RefGene_Name)) %>% mutate(gene= ifelse(gene == "",probe,gene))
+prs_annot <- prs_res %>%
+  rownames_to_column("probe") %>%
+  left_join(annot, by = c("probe" = "Name")) %>%
+  mutate(gene = gsub(";.*", "", UCSC_RefGene_Name)) %>%
+  mutate(gene = ifelse(gene == "", probe, gene))
 
-ggplot(prs_annot,aes(logFC,-log10(P.Value)))+
+ggplot(prs_annot, aes(logFC, -log10(P.Value))) +
   geom_point() +
   geom_text_repel(
-    data=prs_annot%>% filter(abs(logFC) > 0.03 & adj.P.Val < 0.05),
-    color="dodgerblue",
-    mapping=aes(logFC,-log10(P.Value),label=gene)
+    data = prs_annot %>% filter(abs(logFC) > 0.03 & adj.P.Val < 0.05),
+    color = "dodgerblue",
+    mapping = aes(logFC, -log10(P.Value), label = gene)
   ) +
   geom_point(
-    data=subset(prs_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03),
+    data = subset(prs_annot, adj.P.Val < 0.05 & abs(logFC) > 0.03),
     color = "green",
-    mapping=aes(logFC,-log10(P.Value))
+    mapping = aes(logFC, -log10(P.Value))
   ) +
-  labs(x = quote(Delta~beta~Methylation)) +
+  labs(x = quote(Delta ~ beta ~ Methylation)) +
   theme_minimal() +
   geom_hline(
-    linetype="dashed",
-    yintercept = min(-log10(prs_annot$P.Value[prs_annot$adj.P.Val <0.05]))
+    linetype = "dashed",
+    yintercept = min(-log10(prs_annot$P.Value[prs_annot$adj.P.Val < 0.05]))
   ) +
-  geom_vline(linetype="dashed",xintercept = 0.03) +
-  geom_vline(linetype="dashed",xintercept = -0.03)+
+  geom_vline(linetype = "dashed", xintercept = 0.03) +
+  geom_vline(linetype = "dashed", xintercept = -0.03) +
   ggtitle("Cases and Controls")
 # prs_annot[prs_annot$adj.P.Val <0.05,c("gene","CHR","MAPINFO","logFC","P.Value","UCSC_RefGene_Name")] %>% mutate(UCSC_RefGene_Name = sapply(UCSC_RefGene_Name,function(x)split(x)[1]))
-prs_highlight <- subset(prs_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03)
-case_annot <- case_res %>%rownames_to_column("probe") %>% left_join(annot,by=c("probe"="Name"))%>% mutate(gene = gsub(";.*","",UCSC_RefGene_Name)) %>% mutate(gene= ifelse(gene == "",probe,gene))
-ggplot(case_annot,aes(logFC,-log10(P.Value)))+
+prs_highlight <- subset(prs_annot, adj.P.Val < 0.05 & abs(logFC) > 0.03)
+case_annot <- case_res %>%
+  rownames_to_column("probe") %>%
+  left_join(annot, by = c("probe" = "Name")) %>%
+  mutate(gene = gsub(";.*", "", UCSC_RefGene_Name)) %>%
+  mutate(gene = ifelse(gene == "", probe, gene))
+ggplot(case_annot, aes(logFC, -log10(P.Value))) +
   geom_point() +
   geom_text_repel(
-    data=subset(case_annot,adj.P.Val < 0.05& abs(logFC) > 0.03 & !probe %in% prs_highlight$probe),
-    color="dodgerblue",
-    mapping=aes(logFC,-log10(P.Value),label=gene)
+    data = subset(case_annot, adj.P.Val < 0.05 & abs(logFC) > 0.03 & !probe %in% prs_highlight$probe),
+    color = "dodgerblue",
+    mapping = aes(logFC, -log10(P.Value), label = gene)
   ) +
   geom_point(
-    data=subset(case_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03 & !probe %in% prs_highlight$probe),
+    data = subset(case_annot, adj.P.Val < 0.05 & abs(logFC) > 0.03 & !probe %in% prs_highlight$probe),
     color = "red",
-    mapping=aes(logFC,-log10(P.Value))
+    mapping = aes(logFC, -log10(P.Value))
   ) +
-    geom_text_repel(
-    data=case_annot %>% filter(probe %in% prs_highlight$probe),#subset(case_annot,adj.P.Val < 0.05& abs(logFC) > 0.03),
-    color="dodgerblue",
-    mapping=aes(logFC,-log10(P.Value),label=gene)
+  geom_text_repel(
+    data = case_annot %>% filter(probe %in% prs_highlight$probe), # subset(case_annot,adj.P.Val < 0.05& abs(logFC) > 0.03),
+    color = "dodgerblue",
+    mapping = aes(logFC, -log10(P.Value), label = gene)
   ) +
   geom_point(
-    data=case_annot %>% filter(probe %in% prs_highlight$probe),#subset(case_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03),
+    data = case_annot %>% filter(probe %in% prs_highlight$probe), # subset(case_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03),
     color = "green",
-    mapping=aes(logFC,-log10(P.Value))
+    mapping = aes(logFC, -log10(P.Value))
   ) +
-  labs(x = quote(Delta~beta~Methylation)) +
+  labs(x = quote(Delta ~ beta ~ Methylation)) +
   theme_minimal() +
   geom_hline(
-    linetype="dashed",
-    yintercept = min(-log10(case_annot$P.Value[case_annot$adj.P.Val <0.05]))
+    linetype = "dashed",
+    yintercept = min(-log10(case_annot$P.Value[case_annot$adj.P.Val < 0.05]))
   ) +
-  geom_vline(linetype="dashed",xintercept = 0.03) +
-  geom_vline(linetype="dashed",xintercept = -0.03) +
+  geom_vline(linetype = "dashed", xintercept = 0.03) +
+  geom_vline(linetype = "dashed", xintercept = -0.03) +
   ggtitle("Cases")
 # case_annot[case_annot$adj.P.Val <0.05,c("gene","CHR","MAPINFO","logFC","P.Value","UCSC_RefGene_Name")] %>% mutate(UCSC_RefGene_Name = sapply(UCSC_RefGene_Name,function(x)split(x)[1]))
 
-control_annot <- control_res %>%rownames_to_column("probe") %>% left_join(annot,by=c("probe"="Name"))%>% mutate(gene = gsub(";.*","",UCSC_RefGene_Name)) %>% mutate(gene= ifelse(gene == "",probe,gene))
-ggplot(control_annot,aes(logFC,-log10(P.Value)))+
+control_annot <- control_res %>%
+  rownames_to_column("probe") %>%
+  left_join(annot, by = c("probe" = "Name")) %>%
+  mutate(gene = gsub(";.*", "", UCSC_RefGene_Name)) %>%
+  mutate(gene = ifelse(gene == "", probe, gene))
+ggplot(control_annot, aes(logFC, -log10(P.Value))) +
   geom_point() +
   geom_text_repel(
-    data=subset(control_annot,adj.P.Val < 0.05& abs(logFC) > 0.03 & !probe %in% prs_highlight$probe),
-    color="dodgerblue",
-    mapping=aes(logFC,-log10(P.Value),label=gene)
+    data = subset(control_annot, adj.P.Val < 0.05 & abs(logFC) > 0.03 & !probe %in% prs_highlight$probe),
+    color = "dodgerblue",
+    mapping = aes(logFC, -log10(P.Value), label = gene)
   ) +
   geom_point(
-    data=subset(control_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03 & !probe %in% prs_highlight$probe),
+    data = subset(control_annot, adj.P.Val < 0.05 & abs(logFC) > 0.03 & !probe %in% prs_highlight$probe),
     color = "red",
-    mapping=aes(logFC,-log10(P.Value))
+    mapping = aes(logFC, -log10(P.Value))
   ) +
-    geom_text_repel(
-    data=control_annot %>% filter(probe %in% prs_highlight$probe),#subset(control_annot,adj.P.Val < 0.05& abs(logFC) > 0.03),
-    color="dodgerblue",
-    mapping=aes(logFC,-log10(P.Value),label=gene)
+  geom_text_repel(
+    data = control_annot %>% filter(probe %in% prs_highlight$probe), # subset(control_annot,adj.P.Val < 0.05& abs(logFC) > 0.03),
+    color = "dodgerblue",
+    mapping = aes(logFC, -log10(P.Value), label = gene)
   ) +
   geom_point(
-    data=control_annot %>% filter(probe %in% prs_highlight$probe),#subset(control_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03),
+    data = control_annot %>% filter(probe %in% prs_highlight$probe), # subset(control_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03),
     color = "green",
-    mapping=aes(logFC,-log10(P.Value))
+    mapping = aes(logFC, -log10(P.Value))
   ) +
-  labs(x = quote(Delta~beta~Methylation)) +
-  theme_minimal() + geom_hline(linetype="dashed",yintercept = min(-log10(control_annot$P.Value[control_annot$adj.P.Val <0.05]))) +
-  geom_vline(linetype="dashed",xintercept = 0.03) +
-  geom_vline(linetype="dashed",xintercept = -0.03)+
+  labs(x = quote(Delta ~ beta ~ Methylation)) +
+  theme_minimal() +
+  geom_hline(linetype = "dashed", yintercept = min(-log10(control_annot$P.Value[control_annot$adj.P.Val < 0.05]))) +
+  geom_vline(linetype = "dashed", xintercept = 0.03) +
+  geom_vline(linetype = "dashed", xintercept = -0.03) +
   ggtitle("Controls")
 
 # control_annot[control_annot$adj.P.Val <0.05,c("gene","CHR","MAPINFO","logFC","P.Value","UCSC_RefGene_Name")] %>% mutate(UCSC_RefGene_Name = sapply(UCSC_RefGene_Name,function(x)split(x)[1]))
 
 
-ggplot(pd_annot,aes(logFC,-log10(P.Value)))+
+ggplot(pd_annot, aes(logFC, -log10(P.Value))) +
   geom_point() +
-    geom_text_repel(
-    data=pd_annot %>% filter(probe %in% prs_highlight$probe),#subset(pd_annot,adj.P.Val < 0.05& abs(logFC) > 0.03),
-    color="dodgerblue",
-    mapping=aes(logFC,-log10(P.Value),label=gene)
+  geom_text_repel(
+    data = pd_annot %>% filter(probe %in% prs_highlight$probe), # subset(pd_annot,adj.P.Val < 0.05& abs(logFC) > 0.03),
+    color = "dodgerblue",
+    mapping = aes(logFC, -log10(P.Value), label = gene)
   ) +
   geom_point() +
   geom_text_repel(
-    data=pd_annot %>%filter(abs(logFC) > 0.03 & adj.P.Val < 0.05) %>% top_n(25,adj.P.Val),#subset(pd_annot,adj.P.Val < 0.05& abs(logFC) > 0.03),
-    color="dodgerblue",
-    mapping=aes(logFC,-log10(P.Value),label=gene)
+    data = pd_annot %>% filter(abs(logFC) > 0.03 & adj.P.Val < 0.05) %>% top_n(25, adj.P.Val), # subset(pd_annot,adj.P.Val < 0.05& abs(logFC) > 0.03),
+    color = "dodgerblue",
+    mapping = aes(logFC, -log10(P.Value), label = gene)
   ) +
   geom_point(
-    data=pd_annot %>% filter(probe %in% prs_highlight$probe),#subset(pd_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03),
+    data = pd_annot %>% filter(probe %in% prs_highlight$probe), # subset(pd_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03),
     color = "green",
-    mapping=aes(logFC,-log10(P.Value))
+    mapping = aes(logFC, -log10(P.Value))
   ) +
   geom_point(
-    data=subset(pd_annot,adj.P.Val < 0.05 & abs(logFC) > 0.03 & !probe %in% prs_highlight$probe),
+    data = subset(pd_annot, adj.P.Val < 0.05 & abs(logFC) > 0.03 & !probe %in% prs_highlight$probe),
     color = "red",
-    mapping=aes(logFC,-log10(P.Value))
+    mapping = aes(logFC, -log10(P.Value))
   ) +
-  labs(x = quote(Delta~beta~Methylation)) +
+  labs(x = quote(Delta ~ beta ~ Methylation)) +
   theme_minimal() +
   geom_hline(
-    linetype="dashed",
-    yintercept = min(-log10(pd_annot$P.Value[pd_annot$adj.P.Val <0.05]))
+    linetype = "dashed",
+    yintercept = min(-log10(pd_annot$P.Value[pd_annot$adj.P.Val < 0.05]))
   ) +
-  geom_vline(linetype="dashed",xintercept = 0.03) +
-  geom_vline(linetype="dashed",xintercept = -0.03)+
+  geom_vline(linetype = "dashed", xintercept = 0.03) +
+  geom_vline(linetype = "dashed", xintercept = -0.03) +
   ggtitle("PD Diagnosis")
 ```
 
 ```{r}
 library(qqman)
 qqman::qq(pd_res$P.Value)
-manhattan(prs_annot %>% mutate(P=P.Value,SNP=gene, CHR=as.numeric(recode(CHR,X="23",Y="24",MT="26")),BP=MAPINFO),chrlabs = c(1:22,"X","Y"),annotateTop = F,annotatePval = 5e-8)
+manhattan(prs_annot %>% mutate(P = P.Value, SNP = gene, CHR = as.numeric(recode(CHR, X = "23", Y = "24", MT = "26")), BP = MAPINFO), chrlabs = c(1:22, "X", "Y"), annotateTop = F, annotatePval = 5e-8)
 qqman::qq(prs_res$P.Value)
-hist(prs_res$P.Value,breaks = 100)
-hist(pd_res$P.Value,breaks=100)
+hist(prs_res$P.Value, breaks = 100)
+hist(pd_res$P.Value, breaks = 100)
 ```
 
 
@@ -333,37 +441,41 @@ library(parallel)
 num_control <- sum(control_select)
 num_cases <- sum(case_select)
 
-run_at_sample_size <- function(size){
-  to_select <- sample((1:length(na_row))[na_row],size)
-  design_prs <- model.matrix(~1+SCORE1_AVG+age+plate+sex+V3+V4+V5, data=reg_all_data[to_select,])
-  prs_fit <- lmFit(betas_sub[,to_select],design_prs)
+run_at_sample_size <- function(size) {
+  to_select <- sample((1:length(na_row))[na_row], size)
+  design_prs <- model.matrix(~ 1 + SCORE1_AVG + age + plate + sex + V3 + V4 + V5, data = reg_all_data[to_select, ])
+  prs_fit <- lmFit(betas_sub[, to_select], design_prs)
   prs_fit <- eBayes(prs_fit)
-  topTable(prs_fit,coef=2,number = Inf)
+  topTable(prs_fit, coef = 2, number = Inf)
 }
 
 
-run_at_sample_size_control <- function(size){
-  to_select <- sample((1:length(na_row))[control_select],size)
-  design_prs <- model.matrix(~1+SCORE1_AVG+age+plate+sex+V3+V4+V5, data=reg_all_data[to_select,])
-  prs_fit <- lmFit(betas_sub[,to_select],design_prs)
+run_at_sample_size_control <- function(size) {
+  to_select <- sample((1:length(na_row))[control_select], size)
+  design_prs <- model.matrix(~ 1 + SCORE1_AVG + age + plate + sex + V3 + V4 + V5, data = reg_all_data[to_select, ])
+  prs_fit <- lmFit(betas_sub[, to_select], design_prs)
   prs_fit <- eBayes(prs_fit)
-  topTable(prs_fit,coef=2,number = Inf)
+  topTable(prs_fit, coef = 2, number = Inf)
 }
 
-res_control_size <- lapply(1:10,function(x) run_at_sample_size(num_control))
-res_case_size <- lapply(1:10,function(x) run_at_sample_size(num_cases))
+res_control_size <- lapply(1:10, function(x) run_at_sample_size(num_control))
+res_case_size <- lapply(1:10, function(x) run_at_sample_size(num_cases))
 
-res_case_size_control <- lapply(1:10,function(x) run_at_sample_size_control(num_cases))
+res_case_size_control <- lapply(1:10, function(x) run_at_sample_size_control(num_cases))
 ```
 
 ```{r,eval=FALSE}
-control_hits <- unlist(lapply(res_control_size,function(x) nrow(subset(x,adj.P.Val < 0.05 & abs(logFC) > 0.03))))
+control_hits <- unlist(lapply(res_control_size, function(x) nrow(subset(x, adj.P.Val < 0.05 & abs(logFC) > 0.03))))
 
-case_hits <- unlist(lapply(res_case_size,function(x) nrow(subset(x,adj.P.Val < 0.05 & abs(logFC) > 0.03))))
-case_size_control_hits <-unlist(lapply(res_case_size_control,function(x) nrow(subset(x,adj.P.Val < 0.05 & abs(logFC) > 0.03))))
-df <- data.frame(hits = c(mean(case_hits),mean(control_hits)), sample_size=c("Sampled to |Cases|","Sampled to |Controls|"),dev=c(sd(case_hits),sd(control_hits)))
-ggplot(df,aes(x=sample_size,y=hits,ymin=hits-dev,ymax=hits+dev)) + geom_bar(stat="identity") + geom_errorbar(width=0.25) + theme_minimal() + labs(x="",y="Number of hits")
-t.test(case_hits,control_hits)
+case_hits <- unlist(lapply(res_case_size, function(x) nrow(subset(x, adj.P.Val < 0.05 & abs(logFC) > 0.03))))
+case_size_control_hits <- unlist(lapply(res_case_size_control, function(x) nrow(subset(x, adj.P.Val < 0.05 & abs(logFC) > 0.03))))
+df <- data.frame(hits = c(mean(case_hits), mean(control_hits)), sample_size = c("Sampled to |Cases|", "Sampled to |Controls|"), dev = c(sd(case_hits), sd(control_hits)))
+ggplot(df, aes(x = sample_size, y = hits, ymin = hits - dev, ymax = hits + dev)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(width = 0.25) +
+  theme_minimal() +
+  labs(x = "", y = "Number of hits")
+t.test(case_hits, control_hits)
 ```
 
 
@@ -371,59 +483,82 @@ t.test(case_hits,control_hits)
 #### What are these PRS hits?
 
 ```{r}
-prs_res %>% rownames_to_column("probe") %>% filter(adj.P.Val < 0.25) %>% left_join(annot %>% select(Name,CHR,UCSC_RefGene_Name,Relation_to_UCSC_CpG_Island,MAPINFO), by=c("probe"="Name"))%>% mutate(gene = gsub(";.*","",UCSC_RefGene_Name)) %>% mutate(gene= ifelse(gene == "",probe,gene)) %>% write.csv("prs_res_fdr025.csv",row.names = F,quote=F)
+prs_res %>%
+  rownames_to_column("probe") %>%
+  filter(adj.P.Val < 0.25) %>%
+  left_join(annot %>% select(Name, CHR, UCSC_RefGene_Name, Relation_to_UCSC_CpG_Island, MAPINFO), by = c("probe" = "Name")) %>%
+  mutate(gene = gsub(";.*", "", UCSC_RefGene_Name)) %>%
+  mutate(gene = ifelse(gene == "", probe, gene)) %>%
+  write.csv("prs_res_fdr025.csv", row.names = F, quote = F)
 
-pd_res %>% rownames_to_column("probe") %>% filter(P.Value < (0.05/ n()))#, abs(logFC) > 0.1)
-tmp <- prs_res %>% rownames_to_column("probe") %>% filter(P.Value < (0.05/ n()))
-write.csv(tmp$probe,row.names=F)
-rbindlist(lapply(1:3,function(i)get_dmr_res(prs_dmr,i,"chr17",prs_res))) %>% write.csv("PRS_DMR_CPGs.csv",row.names=F,quote=F)
-write.csv(data.frame(prs_dmr@elementMetadata),"PRS_DMR_CPGs_meta.csv",row.names=F,quote=F)
+pd_res %>%
+  rownames_to_column("probe") %>%
+  filter(P.Value < (0.05 / n())) # , abs(logFC) > 0.1)
+tmp <- prs_res %>%
+  rownames_to_column("probe") %>%
+  filter(P.Value < (0.05 / n()))
+write.csv(tmp$probe, row.names = F)
+rbindlist(lapply(1:3, function(i) get_dmr_res(prs_dmr, i, "chr17", prs_res))) %>% write.csv("PRS_DMR_CPGs.csv", row.names = F, quote = F)
+write.csv(data.frame(prs_dmr@elementMetadata), "PRS_DMR_CPGs_meta.csv", row.names = F, quote = F)
 ```
 
 ### PRSxAge interaction
 ```{r}
-design_age <- model.matrix(~1+SCORE1_AVG*sex+age+plate+V3+V4+V5, data=reg_all_data[na_row,])
-age_fit <- lmFit(betas_sub[,na_row],design_age)
+design_age <- model.matrix(~ 1 + SCORE1_AVG * sex + age + plate + V3 + V4 + V5, data = reg_all_data[na_row, ])
+age_fit <- lmFit(betas_sub[, na_row], design_age)
 age_fit <- eBayes(age_fit)
-age_res <- topTable(age_fit, number = Inf,coef=9)
-age_main_res <- topTable(age_fit, number = Inf,coef=c(2,9))
+age_res <- topTable(age_fit, number = Inf, coef = 9)
+age_main_res <- topTable(age_fit, number = Inf, coef = c(2, 9))
 ```
 ```{r}
-ggplot(age_res,aes(logFC,-log10(P.Value)))+ geom_point() +
+ggplot(age_res, aes(logFC, -log10(P.Value))) +
+  geom_point() +
   geom_point(
-    data=subset(age_res,adj.P.Val < 0.05 & abs(logFC) > 0.03),
+    data = subset(age_res, adj.P.Val < 0.05 & abs(logFC) > 0.03),
     color = "green",
-    mapping=aes(logFC,-log10(P.Value))
+    mapping = aes(logFC, -log10(P.Value))
   ) +
-  labs(x = quote(Delta~beta~Methylation)) +
+  labs(x = quote(Delta ~ beta ~ Methylation)) +
   theme_minimal() +
   geom_hline(
-    linetype="dashed",
-    yintercept = min(-log10(age_res$P.Value[age_res$adj.P.Val <0.05]))
+    linetype = "dashed",
+    yintercept = min(-log10(age_res$P.Value[age_res$adj.P.Val < 0.05]))
   ) +
-  geom_vline(linetype="dashed",xintercept = 0.03) +
-  geom_vline(linetype="dashed",xintercept = -0.03)
-ggplot(age_res,aes(logFC,-log10(age_main_res[rownames(age_res),]$P.Value)))+ geom_point()
+  geom_vline(linetype = "dashed", xintercept = 0.03) +
+  geom_vline(linetype = "dashed", xintercept = -0.03)
+ggplot(age_res, aes(logFC, -log10(age_main_res[rownames(age_res), ]$P.Value))) +
+  geom_point()
 ```
 ### PRSxSex interaction
 
 ```{r}
-design_sex <- model.matrix(~1+SCORE1_AVG*sex+age+plate+V3+V4+V5, data=reg_all_data[na_row,])
-sex_fit <- lmFit(betas_sub[,na_row],design_sex)
+design_sex <- model.matrix(~ 1 + SCORE1_AVG * sex + age + plate + V3 + V4 + V5, data = reg_all_data[na_row, ])
+sex_fit <- lmFit(betas_sub[, na_row], design_sex)
 sex_fit <- eBayes(sex_fit)
-sex_res <- topTable(sex_fit, number = Inf,coef=9)
-sex_main_res <- topTable(sex_fit, number = Inf,coef=c(2,9))
+sex_res <- topTable(sex_fit, number = Inf, coef = 9)
+sex_main_res <- topTable(sex_fit, number = Inf, coef = c(2, 9))
 ```
 ```{r}
-ggplot(sex_res,aes(logFC,-log10(P.Value)))+ geom_point()
-ggplot(sex_res,aes(logFC,-log10(sex_main_res[rownames(sex_res),]$P.Value)))+ geom_point()
+ggplot(sex_res, aes(logFC, -log10(P.Value))) +
+  geom_point()
+ggplot(sex_res, aes(logFC, -log10(sex_main_res[rownames(sex_res), ]$P.Value))) +
+  geom_point()
 ```
 #### Are these probes different than those with genetic main effect
 ```{r}
-prs_res %>% rownames_to_column("probe") %>% filter(P.Value < (0.05/ n()))
-sex_main_res%>% rownames_to_column("probe") %>% filter(P.Value < (0.05/ n()))
-sex_res%>% rownames_to_column("probe") %>% filter(P.Value < (0.05/ n()))
-ggplot(reg_all_data,aes(SCORE1_AVG,betas_sub["cg20163478",],color = sex)) + geom_point() + geom_smooth(method="lm") + labs(y = "cg20163478 Methylation", x="PD PRS")
+prs_res %>%
+  rownames_to_column("probe") %>%
+  filter(P.Value < (0.05 / n()))
+sex_main_res %>%
+  rownames_to_column("probe") %>%
+  filter(P.Value < (0.05 / n()))
+sex_res %>%
+  rownames_to_column("probe") %>%
+  filter(P.Value < (0.05 / n()))
+ggplot(reg_all_data, aes(SCORE1_AVG, betas_sub["cg20163478", ], color = sex)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  labs(y = "cg20163478 Methylation", x = "PD PRS")
 ```
 
 ### PRSxExposure Interaction
@@ -431,47 +566,51 @@ Loading in multiple imputation data
 ```{r}
 library(mice)
 pest_missing <- read.csv("/home1/NEURO/SHARE_DECIPHER/TERRE_pesticides/pesticides.csv")
-#pest_missing <- pest_missing[pest_missing$num %in%colnames(betas_sub), ]
+# pest_missing <- pest_missing[pest_missing$num %in%colnames(betas_sub), ]
 pest_imputed <- read.csv("/home1/NEURO/SHARE_DECIPHER/TERRE_pesticides/pesticides_imputed.csv")
-#pest_imputed <- pest_imputed[pest_imputed$num %in%colnames(betas_sub), ]
-pre_mids <-rbind(cbind(data.frame(X_imputation_=0),pest_missing)[,colnames(pest_imputed)],pest_imputed)
-pre_mids <- pre_mids[pre_mids$num %in% colnames(betas_sub),]
-pest_mids <- as.mids(pre_mids, .imp="X_imputation_",.id="num")
-##@TODO RE-RUN ANALYSES AND AGGREGATE WITH RUBIN'S METHOD WITH mice PACKAGE
-betas_pest <- betas_sub[,rownames(pest_mids$data)]
-exposures <- colnames(pest_mids$data)[colMeans(pest_mids$data,na.rm = T) > 0.025]
+# pest_imputed <- pest_imputed[pest_imputed$num %in%colnames(betas_sub), ]
+pre_mids <- rbind(cbind(data.frame(X_imputation_ = 0), pest_missing)[, colnames(pest_imputed)], pest_imputed)
+pre_mids <- pre_mids[pre_mids$num %in% colnames(betas_sub), ]
+pest_mids <- as.mids(pre_mids, .imp = "X_imputation_", .id = "num")
+## @TODO RE-RUN ANALYSES AND AGGREGATE WITH RUBIN'S METHOD WITH mice PACKAGE
+betas_pest <- betas_sub[, rownames(pest_mids$data)]
+exposures <- colnames(pest_mids$data)[colMeans(pest_mids$data, na.rm = T) > 0.025]
 ```
 ### PRS exposure interaction with Random Forest Imputation
 ```{r}
 library(missForest)
-to_impute <- pest_missing[,-c(1)] %>% mutate_all(~factor(.))
+to_impute <- pest_missing[, -c(1)] %>% mutate_all(~ factor(.))
 pest_forest <- missForest(to_impute)
 pest_forest$OOBerror
-pest_forest_imputed <- cbind(num=pest_missing$num,pest_forest$ximp %>% mutate_all(~as.numeric(as.character(.))))
-reg_w_all_pesticide <- reg_all_data %>% left_join(pest_forest_imputed,by = c("patient"="num"))  %>% filter(!is.na(ins))
+pest_forest_imputed <- cbind(num = pest_missing$num, pest_forest$ximp %>% mutate_all(~ as.numeric(as.character(.))))
+reg_w_all_pesticide <- reg_all_data %>%
+  left_join(pest_forest_imputed, by = c("patient" = "num")) %>%
+  filter(!is.na(ins))
 
-reg_pre_impute <- reg_all_data %>% select(patient,SCORE1_AVG,V3,V4,V5,age,men,MMS) %>% left_join(pest_missing %>% mutate_all(~factor(.)), by=c("patient"="num"))
-pest_forest_w_vars <- missForest(reg_pre_impute[,-c(1:5)])
-reg_all_vars <- cbind(reg_pre_impute[,1:8],pest_forest_w_vars$ximp[,-c(1:3)] %>% mutate_all(~as.numeric(as.character(.)))) %>%filter(patient %in% reg_w_all_pesticide$patient)
+reg_pre_impute <- reg_all_data %>%
+  select(patient, SCORE1_AVG, V3, V4, V5, age, men, MMS) %>%
+  left_join(pest_missing %>% mutate_all(~ factor(.)), by = c("patient" = "num"))
+pest_forest_w_vars <- missForest(reg_pre_impute[, -c(1:5)])
+reg_all_vars <- cbind(reg_pre_impute[, 1:8], pest_forest_w_vars$ximp[, -c(1:3)] %>% mutate_all(~ as.numeric(as.character(.)))) %>% filter(patient %in% reg_w_all_pesticide$patient)
 pest_forest_w_vars$OOBerror
-
 ```
 
 Run regressions:
 ```{r}
-betas_pest <- betas_sub[,as.character(reg_w_all_pesticide$patient)]
+betas_pest <- betas_sub[, as.character(reg_w_all_pesticide$patient)]
 all(reg_w_all_pesticide$patient == colnames(betas_pest))
-exposures <- colnames(pest_forest$ximp)[colMeans(reg_w_all_pesticide[,.SD,.SDcols=colnames(pest_forest$ximp)]) > 0.025]
+exposures <- colnames(pest_forest$ximp)[colMeans(reg_w_all_pesticide[, .SD, .SDcols = colnames(pest_forest$ximp)]) > 0.025]
 # exposures_vars <- colnames(pest_forest_w_vars$ximp[,-c(1:3)])[colMeans(reg_all_vars[,.SD,.SDcols=colnames(pest_forest_w_vars$ximp[,-c(1:3)])]) > 0.04]
 res <- parallel::mclapply(
-    exposures,
-    function(x){
-      design <- substitute(model.matrix(~E*SCORE1_AVG + sex + age + V3 + V4 + V5,reg_w_all_pesticide),list(E=as.name(x)))
-      fit <- lmFit(betas_pest,eval(design))
-      eb <- eBayes(fit)
-      topTable(eb,coef=9,number = Inf)
-    },
-    mc.cores = 16)
+  exposures,
+  function(x) {
+    design <- substitute(model.matrix(~ E * SCORE1_AVG + sex + age + V3 + V4 + V5, reg_w_all_pesticide), list(E = as.name(x)))
+    fit <- lmFit(betas_pest, eval(design))
+    eb <- eBayes(fit)
+    topTable(eb, coef = 9, number = Inf)
+  },
+  mc.cores = 16
+)
 names(res) <- as.character(exposures)
 
 # res_vars <- parallel::mclapply(
@@ -485,103 +624,153 @@ names(res) <- as.character(exposures)
 #     mc.cores = 16)
 # names(res_vars) <- as.character(exposures_vars)
 
-all_pest_prs_df <- rbindlist(lapply(res,function(df) rownames_to_column(df,var = "probe")),idcol="exposure") %>% filter(adj.P.Val < 0.25) %>% left_join(annot,by=c("probe"="Name"))
-(prs_int_hits <- all_pest_prs_df %>% arrange(P.Value) %>% filter(adj.P.Val < 0.05) %>% select(exposure,probe,logFC,P.Value,adj.P.Val, UCSC_RefGene_Name))
+all_pest_prs_df <- rbindlist(lapply(res, function(df) rownames_to_column(df, var = "probe")), idcol = "exposure") %>%
+  filter(adj.P.Val < 0.25) %>%
+  left_join(annot, by = c("probe" = "Name"))
+(prs_int_hits <- all_pest_prs_df %>% arrange(P.Value) %>% filter(adj.P.Val < 0.05) %>% select(exposure, probe, logFC, P.Value, adj.P.Val, UCSC_RefGene_Name))
 # all_pest_prs_vars_df <- rbindlist(lapply(res_vars,function(df) rownames_to_column(df,var = "probe")),idcol="exposure") %>% filter(adj.P.Val < 0.25) %>% left_join(annot,by=c("probe"="Name"))
 # all_pest_prs_vars_df %>% arrange(P.Value)
-prs_fong_s_cu <- rbindlist(lapply(res,function(df) rownames_to_column(df,var = "probe")),idcol="exposure") %>% filter(exposure %in% c("fong","s","cu")) %>% left_join(annot,by=c("probe"="Name"))
+prs_fong_s_cu <- rbindlist(lapply(res, function(df) rownames_to_column(df, var = "probe")), idcol = "exposure") %>%
+  filter(exposure %in% c("fong", "s", "cu")) %>%
+  left_join(annot, by = c("probe" = "Name"))
 print(prs_int_hits)
 ```
 ```{r}
-to_plot <- prs_fong_s_cu%>% mutate(exposure=recode(exposure,cu="Copper",fong="Fungicides", s="Sulphur"))
-ggplot(to_plot,aes(logFC,-log10(P.Value),color = exposure)) + geom_point() +geom_text_repel(data = subset(to_plot, adj.P.Val < 0.05),mapping=aes(logFC,-log10(P.Value),label=UCSC_RefGene_Name)) + labs(color="Exposure",x=quote(Delta~beta~Methylation))+ theme_minimal()
+to_plot <- prs_fong_s_cu %>% mutate(exposure = recode(exposure, cu = "Copper", fong = "Fungicides", s = "Sulphur"))
+ggplot(to_plot, aes(logFC, -log10(P.Value), color = exposure)) +
+  geom_point() +
+  geom_text_repel(data = subset(to_plot, adj.P.Val < 0.05), mapping = aes(logFC, -log10(P.Value), label = UCSC_RefGene_Name)) +
+  labs(color = "Exposure", x = quote(Delta ~ beta ~ Methylation)) +
+  theme_minimal()
 ```
 
 ```{r}
-methy_tmp <- betas_pest["cg13975855",]
-ggplot(reg_w_all_pesticide,aes(SCORE1_AVG,methy_tmp,color = ifelse(fong==1 | cu==1 | s==1,"Exposed","Not Exposed"))) + geom_point() + geom_smooth(method="lm",se = F) + facet_grid(~PD) + labs(x= "PRS for PD", color="Copper, sulphur, or fungicide", y= quote(beta~Methylation~of~cg13975855)) + theme_minimal()
-reg_w_all_pesticide <- reg_w_all_pesticide %>% mutate(combined = ifelse(fong==1 | cu==1 | s==1,"Exposed","Not Exposed"))
-ggplot(reg_w_all_pesticide,aes(SCORE1_AVG,methy_tmp)) + geom_smooth(method="lm",se = F) + geom_point(data=reg_w_all_pesticide,aes(color=PD)) +facet_grid(~combined) + labs(x= "Polygenic risk score for PD", y= quote(beta~Methylation~of~cg13975855), color="PD status") + theme_minimal()
-ggplot(reg_w_all_pesticide,aes(SCORE1_AVG,methy_tmp,color = cu==1)) + geom_point() + geom_smooth(method="lm")
-ggplot(reg_w_all_pesticide,aes(SCORE1_AVG,methy_tmp,color = s==1)) + geom_point() + geom_smooth(method="lm")
+methy_tmp <- betas_pest["cg13975855", ]
+ggplot(reg_w_all_pesticide, aes(SCORE1_AVG, methy_tmp, color = ifelse(fong == 1 | cu == 1 | s == 1, "Exposed", "Not Exposed"))) +
+  geom_point() +
+  geom_smooth(method = "lm", se = F) +
+  facet_grid(~PD) +
+  labs(x = "PRS for PD", color = "Copper, sulphur, or fungicide", y = quote(beta ~ Methylation ~ of ~ cg13975855)) +
+  theme_minimal()
+reg_w_all_pesticide <- reg_w_all_pesticide %>% mutate(combined = ifelse(fong == 1 | cu == 1 | s == 1, "Exposed", "Not Exposed"))
+ggplot(reg_w_all_pesticide, aes(SCORE1_AVG, methy_tmp)) +
+  geom_smooth(method = "lm", se = F) +
+  geom_point(data = reg_w_all_pesticide, aes(color = PD)) +
+  facet_grid(~combined) +
+  labs(x = "Polygenic risk score for PD", y = quote(beta ~ Methylation ~ of ~ cg13975855), color = "PD status") +
+  theme_minimal()
+ggplot(reg_w_all_pesticide, aes(SCORE1_AVG, methy_tmp, color = cu == 1)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+ggplot(reg_w_all_pesticide, aes(SCORE1_AVG, methy_tmp, color = s == 1)) +
+  geom_point() +
+  geom_smooth(method = "lm")
 ```
 
 # CASE and CONTROL only analysis
 ## Pre-check that PRS is independent of exposure
 
 ```{r}
-prs_vs_pest <- lapply(exposures, function(x) t.test(reg_w_all_pesticide$SCORE1_AVG ~ unlist(reg_w_all_pesticide[,..x]))$p.value)
+prs_vs_pest <- lapply(exposures, function(x) t.test(reg_w_all_pesticide$SCORE1_AVG ~ unlist(reg_w_all_pesticide[, ..x]))$p.value)
 names(prs_vs_pest) <- exposures
-prs_vs_pest %>% stack() %>% arrange(values)
+prs_vs_pest %>%
+  stack() %>%
+  arrange(values)
 exposures_ind <- names(prs_vs_pest[prs_vs_pest > 0.05])
 ```
 Checking correlation between exposures:
 ```{r}
 library(pheatmap)
-cor(reg_w_all_pesticide[,..exposures_ind]) %>%
-  pheatmap(main="Correlation between exposures")
-  #melt() %>%
-  #ggplot(aes(Var1,Var2,fill=value)) + geom_tile() + scale_fill_viridis_c()+
-  #theme(axis.text.x=element_text(angle=90,hjust=1,vjust=1))
-cor(reg_w_all_pesticide[PD == "CASE",..exposures_ind]) %>%
-  pheatmap(main="Correlation between exposures cases only")
-cor(reg_w_all_pesticide[PD == "CONTROL",..exposures_ind]) %>%
-  pheatmap(main="Correlation between exposures controls only")
+cor(reg_w_all_pesticide[, ..exposures_ind]) %>%
+  pheatmap(main = "Correlation between exposures")
+# melt() %>%
+# ggplot(aes(Var1,Var2,fill=value)) + geom_tile() + scale_fill_viridis_c()+
+# theme(axis.text.x=element_text(angle=90,hjust=1,vjust=1))
+cor(reg_w_all_pesticide[PD == "CASE", ..exposures_ind]) %>%
+  pheatmap(main = "Correlation between exposures cases only")
+cor(reg_w_all_pesticide[PD == "CONTROL", ..exposures_ind]) %>%
+  pheatmap(main = "Correlation between exposures controls only")
 ```
 
 ## TERRE CASE ONLY ANALYSIS
 ```{r}
-betas_pest_case <- betas_pest[,reg_w_all_pesticide$PD == "CASE"]
+betas_pest_case <- betas_pest[, reg_w_all_pesticide$PD == "CASE"]
 reg_w_all_pesticide_case <- reg_w_all_pesticide %>% filter(PD == "CASE")
 all(reg_w_all_pesticide$patient == colnames(betas_pest))
-exposures <- colnames(pest_forest$ximp)[colMeans(reg_w_all_pesticide_case[,.SD,.SDcols=colnames(pest_forest$ximp)]) > 0.025 & colnames(pest_forest$ximp) %in% exposures_ind]
+exposures <- colnames(pest_forest$ximp)[colMeans(reg_w_all_pesticide_case[, .SD, .SDcols = colnames(pest_forest$ximp)]) > 0.025 & colnames(pest_forest$ximp) %in% exposures_ind]
 res_case <- parallel::mclapply(
-    exposures,
-    function(x){
-      design <- substitute(model.matrix(~E*SCORE1_AVG + sex + age + V3 + V4 + V5,reg_w_all_pesticide_case),list(E=as.name(x)))
-      fit <- lmFit(betas_pest_case,eval(design))
-      eb <- eBayes(fit)
-      topTable(eb,coef=9,number = Inf)
-    },
-    mc.cores = 16)
+  exposures,
+  function(x) {
+    design <- substitute(model.matrix(~ E * SCORE1_AVG + sex + age + V3 + V4 + V5, reg_w_all_pesticide_case), list(E = as.name(x)))
+    fit <- lmFit(betas_pest_case, eval(design))
+    eb <- eBayes(fit)
+    topTable(eb, coef = 9, number = Inf)
+  },
+  mc.cores = 16
+)
 names(res_case) <- as.character(exposures)
-all_pest_prs_case_df <- rbindlist(lapply(res_case,function(df) rownames_to_column(df,var = "probe")),idcol="exposure") %>% filter(adj.P.Val < 0.05) %>% left_join(annot,by=c("probe"="Name"))
-all_pest_prs_case_df %>% arrange(P.Value) %>% select(exposure,probe,logFC,AveExpr,t,P.Value,adj.P.Val,B,CHR,MAPINFO,UCSC_RefGene_Name) %>% View()
+all_pest_prs_case_df <- rbindlist(lapply(res_case, function(df) rownames_to_column(df, var = "probe")), idcol = "exposure") %>%
+  filter(adj.P.Val < 0.05) %>%
+  left_join(annot, by = c("probe" = "Name"))
+all_pest_prs_case_df %>%
+  arrange(P.Value) %>%
+  select(exposure, probe, logFC, AveExpr, t, P.Value, adj.P.Val, B, CHR, MAPINFO, UCSC_RefGene_Name) %>%
+  View()
 ```
 ```{r}
-to_plot <- rbindlist(lapply(res_case,function(df) rownames_to_column(df,var = "probe")),idcol="exposure") %>% filter(exposure %in% unique(all_pest_prs_case_df$exposure[order(all_pest_prs_case_df$adj.P.Val)])[1:5]) %>% left_join(annot,by=c("probe"="Name")) %>% mutate(gene=gsub(";.*","",UCSC_RefGene_Name))
-ggplot(to_plot,aes(logFC,-log10(P.Value),color = exposure)) + geom_point() +geom_text_repel(data = subset(to_plot, adj.P.Val < 0.05),mapping=aes(logFC,-log10(P.Value),label=gene)) + labs(color="Exposure",x=quote(Delta~beta~Methylation))+ theme_minimal()
+to_plot <- rbindlist(lapply(res_case, function(df) rownames_to_column(df, var = "probe")), idcol = "exposure") %>%
+  filter(exposure %in% unique(all_pest_prs_case_df$exposure[order(all_pest_prs_case_df$adj.P.Val)])[1:5]) %>%
+  left_join(annot, by = c("probe" = "Name")) %>%
+  mutate(gene = gsub(";.*", "", UCSC_RefGene_Name))
+ggplot(to_plot, aes(logFC, -log10(P.Value), color = exposure)) +
+  geom_point() +
+  geom_text_repel(data = subset(to_plot, adj.P.Val < 0.05), mapping = aes(logFC, -log10(P.Value), label = gene)) +
+  labs(color = "Exposure", x = quote(Delta ~ beta ~ Methylation)) +
+  theme_minimal()
 ```
 
 
 # TERRE control ONLY ANALYSIS
 ```{r}
-betas_pest_control <- betas_pest[,reg_w_all_pesticide$PD == "CONTROL"]
+betas_pest_control <- betas_pest[, reg_w_all_pesticide$PD == "CONTROL"]
 reg_w_all_pesticide_control <- reg_w_all_pesticide %>% filter(PD == "CONTROL")
 all(reg_w_all_pesticide$patient == colnames(betas_pest))
-exposures <- colnames(pest_forest$ximp)[colMeans(reg_w_all_pesticide_control[,.SD,.SDcols=colnames(pest_forest$ximp)]) > 0.025& colnames(pest_forest$ximp) %in% exposures_ind]
+exposures <- colnames(pest_forest$ximp)[colMeans(reg_w_all_pesticide_control[, .SD, .SDcols = colnames(pest_forest$ximp)]) > 0.025 & colnames(pest_forest$ximp) %in% exposures_ind]
 res_control <- parallel::mclapply(
-    exposures,
-    function(x){
-      design <- substitute(model.matrix(~E*SCORE1_AVG + sex + age + V3 + V4 + V5,reg_w_all_pesticide_control),list(E=as.name(x)))
-      fit <- lmFit(betas_pest_control,eval(design))
-      eb <- eBayes(fit)
-      topTable(eb,coef=9,number = Inf)
-    },
-    mc.cores = 16)
+  exposures,
+  function(x) {
+    design <- substitute(model.matrix(~ E * SCORE1_AVG + sex + age + V3 + V4 + V5, reg_w_all_pesticide_control), list(E = as.name(x)))
+    fit <- lmFit(betas_pest_control, eval(design))
+    eb <- eBayes(fit)
+    topTable(eb, coef = 9, number = Inf)
+  },
+  mc.cores = 16
+)
 names(res_control) <- as.character(exposures)
-all_pest_prs_control_df <- rbindlist(lapply(res_control,function(df) rownames_to_column(df,var = "probe")),idcol="exposure") %>% filter(adj.P.Val < 0.05) %>% left_join(annot,by=c("probe"="Name"))
-all_pest_prs_control_df %>% arrange(P.Value) %>% select(exposure,probe,logFC,AveExpr,t,P.Value,adj.P.Val,B,CHR,MAPINFO,UCSC_RefGene_Name) %>% View()
+all_pest_prs_control_df <- rbindlist(lapply(res_control, function(df) rownames_to_column(df, var = "probe")), idcol = "exposure") %>%
+  filter(adj.P.Val < 0.05) %>%
+  left_join(annot, by = c("probe" = "Name"))
+all_pest_prs_control_df %>%
+  arrange(P.Value) %>%
+  select(exposure, probe, logFC, AveExpr, t, P.Value, adj.P.Val, B, CHR, MAPINFO, UCSC_RefGene_Name) %>%
+  View()
 ```
 ```{r}
-to_plot <- rbindlist(lapply(res_control,function(df) rownames_to_column(df,var = "probe")),idcol="exposure") %>% filter(exposure %in% unique(all_pest_prs_control_df$exposure[order(all_pest_prs_control_df$adj.P.Val)])[1:5]) %>% left_join(annot,by=c("probe"="Name"))%>% mutate(gene=gsub(";.*","",UCSC_RefGene_Name))
-ggplot(to_plot,aes(logFC,-log10(P.Value),color = exposure)) + geom_point() +geom_text_repel(data = subset(to_plot, adj.P.Val < 0.05),mapping=aes(logFC,-log10(P.Value),label=gene)) + labs(color="Exposure",x=quote(Delta~beta~Methylation))+ theme_minimal()
+to_plot <- rbindlist(lapply(res_control, function(df) rownames_to_column(df, var = "probe")), idcol = "exposure") %>%
+  filter(exposure %in% unique(all_pest_prs_control_df$exposure[order(all_pest_prs_control_df$adj.P.Val)])[1:5]) %>%
+  left_join(annot, by = c("probe" = "Name")) %>%
+  mutate(gene = gsub(";.*", "", UCSC_RefGene_Name))
+ggplot(to_plot, aes(logFC, -log10(P.Value), color = exposure)) +
+  geom_point() +
+  geom_text_repel(data = subset(to_plot, adj.P.Val < 0.05), mapping = aes(logFC, -log10(P.Value), label = gene)) +
+  labs(color = "Exposure", x = quote(Delta ~ beta ~ Methylation)) +
+  theme_minimal()
 ```
 # DIGPD PRS Analysis
 Check SNPs in set of variants:
 
 ```{r}
-bim <- fread("~/genotype_qc/DIGPD_merged_post_imputation_QC/raw_data.imputed.r2_90.hard_call.maf_mismatch.bim", header=F)
+bim <- fread("~/genotype_qc/DIGPD_merged_post_imputation_QC/raw_data.imputed.r2_90.hard_call.maf_mismatch.bim", header = F)
 sum(risk_scores$SNP %in% bim$V2)
 ```
 
@@ -603,54 +792,61 @@ Generate PRS using `plink2 --score`:
 ```
 ## Loading in and preparing data
 ```{r}
-digpd_merged_fam <- rbind(fread("~/genotype_qc/DIGPD_case_pre_pca.matched.fam"),fread("~/genotype_qc/DIGPD_control_pre_pca.matched.fam"))
+digpd_merged_fam <- rbind(fread("~/genotype_qc/DIGPD_case_pre_pca.matched.fam"), fread("~/genotype_qc/DIGPD_control_pre_pca.matched.fam"))
 digpd_prs <- fread("digpd_prs.sscore")
-digpd_prs$sex <- ifelse(digpd_merged_fam$V5 == 1,"MALE","FEMALE")
-digpd_prs$PD <- ifelse(digpd_merged_fam$V6 == 2,"CASE","CONTROL")
+digpd_prs$sex <- ifelse(digpd_merged_fam$V5 == 1, "MALE", "FEMALE")
+digpd_prs$PD <- ifelse(digpd_merged_fam$V6 == 2, "CASE", "CONTROL")
 digpd_control_prs <- fread("digpd_control_prs.sscore")
 digpd_case_prs <- fread("digpd_case_prs.sscore")
 strat_prs <- rbind(digpd_control_prs, digpd_case_prs)
 digpd_pcs <- fread("~/genotype_qc/DIGPD_merged_post_imputation_QC/raw_data.preimpute.pcs")
-digpd_metadata <- fread("/home1/NEURO/SHARE_DECIPHER/digpd_meta_master.csv") %>% select(-PD) %>% mutate(IID = gsub("PAL_[0-9]*_","",IID))
-all_digpd_data <- digpd_prs %>% left_join(digpd_metadata, by=c("IID")) %>% left_join(digpd_pcs,by=c("IID"))
+digpd_metadata <- fread("/home1/NEURO/SHARE_DECIPHER/digpd_meta_master.csv") %>%
+  select(-PD) %>%
+  mutate(IID = gsub("PAL_[0-9]*_", "", IID))
+all_digpd_data <- digpd_prs %>%
+  left_join(digpd_metadata, by = c("IID")) %>%
+  left_join(digpd_pcs, by = c("IID"))
 ```
 
 ### PRS score testing
 
 ```{r}
-ggplot(all_digpd_data,aes(PD,SCORE1_AVG)) + geom_boxplot()+ geom_jitter(height=0, width=0.1)+ labs(x= "Parkinson's Diagnosis", y = "Polygenic Risk Score") +ggtitle(bquote('Nagelkerke Pseudo-'*R^2*':0.0578120' ))
-t.test(all_digpd_data$SCORE1_AVG[all_digpd_data$PD == "CASE"],all_digpd_data$SCORE1_AVG[all_digpd_data$PD == "CONTROL"], alternative = "greater")
-
+ggplot(all_digpd_data, aes(PD, SCORE1_AVG)) +
+  geom_boxplot() +
+  geom_jitter(height = 0, width = 0.1) +
+  labs(x = "Parkinson's Diagnosis", y = "Polygenic Risk Score") +
+  ggtitle(bquote("Nagelkerke Pseudo-" * R^2 * ":0.0578120"))
+t.test(all_digpd_data$SCORE1_AVG[all_digpd_data$PD == "CASE"], all_digpd_data$SCORE1_AVG[all_digpd_data$PD == "CONTROL"], alternative = "greater")
 ```
 
 ### PRS DIGPD PD associations
 ```{r}
-all_digpd_data$PD_fixed <- ifelse(all_digpd_data$PD == "CASE",1,0)
-fit1 <- glm(PD_fixed ~ SCORE1_AVG + sex  +PC1 + PC2 + PC3, data=all_digpd_data,family="binomial",control = list(maxit = 50))
+all_digpd_data$PD_fixed <- ifelse(all_digpd_data$PD == "CASE", 1, 0)
+fit1 <- glm(PD_fixed ~ SCORE1_AVG + sex + PC1 + PC2 + PC3, data = all_digpd_data, family = "binomial", control = list(maxit = 50))
 summary(fit1)
-fit1_null <- glm(PD_fixed ~ sex +PC1 + PC2 + PC3, data=all_digpd_data,family="binomial",control = list(maxit = 50))
+fit1_null <- glm(PD_fixed ~ sex + PC1 + PC2 + PC3, data = all_digpd_data, family = "binomial", control = list(maxit = 50))
 summary(fit1_null)
-nagelkerke(fit1,null=fit1_null)
-lin1<- lm(PD_fixed ~ SCORE1_AVG + sex  +PC1 + PC2 + PC3, data=all_digpd_data)
-lin2<- lm(PD_fixed ~sex  +PC1 + PC2 + PC3, data=all_digpd_data)
+nagelkerke(fit1, null = fit1_null)
+lin1 <- lm(PD_fixed ~ SCORE1_AVG + sex + PC1 + PC2 + PC3, data = all_digpd_data)
+lin2 <- lm(PD_fixed ~ sex + PC1 + PC2 + PC3, data = all_digpd_data)
 R2 <- (deviance(lin2) - deviance(lin1)) / deviance(lin2)
-h2 <- pd_h2(R2,sum(all_digpd_data$PD_fixed)/nrow(all_digpd_data),0.01)
-fit2 <- glm(PD_fixed ~ SCORE1_AVG*sex + PC1+PC2+PC3, data = all_digpd_data, family="binomial")
+h2 <- pd_h2(R2, sum(all_digpd_data$PD_fixed) / nrow(all_digpd_data), 0.01)
+fit2 <- glm(PD_fixed ~ SCORE1_AVG * sex + PC1 + PC2 + PC3, data = all_digpd_data, family = "binomial")
 summary(fit2)
-fit3 <- glm(PD_fixed~SCORE1_AVG*smoking +sex+ PC1+PC2+PC3, data=all_digpd_data, family="binomial")
+fit3 <- glm(PD_fixed ~ SCORE1_AVG * smoking + sex + PC1 + PC2 + PC3, data = all_digpd_data, family = "binomial")
 summary(fit3)
-fit4 <- glm(PD_fixed~SCORE1_AVG*pesticides +sex+ PC1+PC2+PC3, data=all_digpd_data, family="binomial")
+fit4 <- glm(PD_fixed ~ SCORE1_AVG * pesticides + sex + PC1 + PC2 + PC3, data = all_digpd_data, family = "binomial")
 summary(fit4)
-
-
 ```
 ## DIGPD PRS methylation associations
 ```{r}
 load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/DIGPD_processed_2021/DIGPD_betas_combat.RData")
 betas_sub <- betas_combat
-all_digpd_data$patient <- paste0(all_digpd_data$patient,".visit",all_digpd_data$visite)
-digpd_reg_data <- all_digpd_data %>% filter(patient %in% colnames(betas_sub)) %>% mutate(plate=factor(plate))
-betas_digpd <- betas_sub[,digpd_reg_data$patient]
+all_digpd_data$patient <- paste0(all_digpd_data$patient, ".visit", all_digpd_data$visite)
+digpd_reg_data <- all_digpd_data %>%
+  filter(patient %in% colnames(betas_sub)) %>%
+  mutate(plate = factor(plate))
+betas_digpd <- betas_sub[, digpd_reg_data$patient]
 ```
 ### including covariates
 
@@ -659,11 +855,11 @@ pcs <- prcomp(t(betas_digpd))
 ```
 ```{r}
 library(pheatmap)
-tmp_design <- model.matrix(~0+.,data=digpd_reg_data[,c("race1","plate","birth_cohort")] %>% mutate(race1=factor(race1),birth_cohort = birth_cohort - min(birth_cohort)))
+tmp_design <- model.matrix(~ 0 + ., data = digpd_reg_data[, c("race1", "plate", "birth_cohort")] %>% mutate(race1 = factor(race1), birth_cohort = birth_cohort - min(birth_cohort)))
 pheatmap(
-  cor(pcs$x[,1:20],
-      cbind(tmp_design,digpd_reg_data[,c("men","PD","levodopa","Age","pesticides","durevol","smoking","bmi")]) %>% mutate(PD = as.numeric(PD=="CASE")),
-    use="pairwise.complete.obs"
+  cor(pcs$x[, 1:20],
+    cbind(tmp_design, digpd_reg_data[, c("men", "PD", "levodopa", "Age", "pesticides", "durevol", "smoking", "bmi")]) %>% mutate(PD = as.numeric(PD == "CASE")),
+    use = "pairwise.complete.obs"
   ),
   cluster_rows = F
 )
@@ -671,40 +867,64 @@ pheatmap(
 
 ### digpd PRS association
 ```{r}
-design_prs <- model.matrix(~1+SCORE1_AVG+Age+men+PC1+PC2+PC3 + birth_cohort, data=digpd_reg_data %>% mutate(race1=factor(race1),birth_cohort = birth_cohort - min(birth_cohort),PD = as.numeric(PD=="CASE")))
-prs_fit <- lmFit(betas_digpd,design_prs)
+design_prs <- model.matrix(~ 1 + SCORE1_AVG + Age + men + PC1 + PC2 + PC3 + birth_cohort, data = digpd_reg_data %>% mutate(race1 = factor(race1), birth_cohort = birth_cohort - min(birth_cohort), PD = as.numeric(PD == "CASE")))
+prs_fit <- lmFit(betas_digpd, design_prs)
 prs_fit <- eBayes(prs_fit)
-design_pd <- model.matrix(~1+PD+Age+men+plate+birth_cohort, data=digpd_reg_data %>% mutate(race1=factor(race1),birth_cohort = birth_cohort - min(birth_cohort),PD = as.numeric(PD=="CASE")))
-pd_fit <- lmFit(betas_digpd,design_pd)
+design_pd <- model.matrix(~ 1 + PD + Age + men + plate + birth_cohort, data = digpd_reg_data %>% mutate(race1 = factor(race1), birth_cohort = birth_cohort - min(birth_cohort), PD = as.numeric(PD == "CASE")))
+pd_fit <- lmFit(betas_digpd, design_pd)
 pd_fit <- eBayes(pd_fit)
-pd_res <- topTable(pd_fit,coef=2,number = Inf)
-prs_res <- topTable(prs_fit,coef=2,number = Inf)
+pd_res <- topTable(pd_fit, coef = 2, number = Inf)
+prs_res <- topTable(prs_fit, coef = 2, number = Inf)
 ```
 
 
 ```{r}
 library(ggrepel)
-annot <- fread("~/MethylationEPIC_v-1-0_B4.csv",skip = 7)
-pd_annot_digpd <- pd_res %>%rownames_to_column("probe") %>% left_join(annot,by=c("probe"="Name"))%>% mutate(gene = gsub(";.*","",UCSC_RefGene_Name)) %>% mutate(gene= ifelse(gene == "",probe,gene))
-prs_annot_digpd <- prs_res %>%rownames_to_column("probe") %>% left_join(annot,by=c("probe"="Name"))%>% mutate(gene = gsub(";.*","",UCSC_RefGene_Name)) %>% mutate(gene= ifelse(gene == "",probe,gene))
+annot <- fread("~/MethylationEPIC_v-1-0_B4.csv", skip = 7)
+pd_annot_digpd <- pd_res %>%
+  rownames_to_column("probe") %>%
+  left_join(annot, by = c("probe" = "Name")) %>%
+  mutate(gene = gsub(";.*", "", UCSC_RefGene_Name)) %>%
+  mutate(gene = ifelse(gene == "", probe, gene))
+prs_annot_digpd <- prs_res %>%
+  rownames_to_column("probe") %>%
+  left_join(annot, by = c("probe" = "Name")) %>%
+  mutate(gene = gsub(";.*", "", UCSC_RefGene_Name)) %>%
+  mutate(gene = ifelse(gene == "", probe, gene))
 
-ggplot(pd_annot_digpd,aes(logFC,-log10(P.Value)))+ geom_point() + geom_text_repel(data=pd_annot_digpd %>% filter(abs(logFC) > 0.03 & adj.P.Val < 0.05) %>% top_n(25,-adj.P.Val),mapping=aes(logFC,-log10(P.Value),label=gene))  + geom_point(data=pd_annot_digpd %>% filter(abs(logFC) > 0.03 & adj.P.Val < 0.05), color = "red",mapping=aes(logFC,-log10(P.Value))) +labs(x = quote(Delta~beta~Methylation)) + theme_minimal() + geom_hline(linetype="dashed",yintercept = min(-log10(pd_annot_digpd$P.Value[pd_annot_digpd$adj.P.Val <0.05]))) + geom_vline(linetype="dashed",xintercept = 0.03) + geom_vline(linetype="dashed",xintercept = -0.03)
+ggplot(pd_annot_digpd, aes(logFC, -log10(P.Value))) +
+  geom_point() +
+  geom_text_repel(data = pd_annot_digpd %>% filter(abs(logFC) > 0.03 & adj.P.Val < 0.05) %>% top_n(25, -adj.P.Val), mapping = aes(logFC, -log10(P.Value), label = gene)) +
+  geom_point(data = pd_annot_digpd %>% filter(abs(logFC) > 0.03 & adj.P.Val < 0.05), color = "red", mapping = aes(logFC, -log10(P.Value))) +
+  labs(x = quote(Delta ~ beta ~ Methylation)) +
+  theme_minimal() +
+  geom_hline(linetype = "dashed", yintercept = min(-log10(pd_annot_digpd$P.Value[pd_annot_digpd$adj.P.Val < 0.05]))) +
+  geom_vline(linetype = "dashed", xintercept = 0.03) +
+  geom_vline(linetype = "dashed", xintercept = -0.03)
 
-ggplot(prs_annot_digpd,aes(logFC,-log10(P.Value)))+ geom_point() + geom_text_repel(data=subset(prs_annot_digpd,adj.P.Val < 0.05& abs(logFC) > 0.03),mapping=aes(logFC,-log10(P.Value),label=gene))  + geom_point(data=subset(prs_annot_digpd,adj.P.Val < 0.05 & abs(logFC) > 0.03), color = "red",mapping=aes(logFC,-log10(P.Value))) +labs(x = quote(Delta~beta~Methylation)) + theme_minimal() + geom_hline(linetype="dashed",yintercept = min(-log10(prs_annot_digpd$P.Value[prs_annot_digpd$adj.P.Val <0.05]))) + geom_vline(linetype="dashed",xintercept = 0.03) + geom_vline(linetype="dashed",xintercept = -0.03)
+ggplot(prs_annot_digpd, aes(logFC, -log10(P.Value))) +
+  geom_point() +
+  geom_text_repel(data = subset(prs_annot_digpd, adj.P.Val < 0.05 & abs(logFC) > 0.03), mapping = aes(logFC, -log10(P.Value), label = gene)) +
+  geom_point(data = subset(prs_annot_digpd, adj.P.Val < 0.05 & abs(logFC) > 0.03), color = "red", mapping = aes(logFC, -log10(P.Value))) +
+  labs(x = quote(Delta ~ beta ~ Methylation)) +
+  theme_minimal() +
+  geom_hline(linetype = "dashed", yintercept = min(-log10(prs_annot_digpd$P.Value[prs_annot_digpd$adj.P.Val < 0.05]))) +
+  geom_vline(linetype = "dashed", xintercept = 0.03) +
+  geom_vline(linetype = "dashed", xintercept = -0.03)
 ```
 ### checking reason for difference in hits between DIGPD and Terre
 Suspicious inflation here:
 ```{r}
-qq(pd_annot_digpd$P.Value,main="DIGPD Parkinson's EWAS")
-qq(pd_annot$P.Value,main="Terre Parkinson's EWAS")
-qq(prs_annot_digpd$P.Value,main="DIGPD Parkinson's PRS EWAS")
-qq(prs_annot$P.Value,main="Terre Parkinson's PRS EWAS")
+qq(pd_annot_digpd$P.Value, main = "DIGPD Parkinson's EWAS")
+qq(pd_annot$P.Value, main = "Terre Parkinson's EWAS")
+qq(prs_annot_digpd$P.Value, main = "DIGPD Parkinson's PRS EWAS")
+qq(prs_annot$P.Value, main = "Terre Parkinson's PRS EWAS")
 ```
 
 ```{r}
 library(qqman)
-manhattan(prs_annot_digpd %>% mutate(P=P.Value,SNP=gene, CHR=as.numeric(recode(CHR,X="23",Y="24",MT="26")),BP=MAPINFO),chrlabs = c(1:22,"X","Y"),annotateTop = F,annotatePval = 5e-8)
+manhattan(prs_annot_digpd %>% mutate(P = P.Value, SNP = gene, CHR = as.numeric(recode(CHR, X = "23", Y = "24", MT = "26")), BP = MAPINFO), chrlabs = c(1:22, "X", "Y"), annotateTop = F, annotatePval = 5e-8)
 ```
 ```{r}
-qq(pd_annot_digpd$P.Value,main="DIGPD Parkinson's EWAS")
+qq(pd_annot_digpd$P.Value, main = "DIGPD Parkinson's EWAS")
 ```
