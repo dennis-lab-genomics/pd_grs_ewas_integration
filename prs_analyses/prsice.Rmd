@@ -1,6 +1,6 @@
 ---
 title: "PRSice2 Development of risk score"
-output: github_document
+output: html_notebook
 ---
 
 ```{r setup, include=FALSE}
@@ -120,22 +120,28 @@ ggplot(prsice_female_meta[Threshold <= 0.5], aes(Threshold, Num_SNP, color = -lo
 prsice_meta <- fread("prsice_data/TERRE_PRSice.prsice")
 ggplot(mapping = aes(Threshold, R2, color = -log10(P))) +
   geom_point(data = prsice_female_meta, size = 1) +
-  scale_color_gradient(low = "darkred", high = "pink") +
+  scale_color_gradient(low = "lightpink4", high = "lightpink") +
+  labs(color = bquote("Female log"["10"] ~ "(P)")) +
   new_scale_color() +
   geom_point(data = prsice_male_meta, size = 1, aes(color = -log10(P))) +
-  scale_color_gradient(low = "darkblue", high = "lightblue2") +
-  labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("-log"["10"] ~ "(P)")) +
-  theme_minimal()
+  scale_color_gradient(low = "lightblue4", high = "lightblue") +
+  labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("Male log"["10"] ~ "(P)")) +
+  theme_minimal() +
+  theme(legend.position = "top")
 ggplot(mapping = aes(Threshold, R2, color = -log10(P))) +
   geom_point(data = prsice_female_meta, size = 1) +
-  scale_color_gradient(low = "darkred", high = "pink") +
+  scale_color_gradient(low = "lightpink4", high = "lightpink") +
+  labs(color = bquote("Female log"["10"] ~ "(P)")) +
   new_scale_color() +
   geom_point(data = prsice_male_meta, size = 1, aes(color = -log10(P))) +
-  scale_color_gradient(low = "darkblue", high = "lightblue2") +
+  scale_color_gradient(low = "lightblue4", high = "lightblue") +
+  labs(color = bquote("Male log"["10"] ~ "(P)")) +
   new_scale_color() +
   geom_point(data = prsice_meta, size = 1, aes(color = -log10(P))) +
-  labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("-log"["10"] ~ "(P)")) +
-  theme_minimal()
+  scale_color_gradient(low = "gray40", high = "gray80") +
+  labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("Cross-sex -log"["10"] ~ "(P)")) +
+  theme_minimal() +
+  theme(legend.position = "top")
 ```
 
 # Step 3 run linear model at different thresholds for SNP inclusion
@@ -258,6 +264,8 @@ hits_nalls_female <- foreach(prs_thresh = colnames(prs_mat_nalls_female)) %dopar
 names(hits_nalls_female) <- colnames(prs_mat_nalls_female)
 hits_by_thresh_bonf_nalls_female <- rbindlist(hits_nalls_female, idcol = "threshold", fill = TRUE)
 ```
+
+@TODO Color these by sex
 ```{r}
 ggplot(hits_by_thresh_bonf[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
   geom_text(vjust = -0.25) +
@@ -295,9 +303,9 @@ display_venn <- function(x, ...) {
   venn_object <- venn.diagram(x, filename = NULL, ...)
   grid.draw(venn_object)
 }
-display_venn(list(both = hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, male = hits_by_thresh_bonf_male[threshold == "Pt_5e-08"]$ID, female = hits_by_thresh_bonf_female[threshold == "Pt_5e-08"]$ID), fill = c("gray", "blue", "pink"))
+display_venn(list(both = hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, male = hits_by_thresh_bonf_male[threshold == "Pt_5e-08"]$ID, female = hits_by_thresh_bonf_female[threshold == "Pt_5e-08"]$ID), fill = c("gray80", "lightblue", "lightpink"))
 
-display_venn(list(both = hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, male = hits_by_thresh_bonf_nalls_male[threshold == "Pt_5e-08"]$ID, female = hits_by_thresh_bonf_nalls_female[threshold == "Pt_5e-08"]$ID), fill = c("gray", "blue", "pink"))
+display_venn(list(both = hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, male = hits_by_thresh_bonf_nalls_male[threshold == "Pt_5e-08"]$ID, female = hits_by_thresh_bonf_nalls_female[threshold == "Pt_5e-08"]$ID), fill = c("gray80", "lightblue", "lightpink"))
 ```
 
 ```{r,eval=FALSE}
