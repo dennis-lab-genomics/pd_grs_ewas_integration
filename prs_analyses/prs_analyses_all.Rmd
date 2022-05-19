@@ -95,21 +95,27 @@ fit_null <- glm(PD ~ SCORE1_AVG, data = all_data, family = "binomial")
 summary(fit_null)
 ```
 
-```{r}
+```{r, fig.width=10}
 r2_labels <- c(
   round(male_r2$Pseudo.R.squared.for.model.vs.null[3], 4),
-  round(female_r2$Pseudo.R.squared.for.model.vs.null[3], 4)
+  round(female_r2$Pseudo.R.squared.for.model.vs.null[3], 4),
+  0.0611
 )
 h2_labels <- c(
   round(pd_h2(male_r2$Pseudo.R.squared.for.model.vs.null[3], sum(all_data$status) / nrow(all_data), 5 / 1000), 4),
-  round(pd_h2(female_r2$Pseudo.R.squared.for.model.vs.null[3], sum(all_data$status) / nrow(all_data), 5 / 1000), 4)
+  round(pd_h2(female_r2$Pseudo.R.squared.for.model.vs.null[3], sum(all_data$status) / nrow(all_data), 5 / 1000), 4),
+  0.0241
 )
+
 to_plot <- all_data %>%
   mutate(
     PD = ifelse(PD, "CASE", "CONTROL"),
     Sex = ifelse(men == 1, "Male", "Female")
   ) %>%
-  mutate(Sex = factor(Sex, levels = c("Male", "Female")))
+  mutate(Sex = factor(Sex, levels = c("Cross-sex", "Male", "Female")))
+cross_data <- all_data %>% mutate(PD = ifelse(PD, "CASE", "CONTROL"))
+cross_data$Sex <- "Cross-sex"
+to_plot <- rbind(cross_data, to_plot)
 
 ggboxplot(
   to_plot,
@@ -118,18 +124,9 @@ ggboxplot(
   color = "Sex",
   add = "jitter"
 ) +
-  facet_grid(~Sex, labeller = label_bquote(cols = .(as.character(Sex)) ~ R^2 ~ ": " ~ .(r2_labels[Sex]) ~ "; " ~ h^2 ~ ": " ~ .(h2_labels[Sex]))) +
+  facet_grid(~Sex, labeller = label_bquote(cols = .(as.character(Sex)) ~ R^2 ~ ": " ~ .(r2_labels[Sex]) ~ ";" ~ h^2 ~ ": " ~ .(h2_labels[Sex]))) +
   labs(y = "Polygenic Risk Score", x = "Parkinson's Diagnosis") +
-  scale_color_manual(values = c("light blue", "pink"))
-ggboxplot(
-  to_plot,
-  x = "PD",
-  y = "SCORE1_AVG",
-  add = "jitter",
-  add.params = list(width = 0.05)
-) +
-  labs(y = "Polygenic Risk Score", x = "Parkinson's Diagnosis") +
-  ggtitle(bquote(R^2 ~ ": 0.0611; " ~ h^2 ~ ": " ~ .(round(h2, 4))))
+  scale_color_manual(values = c("gray", "light blue", "pink"))
 
 ggboxplot(
   to_plot,
@@ -280,19 +277,19 @@ get_dmr_res <- function(dmr, limma_res) {
   res$DMR <- dmr
   return(res)
 }
-plot_dmrs <- function(dmr_res, limma_res, palette, case_control) {
+plot_dmrs <- function(dmr_res, limma_res, case_control) {
   to_plot <- rbindlist(lapply(dmr_res$coord, function(dmr) get_dmr_effects(dmr, limma_res)))
 
   p1 <- ggplot(to_plot %>% mutate(SCORE1_AVG = scale(SCORE1_AVG)), aes(pos, value, color = SCORE1_AVG)) +
     geom_point() +
-    scale_color_distiller(palette = palette) +
-    facet_wrap(~DMR, scales = "free") +
+    scale_color_gradient(low = rev(case_control)[1], high = rev(case_control)[2]) +
+    facet_wrap(~DMR, scales = "free", nrow = 1) +
     theme_minimal() +
     labs(color = "Normalized PD PRS")
   p2 <- ggplot(to_plot %>% mutate(PD = ifelse(PD == 1, "CASE", "CONTROL")), aes(factor(pos), value, color = PD)) +
     geom_boxplot(position = position_dodge(0.75)) +
     scale_color_manual(values = case_control) +
-    facet_wrap(~DMR, scales = "free") +
+    facet_wrap(~DMR, scales = "free", nrow = 1) +
     theme_minimal() +
     stat_summary(aes(group = PD), fun = mean, geom = "line") +
     labs(color = "PD status") +
@@ -300,9 +297,9 @@ plot_dmrs <- function(dmr_res, limma_res, palette, case_control) {
   print(p1)
   print(p2)
 }
-plot_dmrs(prs_dmr, prs_res, "RdBu", rev(c("gray80", "gray40")))
-plot_dmrs(male_prs_dmr, male_res, "RdBu", rev(c("light blue", "lightblue4")))
-plot_dmrs(female_prs_dmr, female_res, "RdBu", rev(c("lightpink", "lightpink4")))
+plot_dmrs(prs_dmr, prs_res, rev(c("gray80", "gray40")))
+plot_dmrs(male_prs_dmr, male_res, rev(c("light blue", "lightblue4")))
+plot_dmrs(female_prs_dmr, female_res, rev(c("lightpink", "lightpink4")))
 ```
 
 

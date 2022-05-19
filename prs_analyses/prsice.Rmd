@@ -265,36 +265,26 @@ names(hits_nalls_female) <- colnames(prs_mat_nalls_female)
 hits_by_thresh_bonf_nalls_female <- rbindlist(hits_nalls_female, idcol = "threshold", fill = TRUE)
 ```
 
-@TODO Color these by sex
+### Plotting EWAS vs Threshold Experiment by Sex
 ```{r}
-ggplot(hits_by_thresh_bonf[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
-  geom_text(vjust = -0.25) +
-  geom_col() +
+to_plot <- rbind(
+  hits_by_thresh_bonf[, .(hits = .N, Sex = "Cross-sex"), by = threshold] %>%
+    mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")),
+  hits_by_thresh_bonf_nalls_male[, .(hits = .N, Sex = "Male"), by = threshold] %>%
+    mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")),
+  hits_by_thresh_bonf_nalls_female[, .(hits = .N, Sex = "Female"), by = threshold] %>%
+    mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0"))
+) %>% mutate(Sex = factor(Sex, levels = c("Cross-sex", "Male", "Female")))
+plot_pos <- position_dodge(width = 1)
+ggplot(to_plot, aes(threshold, hits, fill = Sex, label = hits)) +
+  geom_text(position = plot_pos, vjust = -0.25) +
+  geom_col(position = plot_pos) +
   labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +
+  scale_fill_manual(values = c("grey80", "lightblue", "lightpink")) +
   theme_minimal()
-
-ggplot(hits_by_thresh_bonf_male[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
-  geom_text(vjust = -0.25) +
-  geom_col() +
-  labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +
-  theme_minimal()
-ggplot(hits_by_thresh_bonf_female[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
-  geom_text(vjust = -0.25) +
-  geom_col() +
-  labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +
-  theme_minimal()
+hits_by_thresh_bonf[, .(hits = .N, Sex = "Cross-sex"), by = threshold]
 hits_by_thresh_bonf_nalls_male[, .(hits = .N), by = threshold]
-ggplot(hits_by_thresh_bonf_nalls_male[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
-  geom_text(vjust = -0.25) +
-  geom_col() +
-  labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +
-  theme_minimal()
 hits_by_thresh_bonf_nalls_female[, .(hits = .N), by = threshold]
-ggplot(hits_by_thresh_bonf_nalls_female[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
-  geom_text(vjust = -0.25) +
-  geom_col() +
-  labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +
-  theme_minimal()
 ```
 ```{r}
 display_venn <- function(x, ...) {
