@@ -11,12 +11,14 @@ library(knitr)
 library(limma)
 library(foreach)
 library(doParallel)
+library(RSpectra)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 # Step 0: Prepare covariates and input files
 ```{r}
+#@TODO change to compute PCs on mvalues
 IDs <- fread("~/genotype_qc/TERRE_QC/all_imputed_r2_30_rsid_hard_call.fam")[, .(FID = V1, IID = V2)]
-covariate <- fread("../cis_mQTL_analyses/terre_data/covariates_10_methy_PC.txt")[id != "head_trauma_loc"]
+covariate <- fread("../cis_mQTL_analyses/terre_data/covariates_10_methy_PC.txt")[!grepl("head_trauma_loc|PC",id)]
 covariate <- cbind(IDs, covariate %>% transpose(make.names = "id"))
 
 PD <- fread("../cis_mQTL_analyses/terre_data/covariates_CTP_PD.txt")[id == "PD"]

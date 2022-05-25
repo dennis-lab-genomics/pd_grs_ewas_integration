@@ -146,7 +146,7 @@ ggboxplot(
 ```{r}
 # load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE/TERRE_betas_CTC.RData")# terre_betas_CTC
 load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE_processed_2021/betas_combat.RData") # betas_sub
-betas_sub <- betas_combat
+betas_sub <- lumi::beta2m(betas_combat)
 # load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE/TERRE_funnorm_processed/betas_combat.RData")
 # betas_sub<- betas_combat
 ```
@@ -259,7 +259,6 @@ annotation <- minfi::getAnnotation(IlluminaHumanMethylationEPICanno.ilm10b4.hg19
 
 ##### Plotting
 ```{r, fig.height=7,fig.width=15}
-library(cowplot)
 get_dmr_effects <- function(dmr, limma_res) {
   dmr_coord <- str_match_all(as.character(dmr), "(chr.*):([0-9]*)-([0-9]*)")[[1]]
   cpgs <- annotation[annotation$chr == dmr_coord[2] & annotation$pos >= as.numeric(dmr_coord[3]) & annotation$pos <= as.numeric(dmr_coord[4]), ]
