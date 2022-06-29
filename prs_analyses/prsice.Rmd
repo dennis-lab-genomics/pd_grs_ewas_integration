@@ -1,6 +1,8 @@
 ---
 title: "PRSice2 Development of risk score"
-output: html_notebook
+output: 
+  html_notebook: 
+    toc: yes
 ---
 
 ```{r setup, include=FALSE}
