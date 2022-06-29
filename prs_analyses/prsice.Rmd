@@ -47,6 +47,7 @@ Rscript /home1/NEURO/casazza/PRSice.R \
     --cov TERRE.covariate \
     --binary-target T\
     --beta  \
+    --ld /home1/NEURO/casazza/1000G_plink/EUR_phase3  \
     --out TERRE_PRSice \
     -q 5\
     --all-score\
@@ -56,22 +57,20 @@ Rscript /home1/NEURO/casazza/PRSice.R \
     --pvalue p\
     --target /home1/NEURO/casazza/genotype_qc/TERRE_QC/all_imputed_r2_30_rsid_hard_call \
     --thread 32
-
-
 ```
 # Step 2: Evaluate output
 ```{r, out.width="400px"}
-include_graphics("prsice_images/TERRE_PRSice_BARPLOT_2022-05-25.png")
-include_graphics("prsice_images/TERRE_PRSice_HIGH-RES_PLOT_2022-05-25.png")
-include_graphics("prsice_images/TERRE_PRSice_QUANTILES_PLOT_2022-05-25.png")
+include_graphics("prsice_images/TERRE_PRSice_BARPLOT_2022-06-30.png")
+include_graphics("prsice_images/TERRE_PRSice_HIGH-RES_PLOT_2022-06-30.png")
+include_graphics("prsice_images/TERRE_PRSice_QUANTILES_PLOT_2022-06-30.png")
 
-include_graphics("prsice_images/TERRE_PRSice_nalls_male_BARPLOT_2022-05-25.png")
-include_graphics("prsice_images/TERRE_PRSice_nalls_male_HIGH-RES_PLOT_2022-05-25.png")
-include_graphics("prsice_images/TERRE_PRSice_nalls_male_QUANTILES_PLOT_2022-05-25.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_male_BARPLOT_2022-06-30.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_male_HIGH-RES_PLOT_2022-06-30.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_male_QUANTILES_PLOT_2022-06-30.png")
 
-include_graphics("prsice_images/TERRE_PRSice_nalls_female_BARPLOT_2022-05-25.png")
-include_graphics("prsice_images/TERRE_PRSice_nalls_female_HIGH-RES_PLOT_2022-05-25.png")
-include_graphics("prsice_images/TERRE_PRSice_nalls_female_QUANTILES_PLOT_2022-05-25.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_female_BARPLOT_2022-06-30.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_female_HIGH-RES_PLOT_2022-06-30.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_female_QUANTILES_PLOT_2022-06-30.png")
 ```
 ## Plotting PRSice Data on my own
 ```{r}
@@ -284,7 +283,7 @@ get_full_fit <- function(prs_mat,cov_mat,mvalues){
   top_prs_fit <- eBayes(top_prs_fit)
   top_prs_hits <- topTable(top_prs_fit, coef = 2, adjust.method = "bonf", number = Inf, genelist = rownames(mvalues))
 }
-top_prs_hits <- get_full_fit(prs_mati,cov_mat,mvalues)
+top_prs_hits <- get_full_fit(prs_mat,cov_mat,mvalues)
 top_male_prs_hits <- get_full_fit(prs_mat_nalls_male, cov_mat_male, mvalues_male)
 top_female_prs_hits <- get_full_fit(prs_mat_nalls_female, cov_mat_female, mvalues_female)
 ```
@@ -367,6 +366,7 @@ manhattan(GWAS,
 ## DMRs
 
 ```{r}
+library(DMRcate)
 S4_to_dataframe <- function(s4obj) {
   nms <- slotNames(s4obj)
   lst <- lapply(nms, function(nm) slot(s4obj, nm))
@@ -426,6 +426,7 @@ plot_dmrs <- function(dmr_res,limma_res,prs_mat, mvalues, case_control) {
   print(p1)
   print(p2)
 }
+
 plot_dmrs(dmr_cross, prs_annot, prs_mat,mvalues, rev(c("gray80", "gray40")))
 plot_dmrs(dmr_males,prs_annot_male,prs_mat_male, mvalues_male,rev(c("light blue", "lightblue4")))
 plot_dmrs(dmr_female, prs_annot_female, prs_mat_female, mvalues_female,rev(c("lightpink", "lightpink4")))
