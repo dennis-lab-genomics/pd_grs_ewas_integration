@@ -1,6 +1,6 @@
 ---
 title: "PRSice sex-stratified"
-output: github_document
+output: html_notebook
 ---
 
 ```{r setup, include=FALSE}
@@ -52,6 +52,7 @@ Rscript /home1/NEURO/casazza/PRSice.R \
     --all-score\
     --pheno TERRE_male.pheno \
     --snp SNP \
+    --ld /home1/NEURO/casazza/1000G_plink/EUR_phase3\
     --stat b \
     --pvalue p\
     --target /home1/NEURO/casazza/genotype_qc/TERRE_QC/all_imputed_r2_30_rsid_hard_call_male \
@@ -68,6 +69,7 @@ Rscript /home1/NEURO/casazza/PRSice.R \
     --all-score\
     --pheno TERRE_female.pheno \
     --snp SNP \
+    --ld /home1/NEURO/casazza/1000G_plink/EUR_phase3\
     --stat b \
     --pvalue p\
     --target /home1/NEURO/casazza/genotype_qc/TERRE_QC/all_imputed_r2_30_rsid_hard_call_female \
@@ -75,12 +77,12 @@ Rscript /home1/NEURO/casazza/PRSice.R \
 ```
 # Step 2: Evaluate output
 ```{r, out.width="400px"}
-include_graphics("prsice_images/TERRE_male_PRSice_BARPLOT_2022-01-12.png")
-include_graphics("prsice_images/TERRE_male_PRSice_HIGH-RES_PLOT_2022-01-12.png")
-include_graphics("prsice_images/TERRE_male_PRSice_QUANTILES_PLOT_2022-01-12.png")
-include_graphics("prsice_images/TERRE_female_PRSice_BARPLOT_2022-01-12.png")
-include_graphics("prsice_images/TERRE_female_PRSice_HIGH-RES_PLOT_2022-01-12.png")
-include_graphics("prsice_images/TERRE_female_PRSice_QUANTILES_PLOT_2022-01-12.png")
+include_graphics("prsice_images/TERRE_male_PRSice_BARPLOT_2022-06-30.png")
+include_graphics("prsice_images/TERRE_male_PRSice_HIGH-RES_PLOT_2022-06-30.png")
+include_graphics("prsice_images/TERRE_male_PRSice_QUANTILES_PLOT_2022-06-30.png")
+include_graphics("prsice_images/TERRE_female_PRSice_BARPLOT_2022-06-30.png")
+include_graphics("prsice_images/TERRE_female_PRSice_HIGH-RES_PLOT_2022-06-30.png")
+include_graphics("prsice_images/TERRE_female_PRSice_QUANTILES_PLOT_2022-06-30.png")
 ```
 ## Plotting PRSice Data on my own
 ```{r}
