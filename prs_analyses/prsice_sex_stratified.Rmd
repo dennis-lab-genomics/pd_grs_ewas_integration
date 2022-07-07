@@ -16,21 +16,19 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 # Step 0: Prepare covariates and input files
 ```{r}
-#@TODO change to compute PCs on mvalues
 IDs <- fread("~/genotype_qc/TERRE_QC/all_imputed_r2_30_rsid_hard_call.fam")[, .(FID = V1, IID = V2)]
-covariate <- fread("../cis_mQTL_analyses/terre_data/covariates_10_methy_PC.txt")[!grepl("head_trauma_loc|PC",id)]
-covariate <- cbind(IDs, covariate %>% transpose(make.names = "id"))
+prsice_cov <- fread("prsice_cov_and_status_mvalues.txt")
+prsice_cov <- prsice_cov[match(IDs$IID,prsice_cov$IID)]
+all(IDs$IID ==prsice_cov$IID)
+covariate <- cbind(IDs, prsice_cov[,-c(16,17,18)])
 
-PD <- fread("../cis_mQTL_analyses/terre_data/covariates_CTP_PD.txt")[id == "PD"]
-PD <- cbind(IDs, PD %>% transpose(make.names = "id"))
-covariate <- covariate[!duplicated(IID)]
-PD <- PD[!duplicated(IID)]
+PD <- cbind(IDs,prsice_cov[,16])
 head(covariate)
 head(PD)
-fwrite(PD[IID %in% covariate[men == 1]$IID], "TERRE_male.pheno", sep = "\t")
-fwrite(covariate[men == 1] %>% select(-men), "TERRE_male.covariate", sep = "\t")
-fwrite(PD[IID %in% covariate[men == 0]$IID], "TERRE_female.pheno", sep = "\t")
-fwrite(covariate[men == 0] %>% select(-men), "TERRE_female.covariate", sep = "\t")
+fwrite(PD[IID %in% covariate[sex == 1]$IID], "TERRE_male.pheno", sep = "\t")
+fwrite(covariate[sex == 1] %>% select(-sex), "TERRE_male.covariate", sep = "\t")
+fwrite(PD[IID %in% covariate[sex == 0]$IID], "TERRE_female.pheno", sep = "\t")
+fwrite(covariate[sex == 0] %>% select(-sex), "TERRE_female.covariate", sep = "\t")
 ```
 ```{r}
 covariate
@@ -138,14 +136,14 @@ ggplot(betas_combat[, 1:5] %>% as.data.table(keep.rownames = T) %>% melt(id.vars
 ```{r}
 covariate_male <- covariate[men == 1] %>% select(-men)
 betas_male <- betas_combat[,covariate_male$IID]
-prsice_male_all <- fread("prsice_male_data/TERRE_male_PRSice.all_score")[match(colnames(betas_male), IID), .(FID, IID, `Pt_0.0219001`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+prsice_male_all <- fread("prsice_male_data/TERRE_male_PRSice.all_score")[match(colnames(betas_male), IID), .(FID, IID, `Pt_0.00040005`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
 covariate_male <- covariate_male[match(colnames(betas_male), IID)]
 all(covariate_male$IID == colnames(betas_male))
 all(covariate_male$IID == prsice_male_all$IID)
 
 covariate_female <- covariate[men == 0] %>% select(-men)
 betas_female <- betas_combat[,covariate_female$IID]
-prsice_female_all <- fread("prsice_female_data/TERRE_female_PRSice.all_score")[match(colnames(betas_female), IID), .(FID, IID, `Pt_0.0219001`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+prsice_female_all <- fread("prsice_female_data/TERRE_female_PRSice.all_score")[match(colnames(betas_female), IID), .(FID, IID, `Pt_0.00040005`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
 covariate_female <- covariate_female[match(colnames(betas_female), IID)]
 all(covariate_female$IID == colnames(betas_female))
 all(covariate_female$IID == prsice_female_all$IID)
@@ -168,7 +166,7 @@ hits_male <- foreach(prs_thresh = colnames(prs_mat_male)) %dopar% {
   design_prs_male <- model.matrix(~., data = cbind(prs_mat_male[, ..prs_thresh], cov_mat_male))
   prs_fit_male <- lmFit(mvalues_male, design_prs_male)
   prs_fit_male <- eBayes(prs_fit_male)
-  topTable(prs_fit_male, coef = 2, adjust.method = "none", p.value = 0.05, number = Inf, genelist = rownames(mvalues_male))
+  topTable(prs_fit_male, coef = 2, adjust.method = "BH", p.value = 0.25, number = Inf, genelist = rownames(mvalues_male))
 }
 names(hits_male) <- colnames(prs_mat_male)
 hits_by_thresh_bonf_male <- rbindlist(hits_male, idcol = "threshold", fill = TRUE)
@@ -178,14 +176,14 @@ hits_female <- foreach(prs_thresh = colnames(prs_mat_female)) %dopar% {
   design_prs_female <- model.matrix(~., data = cbind(prs_mat_female[, ..prs_thresh], cov_mat_female))
   prs_fit_female <- lmFit(mvalues_female, design_prs_female)
   prs_fit_female <- eBayes(prs_fit_female)
-  topTable(prs_fit_female, coef = 2, adjust.method = "none", p.value = 0.05, number = Inf, genelist = rownames(mvalues_female))
+  topTable(prs_fit_female, coef = 2, adjust.method = "BH", p.value = 0.25, number = Inf, genelist = rownames(mvalues_female))
 }
 names(hits_female) <- colnames(prs_mat_female)
 hits_by_thresh_bonf_female <- rbindlist(hits_female, idcol = "threshold", fill = TRUE)
 ```
 ```{r}
 hits_by_thresh_bonf_male[, .(hits = .N), by = threshold]
-ggplot(hits_by_thresh_bonf_male[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
+ggplot(hits_by_thresh_bonf_male[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.00040005` = "4e-4", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
   geom_text(vjust = -0.25) +
   geom_col() +
   labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +
@@ -193,7 +191,7 @@ ggplot(hits_by_thresh_bonf_male[, .(hits = .N), by = threshold] %>% mutate(thres
 
 
 hits_by_thresh_bonf_female[, .(hits = .N), by = threshold]
-ggplot(hits_by_thresh_bonf_female[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
+ggplot(hits_by_thresh_bonf_female[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.00040005` = "4e-4", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
   geom_text(vjust = -0.25) +
   geom_col() +
   labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +

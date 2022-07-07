@@ -1,7 +1,7 @@
 ---
 title: "PRSice2 Development of risk score"
-output: 
-  html_notebook: 
+output:
+  html_notebook:
     toc: yes
 ---
 
@@ -265,9 +265,8 @@ display_venn <- function(x, ...) {
   venn_object <- venn.diagram(x, filename = NULL, ...)
   grid.draw(venn_object)
 }
-display_venn(list(both = hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, male = hits_by_thresh_bonf_male[threshold == "Pt_5e-08"]$ID, female = hits_by_thresh_bonf_female[threshold == "Pt_5e-08"]$ID), fill = c("gray80", "lightblue", "lightpink"))
 
-display_venn(list(both = hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, male = hits_by_thresh_bonf_nalls_male[threshold == "Pt_5e-08"]$ID, female = hits_by_thresh_bonf_nalls_female[threshold == "Pt_5e-08"]$ID), fill = c("gray80", "lightblue", "lightpink"))
+display_venn(list(`Cross-sex` = hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, Male = hits_by_thresh_bonf_nalls_male[threshold == "Pt_5e-08"]$ID, Female = hits_by_thresh_bonf_nalls_female[threshold == "Pt_5e-08"]$ID), fill = c("gray80", "lightblue", "lightpink"))
 male_ids <- hits_by_thresh_bonf_nalls_male[threshold == "Pt_5e-08"]$ID
 cross_ids <- hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID
 male_ids[!male_ids %in% cross_ids]
@@ -387,7 +386,7 @@ dmr_female <- run_dmrcate(prs_mat_nalls_female,cov_mat_female,mvalues_female)
 ```{r}
 annotation <- minfi::getAnnotation(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)
 ```
-
+### Plotting all DMRs {.tabset .tabset-fade}
 ```{r}
 get_dmr_effects <- function(dmr, limma_res,mvalues) {
   dmr_coord <- str_match_all(as.character(dmr), "(chr.*):([0-9]*)-([0-9]*)")[[1]]
@@ -410,26 +409,34 @@ plot_dmrs <- function(dmr_res,limma_res,prs_mat, mvalues, case_control) {
   to_plot <- rbindlist(lapply(dmr_res$coord, function(dmr) get_dmr_effects(dmr, limma_res,mvalues))) %>%
     mutate(SCORE1_AVG = scale(prs_mat[match(Var2,IDs$IID),`Pt_5e-08`]),PD = PD[match(Var2,IID)]$PD) %>%
     filter(!is.na(SCORE1_AVG))
-  p1 <- ggplot(to_plot , aes(pos, value, color = SCORE1_AVG)) +
-    geom_point() +
-    scale_color_gradient(low = rev(case_control)[1], high = rev(case_control)[2]) +
-    facet_wrap(~DMR, scales = "free", nrow = 2) +
-    theme_minimal() +
-    labs(color = "Normalized PD PRS")+
-    theme(axis.text.x = element_text(angle = 90))
-  p2 <- ggplot(to_plot %>% mutate(PD = ifelse(PD == 1, "CASE", "CONTROL")), aes(factor(pos), value, color = PD)) +
-    geom_boxplot(position = position_dodge(0.75)) +
-    scale_color_manual(values = case_control) +
-    facet_wrap(~DMR, scales = "free", nrow = 2) +
-    theme_minimal() +
-    stat_summary(aes(group = PD), fun = mean, geom = "line") +
-    labs(color = "PD status") +
-    theme(axis.text.x = element_text(angle = 90))
-  print(p1)
-  print(p2)
+  for(cur_dmr in unique(to_plot$DMR)){
+    cur_plot <- to_plot[DMR == cur_dmr]
+    p1 <- ggplot(cur_plot , aes(pos, value, color = SCORE1_AVG)) +
+      geom_point() +
+      scale_color_gradient(low = rev(case_control)[1], high = rev(case_control)[2]) +
+      theme_minimal() +
+      labs(title = unique(cur_plot$DMR),x="POS",y=bquote("Methylation"~beta),color = "Normalized PD PRS")+
+      theme(axis.text.x = element_text(angle = 90))
+    p2 <- ggplot(cur_plot %>% mutate(PD = ifelse(PD == 1, "CASE", "CONTROL")), aes(factor(pos), value, color = PD)) +
+      geom_boxplot(position = position_dodge(0.75)) +
+      scale_color_manual(values = case_control) +
+      theme_minimal() +
+      stat_summary(aes(group = PD), fun = mean, geom = "line") +
+      labs(title = unique(cur_plot$DMR),x="POS",y=bquote("Methylation"~beta),color = "PD status") +
+      theme(axis.text.x = element_text(angle = 90))
+    print(p1)
+    print(p2)
+  }
 }
 
 plot_dmrs(dmr_cross, prs_annot, prs_mat,mvalues, rev(c("gray80", "gray40")))
 plot_dmrs(dmr_males,prs_annot_male,prs_mat_male, mvalues_male,rev(c("light blue", "lightblue4")))
 plot_dmrs(dmr_female, prs_annot_female, prs_mat_female, mvalues_female,rev(c("lightpink", "lightpink4")))
+```
+
+
+```{r}
+dmr_cross
+dmr_males
+dmr_female
 ```
