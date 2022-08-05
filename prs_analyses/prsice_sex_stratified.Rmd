@@ -75,12 +75,12 @@ Rscript /home1/NEURO/casazza/PRSice.R \
 ```
 # Step 2: Evaluate output
 ```{r, out.width="400px"}
-include_graphics("prsice_images/TERRE_male_PRSice_BARPLOT_2022-06-30.png")
-include_graphics("prsice_images/TERRE_male_PRSice_HIGH-RES_PLOT_2022-06-30.png")
-include_graphics("prsice_images/TERRE_male_PRSice_QUANTILES_PLOT_2022-06-30.png")
-include_graphics("prsice_images/TERRE_female_PRSice_BARPLOT_2022-06-30.png")
-include_graphics("prsice_images/TERRE_female_PRSice_HIGH-RES_PLOT_2022-06-30.png")
-include_graphics("prsice_images/TERRE_female_PRSice_QUANTILES_PLOT_2022-06-30.png")
+include_graphics("prsice_images/TERRE_male_PRSice_BARPLOT_2022-07-07.png")
+include_graphics("prsice_images/TERRE_male_PRSice_HIGH-RES_PLOT_2022-07-07.png")
+include_graphics("prsice_images/TERRE_male_PRSice_QUANTILES_PLOT_2022-07-07.png")
+include_graphics("prsice_images/TERRE_female_PRSice_BARPLOT_2022-07-07.png")
+include_graphics("prsice_images/TERRE_female_PRSice_HIGH-RES_PLOT_2022-07-07.png")
+include_graphics("prsice_images/TERRE_female_PRSice_QUANTILES_PLOT_2022-07-07.png")
 ```
 ## Plotting PRSice Data on my own
 ```{r}
@@ -134,16 +134,16 @@ ggplot(betas_combat[, 1:5] %>% as.data.table(keep.rownames = T) %>% melt(id.vars
 
 ### Match DNA, PRS, and metadata
 ```{r}
-covariate_male <- covariate[men == 1] %>% select(-men)
+covariate_male <- covariate[sex == 1] %>% select(-sex)
 betas_male <- betas_combat[,covariate_male$IID]
-prsice_male_all <- fread("prsice_male_data/TERRE_male_PRSice.all_score")[match(colnames(betas_male), IID), .(FID, IID, `Pt_0.00040005`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+prsice_male_all <- fread("prsice_male_data/TERRE_male_PRSice.all_score")[match(colnames(betas_male), IID), .(FID, IID, `Pt_0.00675005`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
 covariate_male <- covariate_male[match(colnames(betas_male), IID)]
 all(covariate_male$IID == colnames(betas_male))
 all(covariate_male$IID == prsice_male_all$IID)
 
-covariate_female <- covariate[men == 0] %>% select(-men)
+covariate_female <- covariate[sex == 0] %>% select(-sex)
 betas_female <- betas_combat[,covariate_female$IID]
-prsice_female_all <- fread("prsice_female_data/TERRE_female_PRSice.all_score")[match(colnames(betas_female), IID), .(FID, IID, `Pt_0.00040005`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+prsice_female_all <- fread("prsice_female_data/TERRE_female_PRSice.all_score")[match(colnames(betas_female), IID), .(FID, IID, `Pt_0.00240005`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
 covariate_female <- covariate_female[match(colnames(betas_female), IID)]
 all(covariate_female$IID == colnames(betas_female))
 all(covariate_female$IID == prsice_female_all$IID)
@@ -183,7 +183,7 @@ hits_by_thresh_bonf_female <- rbindlist(hits_female, idcol = "threshold", fill =
 ```
 ```{r}
 hits_by_thresh_bonf_male[, .(hits = .N), by = threshold]
-ggplot(hits_by_thresh_bonf_male[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.00040005` = "4e-4", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
+ggplot(hits_by_thresh_bonf_male[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.00675005` = "6.75e-3", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
   geom_text(vjust = -0.25) +
   geom_col() +
   labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +
@@ -191,7 +191,7 @@ ggplot(hits_by_thresh_bonf_male[, .(hits = .N), by = threshold] %>% mutate(thres
 
 
 hits_by_thresh_bonf_female[, .(hits = .N), by = threshold]
-ggplot(hits_by_thresh_bonf_female[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.00040005` = "4e-4", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
+ggplot(hits_by_thresh_bonf_female[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.00240005` = "2.40e-3", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
   geom_text(vjust = -0.25) +
   geom_col() +
   labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +

@@ -16,7 +16,7 @@ probe_pos <- probe_pos[geneid %chin% methy$cpg]
 
 argv <- commandArgs(trailingOnly = TRUE)
 cov_file <- argv[[1]]
-out_file <- argv[[2]]
+outfile <- argv[[2]]
 shared_covariates <- fread(cov_file)
 env_data <- fread("/home1/NEURO/SHARE_DECIPHER/TERRE_pesticides/pesticides.csv")
 mapping <- fread("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv")
@@ -50,7 +50,11 @@ fit_interaction <- function(row) {
   tmp_df$G <- terre_prs$SCORE1_AVG[ix]
   tmp_df$GxE <- tmp_df$G * tmp_df$E
   df_mids <- suppressWarnings(as.mids(tmp_df))
-  fit <- with(df_mids, lm(y ~ G + E + GxE + V3 + V4 + V5 + age + sex + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10))
+  if (grepl("male", outfile)) {
+    fit <- with(df_mids, lm(y ~ G + E + GxE + V3 + V4 + V5 + age + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10))
+  } else {
+    fit <- with(df_mids, lm(y ~ G + E + GxE + V3 + V4 + V5 + age + sex + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10))
+  }
   stats <- summary(pool(fit)) %>%
     select(-df) %>%
     column_to_rownames(var = "term")
@@ -79,4 +83,4 @@ results <- mclapply(
   mc.cores = num_cores
 )
 
-fwrite(rbindlist(results), out_file, sep = "\t", row.names = F, quote = F)
+fwrite(rbindlist(results), outfile, sep = "\t", row.names = F, quote = F)

@@ -1,6 +1,6 @@
 ---
 title: "DIGPD Data prep"
-output: html_document
+output: html_notebook
 ---
 
 ```{r setup, include=FALSE}
@@ -54,7 +54,7 @@ betas_sub <- betas_combat
 colnames(betas_sub) <- gsub(".visit.*", "", colnames(betas_sub))
 colnames(genotype) <- gsub("_PAL.*|_AOR.*", "", colnames(genotype))
 colnames(genotype)
-digpd_meta <- digpd_meta %>% filter(IID %in% colnames(genotype), patient %in% colnames(betas_sub))
+digpd_meta <- digpd_meta %>% dplyr::filter(IID %in% colnames(genotype), patient %in% colnames(betas_sub))
 new_cols <- c(colnames(genotype)[1:6], colnames(genotype)[7:ncol(genotype)][colnames(genotype)[7:ncol(genotype)] %in% digpd_meta$IID])
 genotype <- genotype[, ..new_cols]
 setcolorder(genotype, neworder = c(colnames(genotype)[1:6], digpd_meta$IID))
@@ -116,8 +116,8 @@ write_delim(betas_sub %>% as.data.frame() %>% rownames_to_column("cpg") %>% filt
 ## Write CTP covars
 UPDATE: changed names for files without mutants
 ```{r}
-covar <- digpd_meta[, .(PD = PD, age = Age, sex = men, V3 = U1, V4 = U2, V5 = U3, CTP_PC1, CTP_PC2, CTP_PC3, CTP_PC4, CTP_PC5)]
-write_delim(t(covar) %>% as.data.frame() %>% rownames_to_column("id"), "digpd_data/covariates_CTP_no_mut.txt")
+covar <- cbind(digpd_meta, methy_PC$x)[, .(PD = PD, age = Age, sex = men, V3 = U1, V4 = U2, V5 = U3, PC1, PC2, PC3, PC4, PC5, PC6, PC7, PC8, PC9)]
+write_delim(t(covar) %>% as.data.frame() %>% rownames_to_column("id"), "digpd_data/covariates_9_methy_PC_no_mut.txt")
 ```
 ## Write CTP data
 UPDATE: changed names for files without mutants
@@ -138,8 +138,8 @@ UPDATE: changed names for files without mutants
 write_delim(t(cbind(digpd_meta[, c("U1", "U2", "U3", "Age", "men", "CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5")])) %>% as.data.frame() %>% rownames_to_column("id"), "digpd_data/covariates_CTP_no_mut.txt")
 write_delim(t(cbind(digpd_meta[, c("U1", "U2", "U3", "PD", "Age", "men", "CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5")])) %>% as.data.frame() %>% rownames_to_column("id"), "digpd_data/covariates_CTP_PD_no_mut.txt")
 
-write_delim(t(cbind(digpd_meta[digpd_meta$men == 1, c("U1", "U2", "U3", "PD", "Age", "CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5")])) %>% as.data.frame() %>% rownames_to_column("id"), "digpd_data/male_covariates_PD_CTP_no_mut.txt")
-write_delim(t(cbind(digpd_meta[digpd_meta$men == 0, c("U1", "U2", "U3", "PD", "Age", "CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5")])) %>% as.data.frame() %>% rownames_to_column("id"), "digpd_data/female_covariates_PD_CTP_no_mut.txt")
+write_delim(t(cbind(digpd_meta, methy_PC$x)[digpd_meta$men == 1, c("U1", "U2", "U3", "Age", paste0("PC", 1:9))]) %>% as.data.frame() %>% rownames_to_column("id"), "digpd_data/male_covariates_9_methy_PC_no_mut.txt")
+write_delim(t(cbind(digpd_meta, methy_PC$x)[digpd_meta$men == 0, c("U1", "U2", "U3", "Age", paste0("PC", 1:9))]) %>% as.data.frame() %>% rownames_to_column("id"), "digpd_data/female_covariates_9_methy_PC_no_mut.txt")
 
 methy_annot <- fread("~/MethylationEPIC_v-1-0_B4.csv", skip = 7)
 

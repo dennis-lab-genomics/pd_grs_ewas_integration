@@ -19,8 +19,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Step 0: Prepare covariates and input files
 ```{r}
-#@TODO change to compute PCs on mvalues
-
 IDs <- fread("~/genotype_qc/TERRE_QC/all_imputed_r2_30_rsid_hard_call.fam")[, .(FID = V1, IID = V2)]
 prsice_cov <- fread("prsice_cov_and_status_mvalues.txt")
 prsice_cov <- prsice_cov[match(IDs$IID,prsice_cov$IID)]
@@ -66,13 +64,13 @@ include_graphics("prsice_images/TERRE_PRSice_BARPLOT_2022-06-30.png")
 include_graphics("prsice_images/TERRE_PRSice_HIGH-RES_PLOT_2022-06-30.png")
 include_graphics("prsice_images/TERRE_PRSice_QUANTILES_PLOT_2022-06-30.png")
 
-include_graphics("prsice_images/TERRE_PRSice_nalls_male_BARPLOT_2022-06-30.png")
-include_graphics("prsice_images/TERRE_PRSice_nalls_male_HIGH-RES_PLOT_2022-06-30.png")
-include_graphics("prsice_images/TERRE_PRSice_nalls_male_QUANTILES_PLOT_2022-06-30.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_male_BARPLOT_2022-07-07.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_male_HIGH-RES_PLOT_2022-07-07.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_male_QUANTILES_PLOT_2022-07-07.png")
 
-include_graphics("prsice_images/TERRE_PRSice_nalls_female_BARPLOT_2022-06-30.png")
-include_graphics("prsice_images/TERRE_PRSice_nalls_female_HIGH-RES_PLOT_2022-06-30.png")
-include_graphics("prsice_images/TERRE_PRSice_nalls_female_QUANTILES_PLOT_2022-06-30.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_female_BARPLOT_2022-07-07.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_female_HIGH-RES_PLOT_2022-07-07.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_female_QUANTILES_PLOT_2022-07-07.png")
 ```
 ## Plotting PRSice Data on my own
 ```{r}
@@ -132,21 +130,21 @@ ggplot(betas_combat[, 1:5] %>% as.data.table(keep.rownames = T) %>% melt(id.vars
 
 ### Match DNA, PRS, and metadata
 ```{r}
-prsice_all <- fread("prsice_data/TERRE_PRSice.all_score")[match(colnames(betas_combat), IID), .(FID, IID, `Pt_0.0219001`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+prsice_all <- fread("prsice_data/TERRE_PRSice.all_score")[match(colnames(betas_combat), IID), .(FID, IID, `Pt_0.00030005`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
 covariate <- covariate[match(colnames(betas_combat), IID)]
 all(covariate$IID == colnames(betas_combat))
 all(covariate$IID == prsice_all$IID)
 
 covariate_male <- covariate[sex == 1] %>% select(-sex)
 betas_male <- betas_combat[, covariate_male$IID]
-prsice_male_all <- prsice_all[match(colnames(betas_male), IID), .(FID, IID, `Pt_0.0219001`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+prsice_male_all <- prsice_all[match(colnames(betas_male), IID), .(FID, IID, `Pt_0.00030005`,`Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
 covariate_male <- covariate_male[match(colnames(betas_male), IID)]
 all(covariate_male$IID == colnames(betas_male))
 all(covariate_male$IID == prsice_male_all$IID)
 
 covariate_female <- covariate[sex == 0] %>% select(-sex)
 betas_female <- betas_combat[, covariate_female$IID]
-prsice_female_all <- prsice_all[match(colnames(betas_female), IID), .(FID, IID, `Pt_0.0219001`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+prsice_female_all <- prsice_all[match(colnames(betas_female), IID), .(FID, IID, `Pt_0.00030005`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
 covariate_female <- covariate_female[match(colnames(betas_female), IID)]
 all(covariate_female$IID == colnames(betas_female))
 all(covariate_female$IID == prsice_female_all$IID)
@@ -154,7 +152,7 @@ all(covariate_female$IID == prsice_female_all$IID)
 
 covariate_male <- covariate[sex == 1] %>% select(-sex)
 betas_male <- betas_combat[, covariate_male$IID]
-prsice_male_nalls_all <- fread("prsice_nalls_male_data/TERRE_PRSice_nalls_male.all_score")[match(colnames(betas_male), IID), .(FID, IID, `Pt_0.0219001`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+prsice_male_nalls_all <- fread("prsice_nalls_male_data/TERRE_PRSice_nalls_male.all_score")[match(colnames(betas_male), IID), .(FID, IID, `Pt_0.00030005`, `Pt_0.00040005`,`Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
 covariate_male <- covariate_male[match(colnames(betas_male), IID)]
 all(covariate_male$IID == colnames(betas_male))
 all(covariate_male$IID == prsice_male_nalls_all$IID)
