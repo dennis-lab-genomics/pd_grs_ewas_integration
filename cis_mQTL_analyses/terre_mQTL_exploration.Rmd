@@ -12,40 +12,61 @@ library(qvalue)
 library(readxl)
 library(Gviz)
 library(tidyverse)
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
 knitr::opts_chunk$set(cache = TRUE)
 ```
 ## Replication of Cross-sex mQTL
 ```{r}
+library(dbplyr)
+library(DBI)
 ntests <- 126904049
-mQTL_results <- fread("terre_data/cis_all_impute_mQTL_results_9_methy_PC.txt.gz", key = "gene")
+file.exists("terre_data/cis_all_impute_mQTL_results_9_methy_PC.db")
+con_terre <- dbConnect(RSQLite::SQLite(), "terre_data/cis_all_impute_mQTL_results_9_methy_PC.db")
+
+mQTL_results <- tbl(con_terre, "datatable")
+con_digpd <- dbConnect(RSQLite::SQLite(), "digpd_data/cis_all_impute_mQTL_results_9_methy_PC.db")
 ntests_digpd <- 100363748
-mQTL_results_digpd <- fread("digpd_data/cis_all_impute_mQTL_results_9_methy_PC_no_mut.txt.gz")
+mQTL_results_digpd <- tbl(con_digpd, "datatable")
 ```
 ```{r}
-mQTL_results[FDR < 0.05, .(total = .N, cpgs = uniqueN(gene))]
-mQTL_results[`p-value` < (0.05 / ntests), .(total = .N, cpgs = uniqueN(gene))]
-hist(mQTL_results$`p-value`)
-qq(mQTL_results$`p-value`)
+mQTL_results %>%
+  filter(FDR < 0.05) %>%
+  summarize(total = n(), cpgs = n_distinct(gene))
+mQTL_results %>%
+  filter(`p-value` < (0.05 / ntests)) %>%
+  summarize(total = n(), cpgs = n_distinct(gene))
+
+mQTL_results_digpd %>%
+  filter(FDR < 0.05) %>%
+  summarize(total = n(), cpgs = n_distinct(gene))
+mQTL_results_digpd %>%
+  filter(`p-value` < (0.05 / ntests)) %>%
+  summarize(total = n(), cpgs = n_distinct(gene))
+
+library(dbplot)
+mQTL_results %>% dbplot_histogram(`p-value`)
+# qq(mQTL_results$`p-value`)
 ```
 
 ### Checking replication
 ```{r}
-to_check_replication <- mQTL_results_digpd[mQTL_results[FDR < 0.05], on = c("SNP", "gene"), nomatch = 0]
+to_check_replication <- mQTL_results_digpd %>%
+  inner_join(mQTL_results %>% filter(FDR < 0.05), by = c("SNP", "gene"), copy = TRUE) %>%
+  collect()
 ```
 
 $\pi_1$ statistics
 ```{r}
-(sig_shared <- uniqueN(to_check_replication[FDR < (0.05 / nrow(mQTL_results_digpd))]$gene))
+to_check_replication <- as.data.table(to_check_replication)
 
-pi0res <- pi0est(na.omit(to_check_replication$`p-value`), lambda = seq(0, 0.245, 0.005), pi0.method = "bootstrap")
+pi0res <- pi0est(na.omit(as.numeric(to_check_replication$`p-value.x`)), lambda = seq(0, 0.245, 0.005), pi0.method = "bootstrap")
 1 - pi0res$pi0
 plot(pi0res$pi0.lambda, pi0res$lambda, xlab = bquote(pi[0]), ylab = bquote(lambda))
 abline(v = pi0res$pi0)
-qvalres <- qvalue_truncp(na.omit(to_check_replication$`p-value`))
+qvalres <- qvalue_truncp(na.omit(as.numeric(to_check_replication$`p-value.x`)))
 1 - qvalres$pi0
 abline(v = qvalres$pi0)
-pi0est(to_check_replication$`p-value` / 0.25)
+pi0est(as.numeric(to_check_replication$`p-value.x`) / 0.25)
 ```
 
 ## Colocalization with parkinson's loci
