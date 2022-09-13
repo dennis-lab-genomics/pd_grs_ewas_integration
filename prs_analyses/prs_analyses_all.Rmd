@@ -17,7 +17,7 @@ library(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 # PD risk score data and matching
-```{r, eval=FALSE}
+```{r eval=FALSE}
 risk_scores <- read_xlsx("~/pd_risk_score/Supplementary materials/Table S2. Detailed summary statistics on all nominated risk variants, known and novel_.xlsx") %>%
   mutate(CHR = as.numeric(CHR), COUNTED = toupper(`Effect allele`), ALT = toupper(`Other allele`), POS = BP) %>%
   filter(!is.na(CHR))
@@ -28,7 +28,7 @@ risk_scores %>%
 
 # TERRE PRS Analysis
 Generate PRS using `plink2 --score`:
-```{bash, eval=FALSE}
+```{bash eval=FALSE}
 ~/plink2 --bfile ~/genotype_qc/TERRE_QC/raw_data.imputed.r2_30.hard_call.maf_mismatch\
   --score pd_prs_file.txt\
   --out terre_prs
@@ -95,7 +95,7 @@ fit_null <- glm(PD ~ SCORE1_AVG, data = all_data, family = "binomial")
 summary(fit_null)
 ```
 
-```{r, fig.width=10}
+```{r fig.width=10}
 r2_labels <- c(
   round(male_r2$Pseudo.R.squared.for.model.vs.null[3], 4),
   round(female_r2$Pseudo.R.squared.for.model.vs.null[3], 4),
@@ -258,7 +258,7 @@ annotation <- minfi::getAnnotation(IlluminaHumanMethylationEPICanno.ilm10b4.hg19
 ```
 
 ##### Plotting
-```{r, fig.height=7,fig.width=15}
+```{r fig.height=7, fig.width=15}
 get_dmr_effects <- function(dmr, limma_res) {
   dmr_coord <- str_match_all(as.character(dmr), "(chr.*):([0-9]*)-([0-9]*)")[[1]]
   cpgs <- annotation[annotation$chr == dmr_coord[2] & annotation$pos >= as.numeric(dmr_coord[3]) & annotation$pos <= as.numeric(dmr_coord[4]), ]
@@ -302,7 +302,7 @@ plot_dmrs(female_prs_dmr, female_res, rev(c("lightpink", "lightpink4")))
 ```
 
 
-```{r, eval=FALSE}
+```{r eval=FALSE}
 library(ggrepel)
 if (!exists("annot")) annot <- fread("~/MethylationEPIC_v-1-0_B4.csv", skip = 7)
 pd_annot <- pd_res %>%
@@ -460,7 +460,7 @@ hist(pd_res$P.Value, breaks = 100)
 
 
 #### Permutation test for checking if reason for discrepancy between cases and controls is sample sized
-```{r, eval=FALSE}
+```{r eval=FALSE}
 library(parallel)
 num_control <- sum(control_select)
 num_cases <- sum(case_select)
@@ -844,7 +844,7 @@ sum(risk_scores$SNP %in% bim$V2)
 ```
 
 Generate PRS using `plink2 --score`:
-```{bash, eval=FALSE}
+```{bash eval=FALSE}
 ~/plink2 --bfile ~/genotype_qc/DIGPD_merged_post_imputation_QC/raw_data.imputed.r2_90.hard_call.maf_mismatch\
   --score pd_prs_file.txt list-variants\
   --out digpd_prs

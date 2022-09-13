@@ -20,13 +20,10 @@ knitr::opts_chunk$set(cache = TRUE)
 library(dbplyr)
 library(DBI)
 ntests <- 126904049
-file.exists("terre_data/cis_all_impute_mQTL_results_9_methy_PC.db")
-con_terre <- dbConnect(RSQLite::SQLite(), "terre_data/cis_all_impute_mQTL_results_9_methy_PC.db")
-
-mQTL_results <- tbl(con_terre, "datatable")
-con_digpd <- dbConnect(RSQLite::SQLite(), "digpd_data/cis_all_impute_mQTL_results_9_methy_PC.db")
+con <- dbConnect(RSQLite::SQLite(), "terre_and_digpd_cis_all_impute_mQTL_9_methy_PC.db")
+mQTL_results <- tbl(con, "terre")
 ntests_digpd <- 100363748
-mQTL_results_digpd <- tbl(con_digpd, "datatable")
+mQTL_results_digpd <- tbl(con, "digpd")
 ```
 ```{r}
 mQTL_results %>%
@@ -49,15 +46,11 @@ mQTL_results %>% dbplot_histogram(`p-value`)
 ```
 
 ### Checking replication
+$\pi_1$ statistics
 ```{r}
 to_check_replication <- mQTL_results_digpd %>%
   inner_join(mQTL_results %>% filter(FDR < 0.05), by = c("SNP", "gene"), copy = TRUE) %>%
-  collect()
-```
-
-$\pi_1$ statistics
-```{r}
-to_check_replication <- as.data.table(to_check_replication)
+  collect() %>% as.data.table()
 
 pi0res <- pi0est(na.omit(as.numeric(to_check_replication$`p-value.x`)), lambda = seq(0, 0.245, 0.005), pi0.method = "bootstrap")
 1 - pi0res$pi0
@@ -85,7 +78,15 @@ probes_1mb <- function(row) {
   probe_pos[chr == paste0("chr", row$CHR) & s1 >= row$POS - 1e6 & s1 <= row$POS + 1e6]$geneid
 }
 
-localize_per_locus <- function(i, mQTL_results = mQTL_results, snp_pos = snp_pos, has_methy = TRUE, N1 = 245, return_summary = TRUE) {
+localize_per_locus <- function(
+  i,
+  mQTL_results = mQTL_results,
+  snp_pos = snp_pos,
+  has_methy = TRUE,
+  N1 = 245,
+  sum_stats=sum_stats,
+  risk_scores=risk_scores, # Must contain CHR,POS, SNP, and Locus Number column
+  return_summary = TRUE) {
   all_probes <- unlist(probes_1mb(risk_scores[i, ]))
   probe_res <- mclapply(
     1:length(all_probes),
@@ -129,7 +130,8 @@ localize_per_locus <- function(i, mQTL_results = mQTL_results, snp_pos = snp_pos
       gwas_pval <- as.list(gwas_pval[!is.na(gwas_pval$pvalues), ])
       gwas_pval$N <- unique(gwas_pval$N)[1]
       gwas_pval$type <- unique(gwas_pval$type)[1]
-      print(j)
+      print(gwas_pval)
+      print(mqtl_pval)
       if (length(gwas_pval$snp) != 0 | length(mqtl_pval$snp != 0)) {
         res <- coloc.abf(mqtl_pval, gwas_pval)
         if (return_summary) {
@@ -141,22 +143,47 @@ localize_per_locus <- function(i, mQTL_results = mQTL_results, snp_pos = snp_pos
         return(data.frame())
       }
     },
-    mc.cores = 8
+    mc.cores = 4
   )
   return(rbindlist(probe_res))
 }
-# system.time(res1 <- rbindlist(mclapply(1:nrow(risk_scores), function(i) localize_per_locus(i, mQTL_results = mQTL_results, snp_pos = snp_pos, has_methy = TRUE, N1 = 245), mc.cores = 4)))
+```
+
+```{r}
 system.time(res1_pval <- rbindlist(mclapply(1:nrow(risk_scores), function(i) localize_per_locus(i, mQTL_results = mQTL_results, snp_pos = snp_pos, has_methy = FALSE, N1 = 245), mc.cores = 4)))
 
 system.time(res1_SNP <- rbindlist(mclapply(1:nrow(risk_scores), function(i) localize_per_locus(i, mQTL_results = mQTL_results, snp_pos = snp_pos, has_methy = FALSE, N1 = 245, return_summary = FALSE), mc.cores = 4)))
 fwrite(res1_SNP, "mqtl_pd_snp_colocalization.txt.gz", sep = "\t", row.names = F, quote = F)
 fwrite(res1_pval, "mqtl_pd_snp_colocalization.txt", sep = "\t", row.names = F, quote = F)
 ```
+
 ## Sex stratified colocalization
+### Male
 
+Loading data:
 ```{r}
+male_sum_stats <-  fread("~/Blauwendraat_male_female_GWAS/MALE_PD_filtered_sumstats_no_multi_allelics_RSID.QC.txt.gz")
+male_sum_stats[,`:=`(SNP=paste0("chr",CHR,":",BP),freq=MAF)]
+male_mQTL_results <- fread("terre_data/male_cis_all_impute_mQTL_results_9_methy_PC.txt.gz", key="gene")
+# male_loci <- fread("~/prs_ewas_integration/cis_mQTL_analyses/Blauwendraat_male.clumped")
+male_loci[,`:=`(POS=BP, `Locus Number`=.I)]
 
+res_male_SNP <- rbindlist(mclapply(1:nrow(male_loci), function(i) localize_per_locus(i, mQTL_results = male_mQTL_results, snp_pos = snp_pos, sum_stats=male_sum_stats, has_methy = FALSE, N1 = 131,risk_scores = male_loci, return_summary = FALSE), mc.cores = 4))
+res_male_cpg <- rbindlist(mclapply(1:nrow(risk_scores), function(i) localize_per_locus(i, mQTL_results = male_mQTL_results, snp_pos = snp_pos, sum_stats=male_sum_stats, has_methy = FALSE, N1 = 131,risk_scores = male_loci, return_summary = TRUE), mc.cores = 4))
 ```
+### Female
+```{r}
+female_sum_stats <-  fread("~/Blauwendraat_male_female_GWAS/FEMALE_PD_filtered_sumstats_no_multi_allelics_RSID.QC.txt.gz")
+female_sum_stats[,`:=`(SNP=paste0("chr",CHR,":",BP),freq=MAF)]
+female_mQTL_results <- fread("terre_data/female_cis_all_impute_mQTL_results_9_methy_PC.txt.gz", key="gene")
+female_loci <- fread("~/prs_ewas_integration/cis_mQTL_analyses/Blauwendraat_female.clumped")
+female_loci[,`:=`(POS=BP, `Locus Number`=.I)]
+
+res_female_SNP <- rbindlist(mclapply(1:nrow(female_loci), function(i) localize_per_locus(i, mQTL_results = female_mQTL_results, snp_pos = snp_pos, sum_stats=female_sum_stats, has_methy = FALSE, N1 = 131,risk_scores = female_loci, return_summary = FALSE), mc.cores = 4))
+res_female_cpg <- rbindlist(mclapply(1:nrow(risk_scores), function(i) localize_per_locus(i, mQTL_results = female_mQTL_results, snp_pos = snp_pos, sum_stats=female_sum_stats, has_methy = FALSE, N1 = 131,risk_scores = female_loci, return_summary = TRUE), mc.cores = 4))
+```
+
+### Save results
 
 
 ## Plot out results
@@ -369,7 +396,7 @@ if (file.exists("mqtl_results_trunc.txt.gz")) {
 edb <- EnsDb.Hsapiens.v75
 unified_pos <- merge(pos_brain, snp_pos, by = c("CHR", "POS"), all = TRUE)
 ```
-### Plot
+### Plot @TODO change to plot from coloc output instead for ease of re-plotting
 ```{r,fig.height=8.5, fig.height=11}
 
 plot_cpgs_overlap <- function(cpgs) {
