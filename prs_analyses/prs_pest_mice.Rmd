@@ -1,6 +1,6 @@
 ---
 title: "Analysis of PRSxPesticide interactions"
-output: github_document
+output: html_notebook
 ---
 
 ```{r setup, include=FALSE}
@@ -31,7 +31,7 @@ do.call(plot_grid, plots)
 ## Filtering sumstats based on within-exposure FDR
 ```{r}
 manifest <- fread("~/MethylationEPIC_v-1-0_B4.csv", skip = 7, fill = TRUE)
-pesticide_interactions[, c("GxEq","Eq") := .(p.adjust(GxEp, method = "fdr"),p.adjust(Ep,method="fdr")), by = "env"]
+pesticide_interactions[, c("GxEq", "Eq") := .(p.adjust(GxEp, method = "fdr"), p.adjust(Ep, method = "fdr")), by = "env"]
 (sig_interactions <- pesticide_interactions[GxEq < 0.25][order(GxEq)])
 (sig_E <- pesticide_interactions[Eq < 0.05][order(Eq)])
 ```
@@ -53,9 +53,27 @@ for (cur_env in unique(pesticide_interactions$env)) {
 do.call(plot_grid, plots)
 ```
 
+## Filtering sumstats based on within-exposure FDR @TODO won't run
+```{r}
+pesticide_interactions[, c("GxEq", "Eq") := .(p.adjust(GxEp, method = "fdr"), p.adjust(Ep, method = "fdr")), by = "env"]
+sig_interactions <- pesticide_interactions[GxEq < 0.25][order(GxEq)]
+sig_E <- pesticide_interactions[Eq < 0.05][order(Eq)]
+```
+## Females
+```{r}
+pesticide_interactions <- fread("prs_interaction_result_prsice_female.txt.gz")
+plots <- list()
+for (cur_env in unique(pesticide_interactions$env)) {
+  plots[[cur_env]] <- as.grob(~ qq(pesticide_interactions[pesticide_interactions$env == cur_env, ]$GxEp, main = cur_env))
+}
+```
+```{r, fig.width=11,fig.height=12}
+do.call(plot_grid, plots)
+```
+
 ## Filtering sumstats based on within-exposure FDR
 ```{r}
-pesticide_interactions[, c("GxEq","Eq") := .(p.adjust(GxEp, method = "fdr"),p.adjust(Ep,method="fdr")), by = "env"]
+pesticide_interactions[, c("GxEq", "Eq") := .(p.adjust(GxEp, method = "fdr"), p.adjust(Ep, method = "fdr")), by = "env"]
 (sig_interactions <- pesticide_interactions[GxEq < 0.25][order(GxEq)])
 (sig_E <- pesticide_interactions[Eq < 0.05][order(Eq)])
 ```
