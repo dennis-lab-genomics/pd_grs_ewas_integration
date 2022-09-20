@@ -158,33 +158,85 @@ fwrite(res1_pval, "mqtl_pd_snp_colocalization.txt", sep = "\t", row.names = F, q
 ```
 
 ## Sex stratified colocalization
-### Male
-
-Loading data:
+See [Script](run_colocalization.R).
+### Male results at CpG level
 ```{r}
-male_sum_stats <-  fread("~/Blauwendraat_male_female_GWAS/MALE_PD_filtered_sumstats_no_multi_allelics_RSID.QC.txt.gz")
-male_sum_stats[,`:=`(SNP=paste0("chr",CHR,":",BP),freq=MAF)]
-male_mQTL_results <- fread("terre_data/male_cis_all_impute_mQTL_results_9_methy_PC.txt.gz", key="gene")
-# male_loci <- fread("~/prs_ewas_integration/cis_mQTL_analyses/Blauwendraat_male.clumped")
-male_loci[,`:=`(POS=BP, `Locus Number`=.I)]
+male_results <- fread("male_mqtl_male_sumstats_pd_snp_colocalization_ph4.txt.gz")
+```
+Hits at $P(H_4) > 0.9$
+```{r}
+male_results[PP.H4.abf > 0.9,.(unique_loci = uniqueN(locus), unique_probes= uniqueN(probe))]
+male_results[PP.H4.abf > 0.9,.(uniqueN(probe)),by="locus"]
+male_results[PP.H4.abf > 0.9,.(uniqueN(locus)),by="probe"]
+male_results[PP.H4.abf > 0.9]
 
-res_male_SNP <- rbindlist(mclapply(1:nrow(male_loci), function(i) localize_per_locus(i, mQTL_results = male_mQTL_results, snp_pos = snp_pos, sum_stats=male_sum_stats, has_methy = FALSE, N1 = 131,risk_scores = male_loci, return_summary = FALSE), mc.cores = 4))
-res_male_cpg <- rbindlist(mclapply(1:nrow(risk_scores), function(i) localize_per_locus(i, mQTL_results = male_mQTL_results, snp_pos = snp_pos, sum_stats=male_sum_stats, has_methy = FALSE, N1 = 131,risk_scores = male_loci, return_summary = TRUE), mc.cores = 4))
+```
+```{r}
+ggplot(male_results_snp[,.(loci_per_snp=uniqueN(locus)), by = "snp"],aes(loci_per_snp))+
+  geom_histogram(bins=100)
+```
+
+```{r}
+male_results_snp <- fread("male_mqtl_male_sumstats_pd_snp_colocalization_per_snp.txt.gz")
+```
+
+
+### Female
+```{r}
+female_results <- fread("female_mqtl_female_sumstats_pd_snp_colocalization_ph4.txt.gz")
+female_results[PP.H4.abf > 0.9,.(unique_loci = uniqueN(locus), unique_probes= uniqueN(probe))]
+female_results[PP.H4.abf > 0.9,.(uniqueN(probe)),by="locus"]
+female_results[PP.H4.abf > 0.9,.(uniqueN(locus)),by="probe"]
+female_results[PP.H4.abf > 0.9]
+```
+
+### male vs female overlap
+
+```{r}
+res <- list("male"=unique(male_results[PP.H4.abf > 0.9]$probe),"female" = unique(female_results[PP.H4.abf > 0.9]$probe))
+sex_shared <- Reduce(function(a,b)a[a %in% b],res)
+male <- res$male[!res$male %in% res$female]
+female <- res$female[!res$female %in% res$male]
+plt <- VennDiagram::venn.diagram(res,filename=NULL,cex = 1,
+  cat.cex = 1,
+  lwd = 2)
+grid.newpage()
+grid.draw(plt)
+```
+## Plot overlap
+```{r}
+plot_probes_sex <- function(probe_set)
+for(cur_probe in probe_set){
+  to_plot_male <- male_results_snp[probe == cur_probe]  %>%
+    mutate(POS = as.numeric(gsub(".*:","",snp))) %>%
+    pivot_longer(c("pvalues.df1","pvalues.df2"),names_to="Var",values_to="Val") %>%
+    mutate(Var=recode(Var,pvalues.df1="mQTL",pvalues.df2="GWAS"),Sex="Male")
+  to_plot_female <- female_results_snp[probe == cur_probe]  %>%
+    mutate(POS = as.numeric(gsub(".*:","",snp))) %>%
+    pivot_longer(c("pvalues.df1","pvalues.df2"),names_to="Var",values_to="Val") %>%
+    mutate(Var=recode(Var,pvalues.df1="mQTL",pvalues.df2="GWAS"),Sex="Female")
+  p<- ggplot(rbind(to_plot_male,to_plot_female),aes(POS,-log10(Val),color=SNP.PP.H4)) +
+    geom_point()+
+    scale_color_fermenter(palette="Spectral") +
+    facet_wrap(Var~Sex)+
+    labs(y="-log10 P")+
+    ggtitle(cur_probe)
+  print(p)
+}
+```
+### Shared
+```{r}
+plot_probes_sex(sex_shared)
+```
+
+### Male
+```{r}
+plot_probes_sex(male)
 ```
 ### Female
 ```{r}
-female_sum_stats <-  fread("~/Blauwendraat_male_female_GWAS/FEMALE_PD_filtered_sumstats_no_multi_allelics_RSID.QC.txt.gz")
-female_sum_stats[,`:=`(SNP=paste0("chr",CHR,":",BP),freq=MAF)]
-female_mQTL_results <- fread("terre_data/female_cis_all_impute_mQTL_results_9_methy_PC.txt.gz", key="gene")
-female_loci <- fread("~/prs_ewas_integration/cis_mQTL_analyses/Blauwendraat_female.clumped")
-female_loci[,`:=`(POS=BP, `Locus Number`=.I)]
-
-res_female_SNP <- rbindlist(mclapply(1:nrow(female_loci), function(i) localize_per_locus(i, mQTL_results = female_mQTL_results, snp_pos = snp_pos, sum_stats=female_sum_stats, has_methy = FALSE, N1 = 131,risk_scores = female_loci, return_summary = FALSE), mc.cores = 4))
-res_female_cpg <- rbindlist(mclapply(1:nrow(risk_scores), function(i) localize_per_locus(i, mQTL_results = female_mQTL_results, snp_pos = snp_pos, sum_stats=female_sum_stats, has_methy = FALSE, N1 = 131,risk_scores = female_loci, return_summary = TRUE), mc.cores = 4))
+plot_probes_sex(female)
 ```
-
-### Save results
-
 
 ## Plot out results
 ```{r}

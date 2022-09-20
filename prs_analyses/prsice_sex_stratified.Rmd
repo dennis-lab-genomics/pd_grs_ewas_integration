@@ -89,33 +89,64 @@ prsice_male_meta <- fread("prsice_male_data/TERRE_male_PRSice.prsice")
 ggplot(prsice_male_meta[Threshold <= 0.5], aes(Threshold, Num_SNP, color = -log10(P))) +
   geom_point() +
   scale_y_continuous(breaks = c(seq(0, 1e5, 2.5e4), seq(2e5, 6e5, 1e5))) +
-  theme_minimal()
+  theme_minimal()+
+  theme(legend.position = "top")
 
 prsice_female_meta <- fread("prsice_female_data/TERRE_female_PRSice.prsice")
 ggplot(prsice_female_meta[Threshold <= 0.5], aes(Threshold, Num_SNP, color = -log10(P))) +
   geom_point() +
   scale_y_continuous(breaks = c(seq(0, 1e5, 2.5e4), seq(2e5, 6e5, 1e5))) +
-  theme_minimal()
+  theme_minimal()+
+  theme(legend.position = "top")
 
 prsice_meta <- fread("prsice_data/TERRE_PRSice.prsice")
 ggplot(mapping=aes(Threshold, R2, color = -log10(P))) +
   geom_point(data=prsice_female_meta,size = 1) +
-  scale_color_gradient(low="darkred",high="pink")+
+  scale_color_gradient(low="lightpink4",high="lightpink")+
   new_scale_color() +
   geom_point(data=prsice_male_meta,size = 1,aes(color = -log10(P))) +
-  scale_color_gradient(low="darkblue",high="lightblue2")+
+  scale_color_gradient(low="lightblue4",high="lightblue")+
   labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("-log"["10"] ~ "(P)")) +
-  theme_minimal()
+  theme_minimal()+
+  theme(legend.position = "top")
 ggplot(mapping=aes(Threshold, R2, color = -log10(P))) +
   geom_point(data=prsice_female_meta,size = 1) +
-  scale_color_gradient(low="darkred",high="pink")+
-  new_scale_color() +
-  geom_point(data=prsice_male_meta,size = 1,aes(color = -log10(P))) +
-  scale_color_gradient(low="darkblue",high="lightblue2")+
+  scale_color_gradient(low="lightpink4",high="lightpink")+
   new_scale_color() +
   geom_point(data=prsice_meta,size = 1,aes(color = -log10(P))) +
+  scale_color_gradient(low="gray40",high="gray80")+
+  new_scale_color() +
+  geom_point(data=prsice_male_meta,size = 1,aes(color = -log10(P))) +
+  scale_color_gradient(low="lightblue4",high="lightblue")+
   labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("-log"["10"] ~ "(P)")) +
-  theme_minimal()
+  theme_minimal()+
+  theme(legend.position = "top")
+
+```
+## Overlap in SNPs for optimal PRS
+```{r}
+# Get SNPs
+male <- fread("/home1/NEURO/casazza/Blauwendraat_male_female_GWAS/MALE_PD_filtered_sumstats_no_multi_allelics_RSID.QC.txt.gz")[p < 0.00675005 & MAF > 0.01]
+female <- fread("/home1/NEURO/casazza/Blauwendraat_male_female_GWAS/FEMALE_PD_filtered_sumstats_no_multi_allelics_RSID.QC.txt.gz")[p < 0.00240005 & MAF > 0.01]
+all_sex <- fread("/home1/NEURO/casazza/nalls_PD.QC.gz")[p < 0.00030005 & MAF > 0.01]
+```
+
+Plotting this
+```{r}
+display_venn <- function(x, ...) {
+  library(VennDiagram)
+  grid.newpage()
+  venn_object <- venn.diagram(x, filename = NULL, ...)
+  grid.draw(venn_object)
+}
+display_venn(
+  list(
+    `Cross-sex` = all_sex$SNP,
+    Male = male$SNP,
+    Female = female$SNP
+  ),
+  fill = c("gray80", "lightblue", "lightpink")
+)
 ```
 
 # Step 3 run linear model at different thresholds for SNP inclusion

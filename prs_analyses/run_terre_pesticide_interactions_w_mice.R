@@ -4,7 +4,7 @@ library(tidyverse)
 library(mice)
 # Global data
 num_cores <- 32L
-setDTthreads(num_cores)
+setDTthreads(4)
 probe_pos <- fread("~/prs_ewas_integration/cis_mQTL_analyses/terre_data/probe_pos.txt")
 methy <- fread(
   "~/prs_ewas_integration/cis_mQTL_analyses/terre_data/methylation_combat.txt",
@@ -17,10 +17,11 @@ probe_pos <- probe_pos[geneid %chin% methy$cpg]
 argv <- commandArgs(trailingOnly = TRUE)
 cov_file <- argv[[1]]
 outfile <- argv[[2]]
+prs_file <- argv[[3]]
 shared_covariates <- fread(cov_file)
 env_data <- fread("/home1/NEURO/SHARE_DECIPHER/TERRE_pesticides/pesticides.csv")
 mapping <- fread("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv")
-terre_prs <- fread("prsice_data/TERRE_PRSice.all_score", select = c(1, 2, 3))
+terre_prs <- fread(prs_file, select = c(1, 2, 3))
 colnames(terre_prs) <- c("FID", "IID", "SCORE1_AVG")
 mapping$IID <- gsub("_PAE.*", "", mapping$IID)
 env_data$num <- mapping$IID[match(env_data$num, mapping$patient)]
