@@ -29,8 +29,8 @@ PD <- cbind(IDs,prsice_cov[,16])
 
 head(covariate)
 head(PD)
-fwrite(PD, "TERRE.pheno", sep = "\t")
-fwrite(covariate, "TERRE.covariate", sep = "\t")
+fwrite(na.omit(PD), "TERRE.pheno", sep = "\t")
+fwrite(na.omit(covariate), "TERRE.covariate", sep = "\t")
 ```
 ```{r}
 covariate
@@ -64,13 +64,13 @@ include_graphics("prsice_images/TERRE_PRSice_BARPLOT_2022-06-30.png")
 include_graphics("prsice_images/TERRE_PRSice_HIGH-RES_PLOT_2022-06-30.png")
 include_graphics("prsice_images/TERRE_PRSice_QUANTILES_PLOT_2022-06-30.png")
 
-include_graphics("prsice_images/TERRE_PRSice_nalls_male_BARPLOT_2022-07-07.png")
-include_graphics("prsice_images/TERRE_PRSice_nalls_male_HIGH-RES_PLOT_2022-07-07.png")
-include_graphics("prsice_images/TERRE_PRSice_nalls_male_QUANTILES_PLOT_2022-07-07.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_male_BARPLOT_2022-10-04.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_male_HIGH-RES_PLOT_2022-10-04.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_male_QUANTILES_PLOT_2022-10-04.png")
 
-include_graphics("prsice_images/TERRE_PRSice_nalls_female_BARPLOT_2022-07-07.png")
-include_graphics("prsice_images/TERRE_PRSice_nalls_female_HIGH-RES_PLOT_2022-07-07.png")
-include_graphics("prsice_images/TERRE_PRSice_nalls_female_QUANTILES_PLOT_2022-07-07.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_female_BARPLOT_2022-10-04.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_female_HIGH-RES_PLOT_2022-10-04.png")
+include_graphics("prsice_images/TERRE_PRSice_nalls_female_QUANTILES_PLOT_2022-10-04.png")
 ```
 ## Plotting PRSice Data on my own
 ```{r}
@@ -115,54 +115,56 @@ ggplot(mapping = aes(Threshold, R2, color = -log10(P))) +
 ```
 
 # Step 3 run linear model at different thresholds for SNP inclusion
+This is updated to recently processed DNAm Data 20 outliers in DNAm removed:
 ```{r}
-load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE_processed_2021/betas_combat.RData") # betas_sub
+load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/1-TERRE_RG_filtered.RData") #PD_RG_filtered
 # Assign genotyping ID to data
 original_covars <- fread("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv")[, .(patient, IID = gsub("_PAE.*", "", IID))]
+betas_combat <- minfi::getBeta(PD_RG_filtered)
 colnames(betas_combat) <- original_covars$IID[match(colnames(betas_combat), original_covars$patient)]
 betas_combat <- betas_combat[, colnames(betas_combat) %in% covariate$IID]
 ```
 Let's check how the data looks for the first 5 subjects:
 ```{r}
-ggplot(betas_combat[, 1:5] %>% as.data.table(keep.rownames = T) %>% melt(id.vars = "rn", value.name = "betas", variable.name = "subject"), aes(betas, color = subject)) +
+ggplot(betas_combat[, 1:5] %>% as.data.table(keep.rownames = T) %>% melt(id.vars = "rn", value.name = "betas", variable.name = "subject"), aes(betas, color = subject))+
   geom_density()
 ```
 
-### Match DNA, PRS, and metadata
+### Match DNA, PRS, and metadata @TODO fix this after update of PRS etc.
 ```{r}
-prsice_all <- fread("prsice_data/TERRE_PRSice.all_score")[match(colnames(betas_combat), IID), .(FID, IID, `Pt_0.00030005`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+prsice_best <- fread("prsice_data/TERRE_PRSice.best")[match(colnames(betas_combat), IID,nomatch=0),.(best=PRS)]
+prsice_all <- cbind(
+  fread("prsice_data/TERRE_PRSice.all_score")[match(colnames(betas_combat), IID,nomatch=0), .(FID, IID, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)],
+  prsice_best
+)
 covariate <- covariate[match(colnames(betas_combat), IID)]
 all(covariate$IID == colnames(betas_combat))
 all(covariate$IID == prsice_all$IID)
 
 covariate_male <- covariate[sex == 1] %>% select(-sex)
 betas_male <- betas_combat[, covariate_male$IID]
-prsice_male_all <- prsice_all[match(colnames(betas_male), IID), .(FID, IID, `Pt_0.00030005`,`Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
-covariate_male <- covariate_male[match(colnames(betas_male), IID)]
+prsice_male_best <- fread("prsice_nalls_male_data/TERRE_PRSice_nalls_male.best")[match(colnames(betas_male), IID,nomatch=0),.(best=PRS)]
+prsice_male_all <- cbind(
+  fread("prsice_nalls_male_data/TERRE_PRSice_nalls_male.all_score")[match(colnames(betas_male), IID,nomatch=0), .(FID, IID, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)],
+  prsice_male_best
+)
+covariate_male <- covariate_male[match(colnames(betas_male), IID,nomatch=0)]
 all(covariate_male$IID == colnames(betas_male))
 all(covariate_male$IID == prsice_male_all$IID)
 
-covariate_female <- covariate[sex == 0] %>% select(-sex)
+prsice_female_best <- fread("prsice_nalls_female_data/TERRE_PRSice_nalls_female.best")
+covariate_female <- covariate[sex == 0] %>% select(-sex) %>% filter(IID %in% prsice_female_best$IID)
 betas_female <- betas_combat[, covariate_female$IID]
-prsice_female_all <- prsice_all[match(colnames(betas_female), IID), .(FID, IID, `Pt_0.00030005`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
-covariate_female <- covariate_female[match(colnames(betas_female), IID)]
+prsice_female_best <- prsice_female_best[match(colnames(betas_female), IID,nomatch=0),.(best=PRS)]
+prsice_female_all <- cbind(
+  fread("prsice_nalls_female_data/TERRE_PRSice_nalls_female.all_score")[match(colnames(betas_female), IID,nomatch=0), .(FID, IID, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)],
+  prsice_female_best
+)
+covariate_female <- covariate_female[match(colnames(betas_female), IID,nomatch=0)]
 all(covariate_female$IID == colnames(betas_female))
 all(covariate_female$IID == prsice_female_all$IID)
 
 
-covariate_male <- covariate[sex == 1] %>% select(-sex)
-betas_male <- betas_combat[, covariate_male$IID]
-prsice_male_nalls_all <- fread("prsice_nalls_male_data/TERRE_PRSice_nalls_male.all_score")[match(colnames(betas_male), IID), .(FID, IID, `Pt_0.00030005`, `Pt_0.00040005`,`Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
-covariate_male <- covariate_male[match(colnames(betas_male), IID)]
-all(covariate_male$IID == colnames(betas_male))
-all(covariate_male$IID == prsice_male_nalls_all$IID)
-
-covariate_female <- covariate[sex == 0] %>% select(-sex)
-betas_female <- betas_combat[, covariate_female$IID]
-prsice_female_nalls_all <- fread("prsice_nalls_female_data/TERRE_PRSice_nalls_female.all_score")[match(colnames(betas_female), IID), .(FID, IID, `Pt_0.0219001`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
-covariate_female <- covariate_female[match(colnames(betas_female), IID)]
-all(covariate_female$IID == colnames(betas_female))
-all(covariate_female$IID == prsice_female_nalls_all$IID)
 ```
 ### Run limma
 
@@ -178,13 +180,10 @@ cov_mat_male <- covariate_male[, -c(1, 2)]
 mvalues_female <- lumi::beta2m(betas_female)
 prs_mat_female <- prsice_female_all[, -c(1, 2)]
 cov_mat_female <- covariate_female[, -c(1, 2)]
-
-prs_mat_nalls_male <- prsice_male_nalls_all[, -c(1, 2)]
-prs_mat_nalls_female <- prsice_female_nalls_all[, -c(1, 2)]
 ```
 
 ```{r}
-registerDoParallel(ncol(prs_mat) / 2)
+registerDoParallel(ncol(prs_mat) / 4)
 hits <- foreach(prs_thresh = colnames(prs_mat)) %dopar% {
   design_prs <- model.matrix(~., data = cbind(prs_mat[, ..prs_thresh], cov_mat))
   prs_fit <- lmFit(mvalues, design_prs)
@@ -194,7 +193,7 @@ hits <- foreach(prs_thresh = colnames(prs_mat)) %dopar% {
 names(hits) <- colnames(prs_mat)
 hits_by_thresh_bonf <- rbindlist(hits, idcol = "threshold", fill = TRUE)
 
-registerDoParallel(ncol(prs_mat_male) / 2)
+registerDoParallel(ncol(prs_mat_male) / 4)
 hits_male <- foreach(prs_thresh = colnames(prs_mat_male)) %dopar% {
   design_prs_male <- model.matrix(~., data = cbind(prs_mat_male[, ..prs_thresh], cov_mat_male))
   prs_fit_male <- lmFit(mvalues_male, design_prs_male)
@@ -204,7 +203,7 @@ hits_male <- foreach(prs_thresh = colnames(prs_mat_male)) %dopar% {
 names(hits_male) <- colnames(prs_mat_male)
 hits_by_thresh_bonf_male <- rbindlist(hits_male, idcol = "threshold", fill = TRUE)
 
-registerDoParallel(ncol(prs_mat_female) / 2)
+registerDoParallel(ncol(prs_mat_female) / 4)
 hits_female <- foreach(prs_thresh = colnames(prs_mat_female)) %dopar% {
   design_prs_female <- model.matrix(~., data = cbind(prs_mat_female[, ..prs_thresh], cov_mat_female))
   prs_fit_female <- lmFit(mvalues_female, design_prs_female)
@@ -214,25 +213,6 @@ hits_female <- foreach(prs_thresh = colnames(prs_mat_female)) %dopar% {
 names(hits_female) <- colnames(prs_mat_female)
 hits_by_thresh_bonf_female <- rbindlist(hits_female, idcol = "threshold", fill = TRUE)
 
-registerDoParallel(ncol(prs_mat_male) / 2)
-hits_nalls_male <- foreach(prs_thresh = colnames(prs_mat_nalls_male)) %dopar% {
-  design_prs_nalls_male <- model.matrix(~., data = cbind(prs_mat_nalls_male[, ..prs_thresh], cov_mat_male))
-  prs_fit_nalls_male <- lmFit(mvalues_male, design_prs_nalls_male)
-  prs_fit_nalls_male <- eBayes(prs_fit_nalls_male)
-  topTable(prs_fit_nalls_male, coef = 2, adjust.method = "bonf", p.value = 0.05, number = Inf, genelist = rownames(mvalues_male))
-}
-names(hits_nalls_male) <- colnames(prs_mat_nalls_male)
-hits_by_thresh_bonf_nalls_male <- rbindlist(hits_nalls_male, idcol = "threshold", fill = TRUE)
-
-registerDoParallel(ncol(prs_mat_female) / 2)
-hits_nalls_female <- foreach(prs_thresh = colnames(prs_mat_nalls_female)) %dopar% {
-  design_prs_nalls_female <- model.matrix(~., data = cbind(prs_mat_nalls_female[, ..prs_thresh], cov_mat_female))
-  prs_fit_nalls_female <- lmFit(mvalues_female, design_prs_nalls_female)
-  prs_fit_nalls_female <- eBayes(prs_fit_nalls_female)
-  topTable(prs_fit_nalls_female, coef = 2, adjust.method = "bonf", p.value = 0.05, number = Inf, genelist = rownames(mvalues_female))
-}
-names(hits_nalls_female) <- colnames(prs_mat_nalls_female)
-hits_by_thresh_bonf_nalls_female <- rbindlist(hits_nalls_female, idcol = "threshold", fill = TRUE)
 ```
 
 ### Plotting EWAS vs Threshold Experiment by Sex
@@ -240,9 +220,9 @@ hits_by_thresh_bonf_nalls_female <- rbindlist(hits_nalls_female, idcol = "thresh
 to_plot <- rbind(
   hits_by_thresh_bonf[, .(hits = .N, Sex = "Cross-sex"), by = threshold] %>%
     mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")),
-  hits_by_thresh_bonf_nalls_male[, .(hits = .N, Sex = "Male"), by = threshold] %>%
+  hits_by_thresh_bonf_male[, .(hits = .N, Sex = "Male"), by = threshold] %>%
     mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")),
-  hits_by_thresh_bonf_nalls_female[, .(hits = .N, Sex = "Female"), by = threshold] %>%
+  hits_by_thresh_bonf_female[, .(hits = .N, Sex = "Female"), by = threshold] %>%
     mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0"))
 ) %>% mutate(Sex = factor(Sex, levels = c("Cross-sex", "Male", "Female")))
 plot_pos <- position_dodge(width = 1)
@@ -253,8 +233,8 @@ ggplot(to_plot, aes(threshold, hits, fill = Sex, label = hits)) +
   scale_fill_manual(values = c("grey80", "lightblue", "lightpink")) +
   theme_minimal()
 hits_by_thresh_bonf[, .(hits = .N, Sex = "Cross-sex"), by = threshold]
-hits_by_thresh_bonf_nalls_male[, .(hits = .N), by = threshold]
-hits_by_thresh_bonf_nalls_female[, .(hits = .N), by = threshold]
+hits_by_thresh_bonf_male[, .(hits = .N), by = threshold]
+hits_by_thresh_bonf_female[, .(hits = .N), by = threshold]
 ```
 ```{r}
 display_venn <- function(x, ...) {
@@ -264,8 +244,8 @@ display_venn <- function(x, ...) {
   grid.draw(venn_object)
 }
 
-display_venn(list(`Cross-sex` = hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, Male = hits_by_thresh_bonf_nalls_male[threshold == "Pt_5e-08"]$ID, Female = hits_by_thresh_bonf_nalls_female[threshold == "Pt_5e-08"]$ID), fill = c("gray80", "lightblue", "lightpink"))
-male_ids <- hits_by_thresh_bonf_nalls_male[threshold == "Pt_5e-08"]$ID
+display_venn(list(`Cross-sex` = hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, Male = hits_by_thresh_bonf_male[threshold == "Pt_5e-08"]$ID, Female = hits_by_thresh_bonf_female[threshold == "Pt_5e-08"]$ID), fill = c("gray80", "lightblue", "lightpink"))
+male_ids <- hits_by_thresh_bonf_male[threshold == "Pt_5e-08"]$ID
 cross_ids <- hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID
 male_ids[!male_ids %in% cross_ids]
 ```
@@ -283,9 +263,11 @@ get_full_fit <- function(prs_mat,cov_mat,mvalues){
   top_prs_hits <- topTable(top_prs_fit, coef = 2, adjust.method = "bonf", number = Inf, genelist = rownames(mvalues))
 }
 top_prs_hits <- get_full_fit(prs_mat,cov_mat,mvalues)
-top_male_prs_hits <- get_full_fit(prs_mat_nalls_male, cov_mat_male, mvalues_male)
-top_female_prs_hits <- get_full_fit(prs_mat_nalls_female, cov_mat_female, mvalues_female)
+top_male_prs_hits <- get_full_fit(prs_mat_male, cov_mat_male, mvalues_male)
+top_female_prs_hits <- get_full_fit(prs_mat_female, cov_mat_female, mvalues_female)
+save(list=c("top_prs_hits","top_male_prs_hits","top_female_prs_hits"),file="prs_nalls_cross_w_sex_stratified.RData")
 ```
+
 ```{r}
 manifest <- IlluminaHumanMethylationEPICanno.ilm10b4.hg19::Other %>%
   as.data.frame() %>%
@@ -322,9 +304,8 @@ plot_prs_hits(prs_annot,"gray40")
 plot_prs_hits(prs_annot_male,"lightblue")
 plot_prs_hits(prs_annot_female,"pink")
 ```
-```{r}
-manifest[manifest$name =="cg06846282",]
-```
+
+
 
 # Manhattan plot vs GWAS manhattan plot
 ```{r,eval=FALSE}
@@ -349,6 +330,7 @@ manhattan(to_plot[CHR == 17],
 )
 qq(to_plot$P)
 ```
+
 ```{r,eval=FALSE}
 GWAS <- fread("~/nalls_PD.QC.gz")
 
@@ -378,8 +360,8 @@ run_dmrcate <- function(prs_mat,cov_mat,mvalues){
   return(S4_to_dataframe(prs_dmr_res))
 }
 dmr_cross <- run_dmrcate(prs_mat, cov_mat, mvalues)
-dmr_males <- run_dmrcate(prs_mat_nalls_male,cov_mat_male,mvalues_male)
-dmr_female <- run_dmrcate(prs_mat_nalls_female,cov_mat_female,mvalues_female)
+dmr_males <- run_dmrcate(prs_mat_male,cov_mat_male,mvalues_male)
+dmr_female <- run_dmrcate(prs_mat_female,cov_mat_female,mvalues_female)
 ```
 ```{r}
 annotation <- minfi::getAnnotation(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)

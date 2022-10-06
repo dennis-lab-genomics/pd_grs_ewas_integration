@@ -75,12 +75,12 @@ Rscript /home1/NEURO/casazza/PRSice.R \
 ```
 # Step 2: Evaluate output
 ```{r, out.width="400px"}
-include_graphics("prsice_images/TERRE_male_PRSice_BARPLOT_2022-07-07.png")
-include_graphics("prsice_images/TERRE_male_PRSice_HIGH-RES_PLOT_2022-07-07.png")
-include_graphics("prsice_images/TERRE_male_PRSice_QUANTILES_PLOT_2022-07-07.png")
-include_graphics("prsice_images/TERRE_female_PRSice_BARPLOT_2022-07-07.png")
-include_graphics("prsice_images/TERRE_female_PRSice_HIGH-RES_PLOT_2022-07-07.png")
-include_graphics("prsice_images/TERRE_female_PRSice_QUANTILES_PLOT_2022-07-07.png")
+include_graphics("prsice_images/TERRE_male_PRSice_BARPLOT_2022-10-04.png")
+include_graphics("prsice_images/TERRE_male_PRSice_HIGH-RES_PLOT_2022-10-04.png")
+include_graphics("prsice_images/TERRE_male_PRSice_QUANTILES_PLOT_2022-10-04.png")
+include_graphics("prsice_images/TERRE_female_PRSice_BARPLOT_2022-10-04.png")
+include_graphics("prsice_images/TERRE_female_PRSice_HIGH-RES_PLOT_2022-10-04.png")
+include_graphics("prsice_images/TERRE_female_PRSice_QUANTILES_PLOT_2022-10-04.png")
 ```
 ## Plotting PRSice Data on my own
 ```{r}

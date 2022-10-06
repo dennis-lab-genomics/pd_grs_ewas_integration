@@ -1,5 +1,5 @@
 ---
-title: "Analysis of PRSxPesticide interactions"
+title: "Analysis of PRS interactions"
 output: html_notebook
 ---
 
@@ -11,12 +11,13 @@ library(grid)
 library(gridExtra)
 library(data.table)
 library(qqman)
+library(limma)
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
+# Pesticides
 ## Checking inflation for prsxpest summary stats
 Before I suspect I was combining effects from limma incorrectly. So I re-rolled the regressions using mice and lm as the mice package seems to be intended to be used. Let's check inflation now within each pesticide:
-
+### Cross-sex
 ```{r}
 pesticide_interactions <- fread("prs_interaction_result_prsice.txt.gz")
 plots <- list()
@@ -28,7 +29,7 @@ for (cur_env in unique(pesticide_interactions$env)) {
 do.call(plot_grid, plots)
 ```
 
-## Filtering sumstats based on within-exposure FDR
+#### Filtering sumstats based on within-exposure FDR
 ```{r}
 manifest <- fread("~/MethylationEPIC_v-1-0_B4.csv", skip = 7, fill = TRUE)
 pesticide_interactions[, c("GxEq", "Eq") := .(p.adjust(GxEp, method = "fdr"), p.adjust(Ep, method = "fdr")), by = "env"]
@@ -41,7 +42,7 @@ merge(sig_interactions, manifest, by.x = "cpg", by.y = "Name")[, .(cpg, env, GxE
 merge(sig_interactions, manifest, by.x = "cpg", by.y = "Name")[, .(cpg, env, GxEp, GxEq, Relation_to_UCSC_CpG_Island, UCSC_RefGene_Name)][order(GxEq)] %>% write.csv(quote = F)
 ```
 
-## Males
+### Males
 ```{r}
 pesticide_interactions <- fread("prs_interaction_result_prsice_male.txt.gz")
 plots <- list()
@@ -53,13 +54,13 @@ for (cur_env in unique(pesticide_interactions$env)) {
 do.call(plot_grid, plots)
 ```
 
-## Filtering sumstats based on within-exposure FDR @TODO won't run
+#### Filtering sumstats based on within-exposure FDR @TODO won't run
 ```{r}
 pesticide_interactions[, c("GxEq", "Eq") := .(p.adjust(GxEp, method = "fdr"), p.adjust(Ep, method = "fdr")), by = "env"]
 sig_interactions <- pesticide_interactions[GxEq < 0.25][order(GxEq)]
 sig_E <- pesticide_interactions[Eq < 0.05][order(Eq)]
 ```
-## Females
+### Females
 ```{r}
 pesticide_interactions <- fread("prs_interaction_result_prsice_female.txt.gz")
 plots <- list()
@@ -71,9 +72,164 @@ for (cur_env in unique(pesticide_interactions$env)) {
 do.call(plot_grid, plots)
 ```
 
-## Filtering sumstats based on within-exposure FDR
+#### Filtering sumstats based on within-exposure FDR
 ```{r}
 pesticide_interactions[, c("GxEq", "Eq") := .(p.adjust(GxEp, method = "fdr"), p.adjust(Ep, method = "fdr")), by = "env"]
 (sig_interactions <- pesticide_interactions[GxEq < 0.25][order(GxEq)])
 (sig_E <- pesticide_interactions[Eq < 0.05][order(Eq)])
+```
+
+## Interaction effects on non-pesticide variables
+### Cross-sex
+```{r}
+load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2021/TERRE_processed_2021/betas_combat.RData") # betas_sub
+# Assign genotyping ID to data
+
+covars <- fread("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv")
+covars$IID <- gsub("_PAE.*", "", covars$IID)
+colnames(betas_combat) <- covars$IID[match(colnames(betas_combat), covars$patient)]
+prs_mat <- fread("prsice_data/TERRE_PRSice.all_score")[IID %in% covars$IID]#5e-8 threshold
+mvals_combat <- lumi::beta2m(betas_combat[, colnames(betas_combat) %in% prs_mat$IID])
+mvals_combat <- mvals_combat[,match(colnames(mvals_combat),prs_mat$IID)]
+covars <- covars[IID %in% prs_mat$IID][match(IID,prs_mat$IID)]
+computed_covars <- fread("prsice_cov_and_status_mvalues.txt")[,-c("PD")]
+all(covars$IID == computed_covars$IID)
+covars <- cbind(covars[,-c("age","men")],prs_mat[,.(SCORE1_AVG=`Pt_5e-08`)],computed_covars)
+all(covars$IID == prs_mat$IID)
+all(prs_mat$IID == colnames(mvals_combat))
+
+```
+
+```{r}
+corrplot::corrplot(cor(model.matrix(~.-1,data=covars[,.(SCORE1_AVG,age,alcohol=factor(alcohol1),smoking,GPC1=V3,GPC2=V4,GPC3=V5,PC1,PC2,PC3,PC4,PC5,PC6,PC7,PC8,PC9,PC10,head_trauma_loc,sex)])),type = "upper",diag = FALSE)
+```
+
+## Interaction function
+```{r}
+base_model <- ~ sex + age + V3 + V4 + V5 + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10
+fit_interaction  <- function(methy, term){
+  interaction_term <- paste0("SCORE1_AVG*",term)
+  design <- model.matrix(update(base_model,paste("~ . +", interaction_term)), data=covars)
+  fit <- lmFit(methy, design)
+  fit <- eBayes(fit)
+  res <- topTable(fit, number = Inf, coef = paste0(term,":SCORE1_AVG"))
+  main_res <- topTable(fit, number = Inf, coef = c(paste0(term,":SCORE1_AVG"),term))
+  return(list(interaction_effect=res,interaction_main=main_res))
+}
+
+test_res <- fit_interaction(mvals_combat,"age")
+```
+
+### PRSxAge interaction
+```{r}
+design_age <- model.matrix(~ SCORE1_AVG * age + sex + V3 + V4 + V5 + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10, data = covars)
+age_fit <- lmFit(mvals_combat, design_age)
+age_fit <- eBayes(age_fit)
+age_res <- topTable(age_fit, number = Inf, coef = "SCORE1_AVG:age")
+age_main_res <- topTable(age_fit, number = Inf, coef = c("SCORE1_AVG","SCORE1_AVG:age"))
+```
+```{r}
+plot_sig <- function(result){ #@TODO finish this
+ggplot(age_res, aes(logFC, -log10(P.Value))) +
+  geom_point() +
+  geom_point(
+    data = subset(age_res, adj.P.Val < 0.05 & abs(logFC) > 0.03),
+    color = "green",
+    mapping = aes(logFC, -log10(P.Value))
+  ) +
+  labs(x = quote(Delta ~ beta ~ Methylation)) +
+  theme_minimal() +
+  geom_hline(
+    linetype = "dashed",
+    yintercept = min(-log10(age_res$P.Value[age_res$adj.P.Val < 0.05]))
+  ) +
+  geom_vline(linetype = "dashed", xintercept = 0.03) +
+  geom_vline(linetype = "dashed", xintercept = -0.03)
+highlight <- age_res
+highlight$adj.P.Val <- age_main_res[rownames(age_res), ]$adj.P.Val
+highlight$P.Value <- age_main_res[rownames(age_res), ]$P.Value
+ggplot(highlight, aes(logFC, -log10(age_main_res[rownames(age_res), ]$P.Value))) +
+  geom_point() +
+  geom_point(
+    data = subset(highlight, adj.P.Val < 0.05 & abs(logFC) > 0.03),
+    color = "green",
+    mapping = aes(logFC, -log10(P.Value))
+  ) +
+  labs(x = quote(Delta ~ beta ~ Methylation)) +
+  theme_minimal() +
+  geom_hline(
+    linetype = "dashed",
+    yintercept = min(-log10(age_main_res$P.Value[age_main_res$adj.P.Val < 0.05]))
+  ) +
+  geom_vline(linetype = "dashed", xintercept = 0.03) +
+  geom_vline(linetype = "dashed", xintercept = -0.03)
+}
+```
+### PRSxSex interaction
+```{r}
+design_sex <- model.matrix(~ SCORE1_AVG * sex + age + V3 + V4 + V5 + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10, data =covars)
+sex_fit <- lmFit(mvals_combat, design_sex)
+sex_fit <- eBayes(sex_fit)
+sex_res <- topTable(sex_fit, number = Inf, coef = "SCORE1_AVG:sex")
+sex_main_res <- topTable(sex_fit, number = Inf, coef = c("SCORE1_AVG:sex","sex"))
+```
+```{r}
+ggplot(sex_res, aes(logFC, -log10(P.Value))) +
+  geom_point() +
+  geom_point(
+    data = subset(sex_res, adj.P.Val < 0.05 & abs(logFC) > 0.03),
+    color = "green",
+    mapping = aes(logFC, -log10(P.Value))
+  ) +
+  labs(x = quote(Delta ~ beta ~ Methylation)) +
+  theme_minimal() +
+  geom_hline(
+    linetype = "dashed",
+    yintercept = min(-log10(sex_res$P.Value[sex_res$adj.P.Val < 0.05]))
+  ) +
+  geom_vline(linetype = "dashed", xintercept = 0.03) +
+  geom_vline(linetype = "dashed", xintercept = -0.03)
+highlight <- sex_res
+highlight$adj.P.Val <- sex_main_res[rownames(sex_res), ]$adj.P.Val
+highlight$P.Value <- sex_main_res[rownames(sex_res), ]$P.Value
+ggplot(highlight, aes(logFC, -log10(sex_main_res[rownames(sex_res), ]$P.Value))) +
+  geom_point() +
+  geom_point(
+    data = subset(highlight, adj.P.Val < 0.05 & abs(logFC) > 0.03),
+    color = "green",
+    mapping = aes(logFC, -log10(P.Value))
+  ) +
+  labs(x = quote(Delta ~ beta ~ Methylation)) +
+  theme_minimal() +
+  geom_hline(
+    linetype = "dashed",
+    yintercept = min(-log10(sex_main_res$P.Value[sex_main_res$adj.P.Val < 0.05]))
+  ) +
+  geom_vline(linetype = "dashed", xintercept = 0.03) +
+  geom_vline(linetype = "dashed", xintercept = -0.03)
+```
+```{r}
+design_alcohol <- model.matrix(~ SCORE1_AVG*alcohol1 + sex + age + V3 + V4 + V5 + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10, data =covars)
+alcohol_fit <- lmFit(mvals_combat, design_alcohol)
+alcohol_fit <- eBayes(alcohol_fit)
+alcohol_res <- topTable(alcohol_fit, number = Inf, coef = "SCORE1_AVG:alcohol1")
+alcohol_main_res <- topTable(alcohol_fit, number = Inf, coef = c("SCORE1_AVG:alcohol1","alcohol1"))
+```
+
+```{r}
+na_row <- is.na(covars$smoking)
+design_smoking <- model.matrix(~ SCORE1_AVG*smoking + sex + age + V3 + V4 + V5 + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10, data=covars[!na_row,])
+smoking_fit <- lmFit(mvals_combat[,!na_row], design_smoking)
+smoking_fit <- eBayes(smoking_fit)
+smoking_res <- topTable(smoking_fit, number = Inf, coef = "SCORE1_AVG:smoking")
+smoking_main_res <- topTable(smoking_fit, number = Inf, coef = c("SCORE1_AVG:smoking","smoking"))
+```
+
+
+```{r}
+design_head_trauma <- model.matrix(~ SCORE1_AVG*head_trauma + sex + age + V3 + V4 + V5 + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10, data=covars)
+head_trauma_fit <- lmFit(mvals_combat, design_head_trauma)
+head_trauma_fit <- eBayes(head_trauma_fit)
+head_trauma_res <- topTable(head_trauma_fit, number = Inf, coef = "SCORE1_AVG:head_trauma")
+head_trauma_main_res <- topTable(head_trauma_fit, number = Inf, coef = c("SCORE1_AVG:head_trauma","head_trauma"))
 ```
