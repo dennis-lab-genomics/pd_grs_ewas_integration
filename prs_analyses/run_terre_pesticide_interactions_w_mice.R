@@ -6,29 +6,27 @@ library(mice)
 num_cores <- 32L
 setDTthreads(4)
 probe_pos <- fread("~/prs_ewas_integration/cis_mQTL_analyses/terre_data/probe_pos.txt")
-methy <- fread(
-  "~/prs_ewas_integration/cis_mQTL_analyses/terre_data/methylation_combat.txt",
-  key = "cpg"
-)
-for (j in 2:ncol(methy)) set(methy, j = j, value = lumi::beta2m(methy[[j]]))
+load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/1-TERRE_RG_filtered.RData") #PD_RG_filtered
+
+methy <- minfi::getM(PD_RG_filtered) %>% data.table(keep.rownames = "cpg",key="cpg")
 
 probe_pos <- probe_pos[geneid %chin% methy$cpg]
 
 argv <- commandArgs(trailingOnly = TRUE)
+#argv <- list("TERRE_female.covariate","prs_interaction_result_prsice_female_only.txt.gz","prsice_female_data/TERRE_female_PRSice.all_score","Pt_5e-08")
 cov_file <- argv[[1]]
 outfile <- argv[[2]]
 prs_file <- argv[[3]]
+prs_thresh <- argv[[4]]
 shared_covariates <- fread(cov_file)
 env_data <- fread("/home1/NEURO/SHARE_DECIPHER/TERRE_pesticides/pesticides.csv")
 mapping <- fread("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv")
-terre_prs <- fread(prs_file, select = c(1, 2, 3))
+terre_prs <- fread(prs_file)[,c("FID","IID",..prs_thresh)]
 colnames(terre_prs) <- c("FID", "IID", "SCORE1_AVG")
 mapping$IID <- gsub("_PAE.*", "", mapping$IID)
 env_data$num <- mapping$IID[match(env_data$num, mapping$patient)]
-env_data <- env_data[!is.na(num)]
-top_10_cases <- sort(colSums(env_data[, -c(1)], na.rm = T), decreasing = TRUE, index.return = TRUE)$ix[1:5]
+top_10_cases <- sort(colSums(env_data[, -c(1)], na.rm = T), decreasing = TRUE, index.return = TRUE)$ix[1:10]
 envs <- colnames(env_data)[-c(1)][top_10_cases] # top represented
-envs <- unique(c(envs, "i_ochl", "naclo4", "as", "h_triazine", "h_uree", "f_amide", "f_dithiocarb")) # environments of interest
 pest_missing <- read.csv("/home1/NEURO/SHARE_DECIPHER/TERRE_pesticides/pesticides.csv")
 pest_imputed <- read.csv("/home1/NEURO/SHARE_DECIPHER/TERRE_pesticides/pesticides_imputed.csv")
 

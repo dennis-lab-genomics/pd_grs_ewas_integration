@@ -1752,9 +1752,8 @@ genotype &lt;- fread(&quot;~/genotype_qc/TERRE_QC/raw_data.imputed.r2_30.maf_mis
 <pre><code>|--------------------------------------------------|
 |==================================================|</code></pre>
 <!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuY29sbmFtZXMoZ2Vub3R5cGUpIDwtIGdzdWIoXCJfXCIsXCItXCIsZ3N1YihcIlBBRV8oLiopX1BBRS4qXCIsIFwiXFxcXDFcIixjb2xuYW1lcyhnZW5vdHlwZSkpKVxubG9hZChcIi9ob21lMS9ORVVSTy9TSEFSRV9ERUNJUEhFUi9wcm9jZXNzZWRfRE5BbV9kYXRhLzIwMjIvVEVSUkVfcHJvY2Vzc2VkXzIwMjIvMS1URVJSRV9SR19maWx0ZXJlZC5SRGF0YVwiKSNtZXRoeWxhdGlvblxuYGBgIn0= -->
-<pre class="r"><code>colnames(genotype) &lt;- gsub(&quot;_&quot;,&quot;-&quot;,gsub(&quot;PAE_(.*)_PAE.*&quot;, &quot;\\1&quot;,colnames(genotype)))
-load(&quot;/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/1-TERRE_RG_filtered.RData&quot;)#methylation</code></pre>
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuY29sbmFtZXMoZ2Vub3R5cGUpIDwtIGdzdWIoXCJfXCIsXCItXCIsZ3N1YihcIlBBRV8oLiopX1BBRS4qXCIsIFwiXFxcXDFcIixjb2xuYW1lcyhnZW5vdHlwZSkpKVxuYGBgIn0= -->
+<pre class="r"><code>colnames(genotype) &lt;- gsub(&quot;_&quot;,&quot;-&quot;,gsub(&quot;PAE_(.*)_PAE.*&quot;, &quot;\\1&quot;,colnames(genotype)))</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
@@ -1762,79 +1761,64 @@ load(&quot;/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_
 <h2>Format Covariates</h2>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYWxsKGNvbG5hbWVzKGdlbm90eXBlKVstYygxOjYpXSA9PSBjb2xuYW1lcyhtZXRoeSkpXG5cbmBgYCJ9 -->
-<pre class="r"><code>all(colnames(genotype)[-c(1:6)] == colnames(methy))
-</code></pre>
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubWV0aHkgPC0gZ2V0QmV0YShQRF9SR19maWx0ZXJlZClcbm1ldGh5IDwtIG1ldGh5Wyxjb2xuYW1lcyhtZXRoeSkgJWluJSBjb2xuYW1lcyhnZW5vdHlwZSldXG5nZW5vdHlwZSA8LSBnZW5vdHlwZVssY29sbmFtZXMoZ2Vub3R5cGUpICVpbiUgYyhjb2xuYW1lcyhnZW5vdHlwZSlbMTo2XSxjb2xuYW1lcyhtZXRoeSkpLHdpdGg9RkFMU0VdXG5hbGwoY29sbmFtZXMoZ2Vub3R5cGUpWy1jKDE6NildID09IGNvbG5hbWVzKG1ldGh5KSlcbmBgYCJ9 -->
+<pre class="r"><code>methy &lt;- getBeta(PD_RG_filtered)
+methy &lt;- methy[,colnames(methy) %in% colnames(genotype)]
+genotype &lt;- genotype[,colnames(genotype) %in% c(colnames(genotype)[1:6],colnames(methy)),with=FALSE]
+all(colnames(genotype)[-c(1:6)] == colnames(methy))</code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-output-begin eyJkYXRhIjoiWzFdIFRSVUVcbiJ9 -->
 <pre><code>[1] TRUE</code></pre>
 <!-- rnb-output-end -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZmVtYWxlX21ldGEgPC0gZmVtYWxlX21ldGFbZmVtYWxlX21ldGEkcGF0aWVudCAlaW4lIGNvbG5hbWVzKG1ldGh5KV1cbm1hbGVfbWV0YSA8LSBtYWxlX21ldGFbbWFsZV9tZXRhJHBhdGllbnQgJWluJSBjb2xuYW1lcyhtZXRoeSldXG5gYGAifQ== -->
+<pre class="r"><code>female_meta &lt;- female_meta[female_meta$patient %in% colnames(methy)]
+male_meta &lt;- male_meta[male_meta$patient %in% colnames(methy)]</code></pre>
+<!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubWV0aHkgPC0gYXMuZGF0YS50YWJsZShtZXRoeSxrZWVwLnJvd25hbWVzID0gXCJjcGdcIilcbiMgTWFsZSBkYXRhXG5md3JpdGUobWV0aHlbLGMoXCJjcGdcIixtYWxlX21ldGEkcGF0aWVudCksd2l0aD1GQUxTRV0sXCJtYWxlX21ldGh5XzIwMjIudHh0Lmd6XCIsc2VwPSdcXHQnLHF1b3RlPUYpXG5gYGAifQ== -->
-<pre class="r"><code>methy &lt;- as.data.table(methy,keep.rownames = &quot;cpg&quot;)
-# Male data
-fwrite(methy[,c(&quot;cpg&quot;,male_meta$patient),with=FALSE],&quot;male_methy_2022.txt.gz&quot;,sep=&#39;\t&#39;,quote=F)</code></pre>
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+</div>
+<div id="format-for-cross-sex-and-prs-work" class="section level2">
+<h2>format for cross-sex and PRS work</h2>
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucGNfZGF0YSA8LSBwcmNvbXAobWV0aHlbLC1jKDEpXVssY2JpbmQobWFsZV9tZXRhLGZlbWFsZV9tZXRhKSRwYXRpZW50LHdpdGg9RkFMU0VdLCBjZW50ZXI9VFJVRSxzY2FsZS49VFJVRSwgcmFuay49MTApXG5cbmBgYCJ9 -->
+<pre class="r"><code>pc_data &lt;- prcomp(methy[,-c(1)][,cbind(male_meta,female_meta)$patient,with=FALSE], center=TRUE,scale.=TRUE, rank.=10)
+</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiXG5Xcml0dGVuIDQzLjMlIG9mIDgwMzc3NyByb3dzIGluIDIgc2VjcyB1c2luZyA5NiB0aHJlYWRzLiBtYXhCdWZmVXNlZD0zMSUuIEVUQSAyIHNlY3MuICAgICAgXG5Xcml0dGVuIDg2LjIlIG9mIDgwMzc3NyByb3dzIGluIDMgc2VjcyB1c2luZyA5NiB0aHJlYWRzLiBtYXhCdWZmVXNlZD0zMSUuIEVUQSAwIHNlY3MuICAgICAgXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgXG4ifQ== -->
-<pre><code>
-Written 43.3% of 803777 rows in 2 secs using 96 threads. maxBuffUsed=31%. ETA 2 secs.
-Written 86.2% of 803777 rows in 3 secs using 96 threads. maxBuffUsed=31%. ETA 0 secs.
-                                                                                                                                     </code></pre>
+<!-- rnb-output-begin eyJkYXRhIjoiSXRlbSAyIGhhcyAxMDAgcm93cyBidXQgbG9uZ2VzdCBpdGVtIGhhcyAxMTg7IHJlY3ljbGVkIHdpdGggcmVtYWluZGVyLlxuIn0= -->
+<pre><code>Item 2 has 100 rows but longest item has 118; recycled with remainder.</code></pre>
 <!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZndyaXRlKGdlbm90eXBlWyxjKFwiU05QXCIsbWFsZV9tZXRhJHBhdGllbnQpLHdpdGg9RkFMU0VdLFwibWFsZV9nZW5vXzIwMjIudHh0Lmd6XCIsc2VwPSdcXHQnLHF1b3RlPUYpXG5gYGAifQ== -->
-<pre class="r"><code>fwrite(genotype[,c(&quot;SNP&quot;,male_meta$patient),with=FALSE],&quot;male_geno_2022.txt.gz&quot;,sep=&#39;\t&#39;,quote=F)</code></pre>
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuY3Jvc3MgPC0gZGF0YS50YWJsZShjYmluZChyYmluZChtYWxlX21ldGEsZmVtYWxlX21ldGEpLHBjX2RhdGEkcm90YXRpb24pKSlcblxuYGBgIn0= -->
+<pre class="r"><code>cross &lt;- data.table(cbind(rbind(male_meta,female_meta),pc_data$rotation)))
+</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiXG5Xcml0dGVuIDE0LjklIG9mIDgzNTQxODggcm93cyBpbiAyIHNlY3MgdXNpbmcgOTYgdGhyZWFkcy4gbWF4QnVmZlVzZWQ9OCUuIEVUQSAxMiBzZWNzLiAgICAgIFxuV3JpdHRlbiAyNC4zJSBvZiA4MzU0MTg4IHJvd3MgaW4gMyBzZWNzIHVzaW5nIDk2IHRocmVhZHMuIG1heEJ1ZmZVc2VkPTklLiBFVEEgOSBzZWNzLiAgICAgIFxuV3JpdHRlbiAzNS4xJSBvZiA4MzU0MTg4IHJvd3MgaW4gNCBzZWNzIHVzaW5nIDk2IHRocmVhZHMuIG1heEJ1ZmZVc2VkPTklLiBFVEEgNyBzZWNzLiAgICAgIFxuV3JpdHRlbiA0Ni4wJSBvZiA4MzU0MTg4IHJvd3MgaW4gNSBzZWNzIHVzaW5nIDk2IHRocmVhZHMuIG1heEJ1ZmZVc2VkPTklLiBFVEEgNiBzZWNzLiAgICAgIFxuV3JpdHRlbiA1NS40JSBvZiA4MzU0MTg4IHJvd3MgaW4gNiBzZWNzIHVzaW5nIDk2IHRocmVhZHMuIG1heEJ1ZmZVc2VkPTklLiBFVEEgNSBzZWNzLiAgICAgIFxuV3JpdHRlbiA2NC45JSBvZiA4MzU0MTg4IHJvd3MgaW4gNyBzZWNzIHVzaW5nIDk2IHRocmVhZHMuIG1heEJ1ZmZVc2VkPTklLiBFVEEgNCBzZWNzLiAgICAgIFxuV3JpdHRlbiA3NS43JSBvZiA4MzU0MTg4IHJvd3MgaW4gOCBzZWNzIHVzaW5nIDk2IHRocmVhZHMuIG1heEJ1ZmZVc2VkPTklLiBFVEEgMiBzZWNzLiAgICAgIFxuV3JpdHRlbiA4NS4yJSBvZiA4MzU0MTg4IHJvd3MgaW4gOSBzZWNzIHVzaW5nIDk2IHRocmVhZHMuIG1heEJ1ZmZVc2VkPTklLiBFVEEgMSBzZWNzLiAgICAgIFxuV3JpdHRlbiA5NC42JSBvZiA4MzU0MTg4IHJvd3MgaW4gMTAgc2VjcyB1c2luZyA5NiB0aHJlYWRzLiBtYXhCdWZmVXNlZD05JS4gRVRBIDAgc2Vjcy4gICAgICBcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBcbiJ9 -->
-<pre><code>
-Written 14.9% of 8354188 rows in 2 secs using 96 threads. maxBuffUsed=8%. ETA 12 secs.
-Written 24.3% of 8354188 rows in 3 secs using 96 threads. maxBuffUsed=9%. ETA 9 secs.
-Written 35.1% of 8354188 rows in 4 secs using 96 threads. maxBuffUsed=9%. ETA 7 secs.
-Written 46.0% of 8354188 rows in 5 secs using 96 threads. maxBuffUsed=9%. ETA 6 secs.
-Written 55.4% of 8354188 rows in 6 secs using 96 threads. maxBuffUsed=9%. ETA 5 secs.
-Written 64.9% of 8354188 rows in 7 secs using 96 threads. maxBuffUsed=9%. ETA 4 secs.
-Written 75.7% of 8354188 rows in 8 secs using 96 threads. maxBuffUsed=9%. ETA 2 secs.
-Written 85.2% of 8354188 rows in 9 secs using 96 threads. maxBuffUsed=9%. ETA 1 secs.
-Written 94.6% of 8354188 rows in 10 secs using 96 threads. maxBuffUsed=9%. ETA 0 secs.
-                                                                                                                                     </code></pre>
+<!-- rnb-output-begin eyJkYXRhIjoiRXJyb3I6IHVuZXhwZWN0ZWQgJyknIGluIFwiY3Jvc3MgPC0gZGF0YS50YWJsZShjYmluZChyYmluZChtYWxlX21ldGEsZmVtYWxlX21ldGEpLHBjX2RhdGEkcm90YXRpb24pKSlcIlxuIn0= -->
+<pre><code>Error: unexpected &#39;)&#39; in &quot;cross &lt;- data.table(cbind(rbind(male_meta,female_meta),pc_data$rotation)))&quot;</code></pre>
 <!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZndyaXRlKG1hbGVfbWV0YVssLihQRCxhZ2Usc21va2luZyxhbGNvaG9sMSxoZWFkX3RyYXVtYSwgQ1RQX1BDMSxDVFBfUEMyLENUUF9QQzMsQ1RQX1BDNCxhbmNlc3RyeVBDMSxhbmNlc3RyeVBDMixhbmNlc3RyeVBDMyxwbGF0ZSxTZW50cml4UG9zaXRpb25fQSx3ZWlnaHRzKV0sXCJtYWxlX21ldGFfMjAyMl93X3dlaWdodHMudHh0Lmd6XCIsc2VwPSdcXHQnLHF1b3RlPUYpXG5md3JpdGUobWFsZV9tZXRhWywuKFBELGFnZSxzbW9raW5nLGFsY29ob2wxLGhlYWRfdHJhdW1hLCBDVFBfUEMxLENUUF9QQzIsQ1RQX1BDMyxDVFBfUEM0LGFuY2VzdHJ5UEMxLGFuY2VzdHJ5UEMyLGFuY2VzdHJ5UEMzLHBsYXRlLFNlbnRyaXhQb3NpdGlvbl9BKV0sXCJtYWxlX21ldGFfMjAyMl9ub193ZWlnaHRzLnR4dC5nelwiLHNlcD0nXFx0JyxxdW90ZT1GKVxuIyBGZW1hbGUgZGF0YVxuZndyaXRlKG1ldGh5WyxjKFwiY3BnXCIsZmVtYWxlX21ldGEkcGF0aWVudCksd2l0aD1GQUxTRV0sXCJmZW1hbGVfbWV0aHlfMjAyMi50eHQuZ3pcIixzZXA9J1xcdCcscXVvdGU9RilcbmBgYCJ9 -->
-<pre class="r"><code>fwrite(male_meta[,.(PD,age,smoking,alcohol1,head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,ancestryPC1,ancestryPC2,ancestryPC3,plate,SentrixPosition_A,weights)],&quot;male_meta_2022_w_weights.txt.gz&quot;,sep=&#39;\t&#39;,quote=F)
-fwrite(male_meta[,.(PD,age,smoking,alcohol1,head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,ancestryPC1,ancestryPC2,ancestryPC3,plate,SentrixPosition_A)],&quot;male_meta_2022_no_weights.txt.gz&quot;,sep=&#39;\t&#39;,quote=F)
-# Female data
-fwrite(methy[,c(&quot;cpg&quot;,female_meta$patient),with=FALSE],&quot;female_methy_2022.txt.gz&quot;,sep=&#39;\t&#39;,quote=F)</code></pre>
+<!-- rnb-chunk-end -->
+<!-- rnb-text-begin -->
+<!-- rnb-text-end -->
+<!-- rnb-chunk-begin -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZndyaXRlKHRyYW5zcG9zZShkYXRhLnRhYmxlKG1vZGVsLm1hdHJpeCh+MCsuLGRhdGE9Y3Jvc3Nbc2V4PT0xLC4uY292YXJfbmFtZXNdKVssLWMoXCJzZXhcIildLGtlZXAubmFtZXMgPSBcImlkXCIpKSxcIm1hbGVfbWV0YV8yMDIyX3Bycy50eHRcIixzZXA9J1xcdCcsIHF1b3RlPUYpXG5cbmBgYCJ9 -->
+<pre class="r"><code>fwrite(transpose(data.table(model.matrix(~0+.,data=cross[sex==1,..covar_names])[,-c(&quot;sex&quot;)],keep.names = &quot;id&quot;)),&quot;male_meta_2022_prs.txt&quot;,sep=&#39;\t&#39;, quote=F)
+</code></pre>
 <!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiXG5Xcml0dGVuIDM5LjQlIG9mIDgwMzc3NyByb3dzIGluIDIgc2VjcyB1c2luZyA5NiB0aHJlYWRzLiBtYXhCdWZmVXNlZD0zMSUuIEVUQSAzIHNlY3MuICAgICAgXG5Xcml0dGVuIDkwLjAlIG9mIDgwMzc3NyByb3dzIGluIDMgc2VjcyB1c2luZyA5NiB0aHJlYWRzLiBtYXhCdWZmVXNlZD0zMSUuIEVUQSAwIHNlY3MuICAgICAgXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgXG4ifQ== -->
-<pre><code>
-Written 39.4% of 803777 rows in 2 secs using 96 threads. maxBuffUsed=31%. ETA 3 secs.
-Written 90.0% of 803777 rows in 3 secs using 96 threads. maxBuffUsed=31%. ETA 0 secs.
-                                                                                                                                     </code></pre>
+<!-- rnb-output-begin eyJkYXRhIjoiRXJyb3IgaW4gLWMoXCJzZXhcIikgOiBpbnZhbGlkIGFyZ3VtZW50IHRvIHVuYXJ5IG9wZXJhdG9yXG4ifQ== -->
+<pre><code>Error in -c(&quot;sex&quot;) : invalid argument to unary operator</code></pre>
 <!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZndyaXRlKGdlbm90eXBlWyxjKFwiU05QXCIsZmVtYWxlX21ldGEkcGF0aWVudCksd2l0aD1GQUxTRV0sXCJmZW1hbGVfZ2Vub18yMDIyLnR4dC5nelwiLHNlcD0nXFx0JyxxdW90ZT1GKVxuYGBgIn0= -->
-<pre class="r"><code>fwrite(genotype[,c(&quot;SNP&quot;,female_meta$patient),with=FALSE],&quot;female_geno_2022.txt.gz&quot;,sep=&#39;\t&#39;,quote=F)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiXG5Xcml0dGVuIDIwLjclIG9mIDgzNTQxODggcm93cyBpbiAyIHNlY3MgdXNpbmcgOTYgdGhyZWFkcy4gbWF4QnVmZlVzZWQ9OSUuIEVUQSA3IHNlY3MuICAgICAgXG5Xcml0dGVuIDM1LjAlIG9mIDgzNTQxODggcm93cyBpbiAzIHNlY3MgdXNpbmcgOTYgdGhyZWFkcy4gbWF4QnVmZlVzZWQ9OSUuIEVUQSA1IHNlY3MuICAgICAgXG5Xcml0dGVuIDQ3LjclIG9mIDgzNTQxODggcm93cyBpbiA0IHNlY3MgdXNpbmcgOTYgdGhyZWFkcy4gbWF4QnVmZlVzZWQ9OSUuIEVUQSA0IHNlY3MuICAgICAgXG5Xcml0dGVuIDYwLjQlIG9mIDgzNTQxODggcm93cyBpbiA1IHNlY3MgdXNpbmcgOTYgdGhyZWFkcy4gbWF4QnVmZlVzZWQ9OSUuIEVUQSAzIHNlY3MuICAgICAgXG5Xcml0dGVuIDcxLjUlIG9mIDgzNTQxODggcm93cyBpbiA2IHNlY3MgdXNpbmcgOTYgdGhyZWFkcy4gbWF4QnVmZlVzZWQ9OSUuIEVUQSAyIHNlY3MuICAgICAgXG5Xcml0dGVuIDgyLjYlIG9mIDgzNTQxODggcm93cyBpbiA3IHNlY3MgdXNpbmcgOTYgdGhyZWFkcy4gbWF4QnVmZlVzZWQ9OSUuIEVUQSAxIHNlY3MuICAgICAgXG5Xcml0dGVuIDkzLjclIG9mIDgzNTQxODggcm93cyBpbiA4IHNlY3MgdXNpbmcgOTYgdGhyZWFkcy4gbWF4QnVmZlVzZWQ9OSUuIEVUQSAwIHNlY3MuICAgICAgXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgXG4ifQ== -->
-<pre><code>
-Written 20.7% of 8354188 rows in 2 secs using 96 threads. maxBuffUsed=9%. ETA 7 secs.
-Written 35.0% of 8354188 rows in 3 secs using 96 threads. maxBuffUsed=9%. ETA 5 secs.
-Written 47.7% of 8354188 rows in 4 secs using 96 threads. maxBuffUsed=9%. ETA 4 secs.
-Written 60.4% of 8354188 rows in 5 secs using 96 threads. maxBuffUsed=9%. ETA 3 secs.
-Written 71.5% of 8354188 rows in 6 secs using 96 threads. maxBuffUsed=9%. ETA 2 secs.
-Written 82.6% of 8354188 rows in 7 secs using 96 threads. maxBuffUsed=9%. ETA 1 secs.
-Written 93.7% of 8354188 rows in 8 secs using 96 threads. maxBuffUsed=9%. ETA 0 secs.
-                                                                                                                                     </code></pre>
-<!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZndyaXRlKGZlbWFsZV9tZXRhWywuKFBELGFnZSxzbW9raW5nLGFsY29ob2wxLGhlYWRfdHJhdW1hLCBDVFBfUEMxLENUUF9QQzIsQ1RQX1BDMyxDVFBfUEM0LGFuY2VzdHJ5UEMxLGFuY2VzdHJ5UEMyLGFuY2VzdHJ5UEMzLHBsYXRlLFNlbnRyaXhQb3NpdGlvbl9BLHdlaWdodHMpXSxcImZlbWFsZV9tZXRhXzIwMjJfd193ZWlnaHRzLnR4dC5nelwiLHNlcD0nXFx0JyxxdW90ZT1GKVxuZndyaXRlKGZlbWFsZV9tZXRhWywuKFBELGFnZSxzbW9raW5nLGFsY29ob2wxLGhlYWRfdHJhdW1hLCBDVFBfUEMxLENUUF9QQzIsQ1RQX1BDMyxDVFBfUEM0LGFuY2VzdHJ5UEMxLGFuY2VzdHJ5UEMyLGFuY2VzdHJ5UEMzLHBsYXRlLFNlbnRyaXhQb3NpdGlvbl9BKV0sXCJmZW1hbGVfbWV0YV8yMDIyX25vX3dlaWdodHMudHh0Lmd6XCIsc2VwPSdcXHQnLHF1b3RlPUYpXG5gYGAifQ== -->
-<pre class="r"><code>fwrite(female_meta[,.(PD,age,smoking,alcohol1,head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,ancestryPC1,ancestryPC2,ancestryPC3,plate,SentrixPosition_A,weights)],&quot;female_meta_2022_w_weights.txt.gz&quot;,sep=&#39;\t&#39;,quote=F)
-fwrite(female_meta[,.(PD,age,smoking,alcohol1,head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,ancestryPC1,ancestryPC2,ancestryPC3,plate,SentrixPosition_A)],&quot;female_meta_2022_no_weights.txt.gz&quot;,sep=&#39;\t&#39;,quote=F)</code></pre>
-<!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
 <!-- rnb-text-end -->
 </div>
 </div>
 
-<div id="rmd-source-code">LS0tCnRpdGxlOiAibVFUTCBkYXRhIHByZXAiCm91dHB1dDogaHRtbF9ub3RlYm9vawotLS0KCmBgYHtyIHNldHVwLCBpbmNsdWRlPUZBTFNFfQpsaWJyYXJ5KHRpZHl2ZXJzZSkKbGlicmFyeShkYXRhLnRhYmxlKQpsaWJyYXJ5KG1pbmZpKQpTeXMuc2V0bG9jYWxlKCJMQ19NRVNTQUdFUyIsICJlbl9VUy51dGY4IikKa25pdHI6Om9wdHNfa25pdCRzZXQocm9vdC5kaXIgPSAifi9wcnNfZXdhc19pbnRlZ3JhdGlvbi9jaXNfbVFUTF9hbmFseXNlcyIpCmtuaXRyOjpvcHRzX2NodW5rJHNldChlY2hvID0gVFJVRSwgY2FjaGUgPSBUUlVFLCBjYWNoZS5sYXp5ID0gRkFMU0UsIGF1dG9kZXAgPSBUUlVFKQpgYGAKCiMgVEVSUkUKYGBge3J9Cm1hbGVfbWV0YSA8LSBmcmVhZCgiL2hvbWUxL05FVVJPL1NIQVJFX0RFQ0lQSEVSL3Byb2Nlc3NlZF9ETkFtX2RhdGEvMjAyMi9URVJSRV9wcm9jZXNzZWRfMjAyMi8zLXRlcnJlX21ldGFfTV9sb2dpdF9tYXRjaGVkLmNzdiIpCmZlbWFsZV9tZXRhIDwtIGZyZWFkKCIvaG9tZTEvTkVVUk8vU0hBUkVfREVDSVBIRVIvcHJvY2Vzc2VkX0ROQW1fZGF0YS8yMDIyL1RFUlJFX3Byb2Nlc3NlZF8yMDIyLzMtdGVycmVfbWV0YV9GX2xvZ2l0X21hdGNoZWQuY3N2IikKZ2Vub3R5cGUgPC0gZnJlYWQoIn4vZ2Vub3R5cGVfcWMvVEVSUkVfUUMvcmF3X2RhdGEuaW1wdXRlZC5yMl8zMC5tYWZfbWlzbWF0Y2gudHJhdyIpCmNvbG5hbWVzKGdlbm90eXBlKSA8LSBnc3ViKCJfIiwiLSIsZ3N1YigiUEFFXyguKilfUEFFLioiLCAiXFwxIixjb2xuYW1lcyhnZW5vdHlwZSkpKQpsb2FkKCIvaG9tZTEvTkVVUk8vU0hBUkVfREVDSVBIRVIvcHJvY2Vzc2VkX0ROQW1fZGF0YS8yMDIyL1RFUlJFX3Byb2Nlc3NlZF8yMDIyLzEtVEVSUkVfUkdfZmlsdGVyZWQuUkRhdGEiKSNtZXRoeWxhdGlvbgpgYGAKCiMjIEZvcm1hdCBDb3ZhcmlhdGVzCmBgYHtyfQptZXRoeSA8LSBnZXRCZXRhKFBEX1JHX2ZpbHRlcmVkKQptZXRoeSA8LSBtZXRoeVssY29sbmFtZXMobWV0aHkpICVpbiUgY29sbmFtZXMoZ2Vub3R5cGUpXQpnZW5vdHlwZSA8LSBnZW5vdHlwZVssY29sbmFtZXMoZ2Vub3R5cGUpICVpbiUgYyhjb2xuYW1lcyhnZW5vdHlwZSlbMTo2XSxjb2xuYW1lcyhtZXRoeSkpLHdpdGg9RkFMU0VdCmFsbChjb2xuYW1lcyhnZW5vdHlwZSlbLWMoMTo2KV0gPT0gY29sbmFtZXMobWV0aHkpKQoKZmVtYWxlX21ldGEgPC0gZmVtYWxlX21ldGFbZmVtYWxlX21ldGEkcGF0aWVudCAlaW4lIGNvbG5hbWVzKG1ldGh5KV0KbWFsZV9tZXRhIDwtIG1hbGVfbWV0YVttYWxlX21ldGEkcGF0aWVudCAlaW4lIGNvbG5hbWVzKG1ldGh5KV0KYGBgCmBgYHtyfQptZXRoeSA8LSBhcy5kYXRhLnRhYmxlKG1ldGh5LGtlZXAucm93bmFtZXMgPSAiY3BnIikKIyBNYWxlIGRhdGEKZndyaXRlKG1ldGh5WyxjKCJjcGciLG1hbGVfbWV0YSRwYXRpZW50KSx3aXRoPUZBTFNFXSwibWFsZV9tZXRoeV8yMDIyLnR4dC5neiIsc2VwPSdcdCcscXVvdGU9RikKZndyaXRlKGdlbm90eXBlWyxjKCJTTlAiLG1hbGVfbWV0YSRwYXRpZW50KSx3aXRoPUZBTFNFXSwibWFsZV9nZW5vXzIwMjIudHh0Lmd6IixzZXA9J1x0JyxxdW90ZT1GKQpmd3JpdGUobWFsZV9tZXRhWywuKFBELGFnZSxzbW9raW5nLGFsY29ob2wxLGhlYWRfdHJhdW1hLCBDVFBfUEMxLENUUF9QQzIsQ1RQX1BDMyxDVFBfUEM0LGFuY2VzdHJ5UEMxLGFuY2VzdHJ5UEMyLGFuY2VzdHJ5UEMzLHBsYXRlLFNlbnRyaXhQb3NpdGlvbl9BLHdlaWdodHMpXSwibWFsZV9tZXRhXzIwMjJfd193ZWlnaHRzLnR4dC5neiIsc2VwPSdcdCcscXVvdGU9RikKZndyaXRlKG1hbGVfbWV0YVssLihQRCxhZ2Usc21va2luZyxhbGNvaG9sMSxoZWFkX3RyYXVtYSwgQ1RQX1BDMSxDVFBfUEMyLENUUF9QQzMsQ1RQX1BDNCxhbmNlc3RyeVBDMSxhbmNlc3RyeVBDMixhbmNlc3RyeVBDMyxwbGF0ZSxTZW50cml4UG9zaXRpb25fQSldLCJtYWxlX21ldGFfMjAyMl9ub193ZWlnaHRzLnR4dC5neiIsc2VwPSdcdCcscXVvdGU9RikKIyBGZW1hbGUgZGF0YQpmd3JpdGUobWV0aHlbLGMoImNwZyIsZmVtYWxlX21ldGEkcGF0aWVudCksd2l0aD1GQUxTRV0sImZlbWFsZV9tZXRoeV8yMDIyLnR4dC5neiIsc2VwPSdcdCcscXVvdGU9RikKZndyaXRlKGdlbm90eXBlWyxjKCJTTlAiLGZlbWFsZV9tZXRhJHBhdGllbnQpLHdpdGg9RkFMU0VdLCJmZW1hbGVfZ2Vub18yMDIyLnR4dC5neiIsc2VwPSdcdCcscXVvdGU9RikKZndyaXRlKGZlbWFsZV9tZXRhWywuKFBELGFnZSxzbW9raW5nLGFsY29ob2wxLGhlYWRfdHJhdW1hLCBDVFBfUEMxLENUUF9QQzIsQ1RQX1BDMyxDVFBfUEM0LGFuY2VzdHJ5UEMxLGFuY2VzdHJ5UEMyLGFuY2VzdHJ5UEMzLHBsYXRlLFNlbnRyaXhQb3NpdGlvbl9BLHdlaWdodHMpXSwiZmVtYWxlX21ldGFfMjAyMl93X3dlaWdodHMudHh0Lmd6IixzZXA9J1x0JyxxdW90ZT1GKQpmd3JpdGUoZmVtYWxlX21ldGFbLC4oUEQsYWdlLHNtb2tpbmcsYWxjb2hvbDEsaGVhZF90cmF1bWEsIENUUF9QQzEsQ1RQX1BDMixDVFBfUEMzLENUUF9QQzQsYW5jZXN0cnlQQzEsYW5jZXN0cnlQQzIsYW5jZXN0cnlQQzMscGxhdGUsU2VudHJpeFBvc2l0aW9uX0EpXSwiZmVtYWxlX21ldGFfMjAyMl9ub193ZWlnaHRzLnR4dC5neiIsc2VwPSdcdCcscXVvdGU9RikKYGBgCgoK</div>
+<div id="rmd-source-code">LS0tCnRpdGxlOiAibVFUTCBkYXRhIHByZXAiCm91dHB1dDogaHRtbF9ub3RlYm9vawotLS0KCmBgYHtyIHNldHVwLCBpbmNsdWRlPUZBTFNFfQpsaWJyYXJ5KHRpZHl2ZXJzZSkKbGlicmFyeShkYXRhLnRhYmxlKQpsaWJyYXJ5KG1pbmZpKQpTeXMuc2V0bG9jYWxlKCJMQ19NRVNTQUdFUyIsICJlbl9VUy51dGY4IikKa25pdHI6Om9wdHNfa25pdCRzZXQocm9vdC5kaXIgPSAifi9wcnNfZXdhc19pbnRlZ3JhdGlvbi9jaXNfbVFUTF9hbmFseXNlcyIpCmtuaXRyOjpvcHRzX2NodW5rJHNldChlY2hvID0gVFJVRSwgY2FjaGUgPSBUUlVFLCBjYWNoZS5sYXp5ID0gRkFMU0UsIGF1dG9kZXAgPSBUUlVFKQpgYGAKCiMgVEVSUkUKYGBge3J9Cm1hbGVfbWV0YSA8LSBmcmVhZCgiL2hvbWUxL05FVVJPL1NIQVJFX0RFQ0lQSEVSL3Byb2Nlc3NlZF9ETkFtX2RhdGEvMjAyMi9URVJSRV9wcm9jZXNzZWRfMjAyMi8zLXRlcnJlX21ldGFfTV9sb2dpdF9tYXRjaGVkLmNzdiIpCmZlbWFsZV9tZXRhIDwtIGZyZWFkKCIvaG9tZTEvTkVVUk8vU0hBUkVfREVDSVBIRVIvcHJvY2Vzc2VkX0ROQW1fZGF0YS8yMDIyL1RFUlJFX3Byb2Nlc3NlZF8yMDIyLzMtdGVycmVfbWV0YV9GX2xvZ2l0X21hdGNoZWQuY3N2IikKZ2Vub3R5cGUgPC0gZnJlYWQoIn4vZ2Vub3R5cGVfcWMvVEVSUkVfUUMvcmF3X2RhdGEuaW1wdXRlZC5yMl8zMC5tYWZfbWlzbWF0Y2gudHJhdyIpCmNvbG5hbWVzKGdlbm90eXBlKSA8LSBnc3ViKCJfIiwiLSIsZ3N1YigiUEFFXyguKilfUEFFLioiLCAiXFwxIixjb2xuYW1lcyhnZW5vdHlwZSkpKQpsb2FkKCIvaG9tZTEvTkVVUk8vU0hBUkVfREVDSVBIRVIvcHJvY2Vzc2VkX0ROQW1fZGF0YS8yMDIyL1RFUlJFX3Byb2Nlc3NlZF8yMDIyLzEtVEVSUkVfUkdfZmlsdGVyZWQuUkRhdGEiKSNtZXRoeWxhdGlvbgpgYGAKCiMjIEZvcm1hdCBDb3ZhcmlhdGVzCmBgYHtyfQptZXRoeSA8LSBnZXRCZXRhKFBEX1JHX2ZpbHRlcmVkKQptZXRoeSA8LSBtZXRoeVssY29sbmFtZXMobWV0aHkpICVpbiUgY29sbmFtZXMoZ2Vub3R5cGUpXQpnZW5vdHlwZSA8LSBnZW5vdHlwZVssY29sbmFtZXMoZ2Vub3R5cGUpICVpbiUgYyhjb2xuYW1lcyhnZW5vdHlwZSlbMTo2XSxjb2xuYW1lcyhtZXRoeSkpLHdpdGg9RkFMU0VdCmFsbChjb2xuYW1lcyhnZW5vdHlwZSlbLWMoMTo2KV0gPT0gY29sbmFtZXMobWV0aHkpKQoKZmVtYWxlX21ldGEgPC0gZmVtYWxlX21ldGFbZmVtYWxlX21ldGEkcGF0aWVudCAlaW4lIGNvbG5hbWVzKG1ldGh5KV0KbWFsZV9tZXRhIDwtIG1hbGVfbWV0YVttYWxlX21ldGEkcGF0aWVudCAlaW4lIGNvbG5hbWVzKG1ldGh5KV0KYGBgCmBgYHtyfQptZXRoeSA8LSBhcy5kYXRhLnRhYmxlKG1ldGh5LGtlZXAucm93bmFtZXMgPSAiY3BnIikKIyBNYWxlIGRhdGEKZndyaXRlKG1ldGh5WyxjKCJjcGciLG1hbGVfbWV0YSRwYXRpZW50KSx3aXRoPUZBTFNFXSwibWFsZV9tZXRoeV8yMDIyLnR4dC5neiIsc2VwPSdcdCcscXVvdGU9RikKZndyaXRlKGdlbm90eXBlWyxjKCJTTlAiLG1hbGVfbWV0YSRwYXRpZW50KSx3aXRoPUZBTFNFXSwibWFsZV9nZW5vXzIwMjIudHh0Lmd6IixzZXA9J1x0JyxxdW90ZT1GKQpmd3JpdGUobWFsZV9tZXRhWywuKFBELGFnZSxzbW9raW5nLGFsY29ob2wxLGhlYWRfdHJhdW1hLCBDVFBfUEMxLENUUF9QQzIsQ1RQX1BDMyxDVFBfUEM0LGFuY2VzdHJ5UEMxLGFuY2VzdHJ5UEMyLGFuY2VzdHJ5UEMzLHBsYXRlLFNlbnRyaXhQb3NpdGlvbl9BLHdlaWdodHMpXSwibWFsZV9tZXRhXzIwMjJfd193ZWlnaHRzLnR4dC5neiIsc2VwPSdcdCcscXVvdGU9RikKbWFsZV9tZXRhX3RvX3dyaXRlIDwtYXMuZGF0YS50YWJsZShtb2RlbC5tYXRyaXgofjArLixkYXRhPW1hbGVfbWV0YVssLihQRCxhZ2Usc21va2luZyxhbGNvaG9sMT1mYWN0b3IoYWxjb2hvbDEpLGhlYWRfdHJhdW1hLCBDVFBfUEMxLENUUF9QQzIsQ1RQX1BDMyxDVFBfUEM0LGFuY2VzdHJ5UEMxLGFuY2VzdHJ5UEMyLGFuY2VzdHJ5UEMzLHBsYXRlPWZhY3RvcihwbGF0ZSksU2VudHJpeFBvc2l0aW9uX0E9ZmFjdG9yKFNlbnRyaXhQb3NpdGlvbl9BKSldKSkKZndyaXRlKHRyYW5zcG9zZShtYWxlX21ldGFfdG9fd3JpdGUsIGtlZXAubmFtZXMgPSAiaWQiKSwibWFsZV9tZXRhXzIwMjJfbm9fd2VpZ2h0cy50eHQuZ3oiLHNlcD0nXHQnLHF1b3RlPUYpCiMgRmVtYWxlIGRhdGEKZndyaXRlKG1ldGh5WyxjKCJjcGciLGZlbWFsZV9tZXRhJHBhdGllbnQpLHdpdGg9RkFMU0VdLCJmZW1hbGVfbWV0aHlfMjAyMi50eHQuZ3oiLHNlcD0nXHQnLHF1b3RlPUYpCmZ3cml0ZShnZW5vdHlwZVssYygiU05QIixmZW1hbGVfbWV0YSRwYXRpZW50KSx3aXRoPUZBTFNFXSwiZmVtYWxlX2dlbm9fMjAyMi50eHQuZ3oiLHNlcD0nXHQnLHF1b3RlPUYpCmZ3cml0ZShmZW1hbGVfbWV0YVssLihQRCxhZ2Usc21va2luZyxhbGNvaG9sMSxoZWFkX3RyYXVtYSwgQ1RQX1BDMSxDVFBfUEMyLENUUF9QQzMsQ1RQX1BDNCxhbmNlc3RyeVBDMSxhbmNlc3RyeVBDMixhbmNlc3RyeVBDMyxwbGF0ZSxTZW50cml4UG9zaXRpb25fQSx3ZWlnaHRzKV0sImZlbWFsZV9tZXRhXzIwMjJfd193ZWlnaHRzLnR4dC5neiIsc2VwPSdcdCcscXVvdGU9RikKZmVtYWxlX21ldGFfdG9fd3JpdGUgPC0gYXMuZGF0YS50YWJsZShtb2RlbC5tYXRyaXgofjArLixkYXRhPWZlbWFsZV9tZXRhWywuKFBELGFnZSxzbW9raW5nLGFsY29ob2wxPWZhY3RvcihhbGNvaG9sMSksaGVhZF90cmF1bWEsIENUUF9QQzEsQ1RQX1BDMixDVFBfUEMzLENUUF9QQzQsYW5jZXN0cnlQQzEsYW5jZXN0cnlQQzIsYW5jZXN0cnlQQzMscGxhdGU9ZmFjdG9yKHBsYXRlKSxTZW50cml4UG9zaXRpb25fQT1mYWN0b3IoU2VudHJpeFBvc2l0aW9uX0EpKV0pKQpmd3JpdGUodHJhbnNwb3NlKGZlbWFsZV9tZXRhX3RvX3dyaXRlLCBrZWVwLm5hbWVzID0gImlkIiksImZlbWFsZV9tZXRhXzIwMjJfbm9fd2VpZ2h0cy50eHQuZ3oiLHNlcD0nXHQnLHF1b3RlPUYpCmBgYAoKIyMgZm9ybWF0IGZvciBjcm9zcy1zZXggYW5kIFBSUyB3b3JrCmBgYHtyfQpwY19kYXRhIDwtIHByY29tcChtZXRoeVssLWMoMSldWyxyYmluZChtYWxlX21ldGEsZmVtYWxlX21ldGEpJHBhdGllbnQsd2l0aD1GQUxTRV0sIGNlbnRlcj1UUlVFLHNjYWxlLj1UUlVFLCByYW5rLj0xMCkKYGBgCgpgYGB7cn0KbWFsZV9tZXRhJHNleCA8LSAxCmZlbWFsZV9tZXRhJHNleCA8LSAwCmNyb3NzIDwtIGRhdGEudGFibGUoY2JpbmQocmJpbmQobWFsZV9tZXRhLGZlbWFsZV9tZXRhKSxwY19kYXRhJHJvdGF0aW9uKSkKYGBgCgpgYGB7cn0KY292YXJfbmFtZXMgPC0gYygic2V4IiwiYWdlIixwYXN0ZTAoImFuY2VzdHJ5UEMiLDE6MykscGFzdGUwKCJQQyIsMToxMCkpCmNyb3NzWywuLmNvdmFyX25hbWVzXQpmd3JpdGUoZ2Vub3R5cGVbLGMoIlNOUCIsY3Jvc3MkcGF0aWVudCksd2l0aD1GQUxTRV0sImFsbF9nZW5vXzIwMjIudHh0IixzZXA9J1x0JyxxdW90ZT1GKQpmd3JpdGUobWV0aHlbLGMoImNwZyIsY3Jvc3MkcGF0aWVudCksd2l0aD1GQUxTRV0sImFsbF9tZXRoeV8yMDIyLnR4dCIsc2VwPSdcdCcscXVvdGU9RikKZndyaXRlKHRyYW5zcG9zZShkYXRhLnRhYmxlKG1vZGVsLm1hdHJpeCh+MCsuLGRhdGE9Y3Jvc3NbLC4uY292YXJfbmFtZXNdKSksa2VlcC5uYW1lcyA9ICJpZCIpLCJhbGxfbWV0YV8yMDIyX3Bycy50eHQiLHNlcD0nXHQnLCBxdW90ZT1GKQpmd3JpdGUodHJhbnNwb3NlKGRhdGEudGFibGUobW9kZWwubWF0cml4KH4wKy4tc2V4LGRhdGE9Y3Jvc3Nbc2V4PT0xLC4uY292YXJfbmFtZXNdKSksa2VlcC5uYW1lcyA9ICJpZCIpLCJtYWxlX21ldGFfMjAyMl9wcnMudHh0IixzZXA9J1x0JywgcXVvdGU9RikKZndyaXRlKHRyYW5zcG9zZShkYXRhLnRhYmxlKG1vZGVsLm1hdHJpeCh+MCsuLXNleCxkYXRhPWNyb3NzW3NleD09MCwuLmNvdmFyX25hbWVzXSkpLGtlZXAubmFtZXMgPSAiaWQiKSwiZmVtYWxlX21ldGFfMjAyMl9wcnMudHh0IixzZXA9J1x0JywgcXVvdGU9RikKYGBgCgo=</div>
 
 
 

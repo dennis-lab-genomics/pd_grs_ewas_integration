@@ -237,303 +237,47 @@ plot_probes_sex(male)
 ```{r}
 plot_probes_sex(female)
 ```
-
-## Plot out results
+## Mendelian Randomization
 ```{r}
-if (file.exists("mqtl_pd_snp_colocalization.txt")) {
-  res1_pval <- fread("mqtl_pd_snp_colocalization.txt")
-  probe_pos <- fread("terre_data/probe_pos.txt")
-}
-res1_pval %>%
-  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
-  arrange(-PP3_4, -PP_4div3) %>%
-  filter(PP3_4 > 0.99, PP_4div3 > 5)
-res1_pval %>%
-  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
-  arrange(-PP3_4, -PP_4div3) %>%
-  filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
-  distinct(probe, locus)
-res1_pval %>%
-  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
-  arrange(-PP3_4, -PP_4div3) %>%
-  filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
-  distinct(probe)
-res1_pval %>%
-  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
-  arrange(-PP3_4, -PP_4div3) %>%
-  filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
-  left_join(probe_pos, by = c("probe" = "geneid")) %>%
-  distinct(locus, chr)
-```
-```{r}
-res1_pval %>%
-  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
-  arrange(-PP3_4, -PP_4div3) %>%
-  filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
-  write_delim("mqtl_pd_snp_colocalized_blood.txt")
-
-res1_pval %>%
-  filter(PP.H4.abf > 0.9) %>%
-  write_delim("mqtl_pd_snp_colocalized_blood_PH4.txt")
-```
-
-modest evidence of colocalization between parkinson's loci and mQTL in blood of TERRE cohort, let's try this analysis on top mQTL CpGs instead:
-```{r}
-all_probes <- mQTL_results[`p-value` < 0.05 / (ntests), .(unique(gene))]$V1
-probe_res <- mclapply(
-  1:length(all_probes),
-  function(j) {
-    snp_set <- mQTL_results[all_probes[j], on = "gene"][!duplicated(SNP)]
-    coords <- snp_pos[snp_set$SNP, on = "SNP"][!duplicated(SNP)]
-    mqtl_pval <- data.frame(beta = snp_set$beta, varbeta = snp_set$beta / snp_set$`t-stat`, N = 245, snp = paste0(coords$CHR, ":", coords$POS), sdY = sd(methy[all_probes[j], -c(1), on = "cpg"]), type = "quant", stringsAsFactors = F)
-    tmp_stats <- sum_stats[mqtl_pval$snp, on = "SNP"]
-    gwas_pval <- data.frame(pvalues = tmp_stats$p, N = tmp_stats$N_cases + tmp_stats$N_controls, s = tmp_stats$N_cases / (tmp_stats$N_cases + tmp_stats$N_controls), snp = tmp_stats$SNP, type = "cc", MAF = tmp_stats$freq, stringsAsFactors = F)
-    mqtl_pval <- as.list(mqtl_pval[!is.na(gwas_pval$pvalues), ])
-    mqtl_pval$N <- unique(mqtl_pval$N)[1]
-    mqtl_pval$type <- unique(mqtl_pval$type)[1]
-    gwas_pval <- as.list(gwas_pval[!is.na(gwas_pval$pvalues), ])
-    gwas_pval$N <- unique(gwas_pval$N)[1]
-    gwas_pval$type <- unique(gwas_pval$type)[1]
-    print(j)
-    if (length(gwas_pval$snp) != 0 | length(mqtl_pval$snp != 0)) {
-      res <- coloc.abf(mqtl_pval, gwas_pval)
-      return(cbind(t(data.frame(res$summary)), data.frame(probe = all_probes[j])))
-    } else {
-      return(data.frame())
-    }
-  },
-  mc.cores = 64
-)
-
-probe_res <- rbindlist(probe_res)
-
-fwrite(probe_res, "mqtl_pd_probe_colocalization.txt", sep = "\t", row.names = F, quote = F)
-```
-
-```{r}
-if (file.exists("mqtl_pd_probe_colocalization.txt")) {
-  probe_res <- fread("mqtl_pd_probe_colocalization.txt")
-}
-
-probe_res %>%
-  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
-  arrange(-PP3_4, -PP_4div3)
-```
-## check against brain mQTLs
-```{r}
-mQTLs_brain <- fread("~/mQTLs_all.txt.gz")
-
-if (file.exists("pos_brain.txt.gz")) {
-  pos_brain <- fread("pos_brain.txt.gz")
-  setkey(pos_brain, "SNP")
-} else {
-  pos_brain <- unique(mQTLs_brain[, .(SNP = SNPid, CHR = paste0("chr", SNPchromosome), POS = SNPpos)])
-  setkey(pos_brain, "SNP")
-  fwrite(pos_brain, "pos_brain.txt.gz")
-}
-
-mQTLs_brain <- mQTLs_brain[, .(
-  SNP = SNPid,
-  gene = featureName,
-  beta = SpearmanRho,
-  `p-value` = pValue
-)]
-setkey(mQTLs_brain, "gene")
-
-coloc_brain <- rbindlist(
-  lapply(
-    1:nrow(risk_scores),
-    function(i) {
-      localize_per_locus(
-        i,
-        mQTL_results = mQTLs_brain,
-        snp_pos = pos_brain,
-        N1 = 468,
-        has_methy = FALSE
-      )
-    }
-  )
-)
-
-coloc_brain_SNP <- rbindlist(
-  lapply(
-    1:nrow(risk_scores),
-    function(i) {
-      localize_per_locus(
-        i,
-        mQTL_results = mQTLs_brain,
-        snp_pos = pos_brain,
-        N1 = 468,
-        has_methy = FALSE,
-        return_summary = FALSE
-      )
-    }
-  )
-)
-```
-```{r}
-
-coloc_brain %>%
-  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
-  arrange(-PP3_4, -PP_4div3) %>%
-  filter(PP3_4 > 0.99, PP_4div3 > 5)
-coloc_brain %>%
-  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
-  arrange(-PP3_4, -PP_4div3) %>%
-  filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
-  distinct(probe, locus)
-coloc_brain %>%
-  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
-  arrange(-PP3_4, -PP_4div3) %>%
-  filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
-  distinct(probe)
-coloc_brain %>%
-  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
-  arrange(-PP3_4, -PP_4div3) %>%
-  filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
-  distinct(locus)
-```
-```{r}
-coloc_brain %>%
-  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
-  arrange(-PP3_4, -PP_4div3) %>%
-  filter(PP3_4 > 0.99, PP_4div3 > 5) %>%
-  write_delim("mqtl_pd_snp_colocalized_brain.txt")
-
-coloc_brain %>%
-  filter(PP.H4.abf > 0.9) %>%
-  write_delim("mqtl_pd_snp_colocalized_brain_PH4.txt")
-
-fwrite(coloc_brain_SNP, "mqtl_pd_snp_colocalization_brain.txt.gz", sep = "\t", row.names = F, quote = F)
-```
-
-
-## Visualizing colocalization
-
-### Load data
-```{r}
-library(EnsDb.Hsapiens.v75)
-
-res1_pval <- fread("mqtl_pd_snp_colocalized_blood.txt")
-coloc_brain <- fread("mqtl_pd_snp_colocalized_brain.txt")
-blood_cpg <- res1_pval %>%
-  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
-  arrange(-PP3_4, -PP_4div3) %>%
-  dplyr::filter(PP3_4 > 0.99, PP_4div3 > 5)
-brain_cpg <- coloc_brain %>%
-  mutate(PP3_4 = PP.H3.abf + PP.H4.abf, PP_4div3 = PP.H4.abf / PP.H3.abf) %>%
-  arrange(-PP3_4, -PP_4div3) %>%
-  dplyr::filter(PP3_4 > 0.99, PP_4div3 > 5)
-
-top_blood <- as.character(blood_cpg[locus %in% c("69.0")]$probe)
-top_brain <- as.character(brain_cpg[locus %in% c("69.0")]$probe)
-top_coloc_loci <- unique(c(top_blood, top_brain))
-
-top_2_blood <- as.character(blood_cpg[locus %in% c("70.0")]$probe)
-top_2_brain <- as.character(brain_cpg[locus %in% c("70.0")]$probe)
-top_2_coloc_loci <- unique(c(top_2_blood, top_2_brain))
-probe_pos <- fread("terre_data/probe_pos.txt")
-snp_pos <- fread("terre_data/snp_pos.txt", key = "SNP")
-pos_brain <- fread("pos_brain.txt.gz")
-setkey(pos_brain, "SNP")
-sum_stats <- fread("~/nallsEtAl2019_excluding23andMe_allVariants.tab.gz", key = "SNP")
-
-if (file.exists("mqtl_results_trunc.txt.gz")) {
-  mQTL_results_trunc <- fread("mqtl_results_trunc.txt.gz")
-  mQTLs_brain_trunc <- fread("mqtl_brain_trunc.txt.gz")
-} else {
-  fwrite(mQTL_results[gene %in% union(top_coloc_loci, top_2_coloc_loci)], "mqtl_results_trunc.txt.gz")
-  fwrite(mQTLs_brain[gene %in% union(top_coloc_loci, top_2_coloc_loci)], "mqtl_brain_trunc.txt.gz")
-}
-edb <- EnsDb.Hsapiens.v75
-unified_pos <- merge(pos_brain, snp_pos, by = c("CHR", "POS"), all = TRUE)
-```
-### Plot @TODO change to plot from coloc output instead for ease of re-plotting
-```{r,fig.height=8.5, fig.height=11}
-
-plot_cpgs_overlap <- function(cpgs) {
-  # gather all SNPs as chr#:pos
-  cpg_coord <- probe_pos[cpgs, on = "geneid"]
-  cpg_snps <- unified_pos[CHR == cpg_coord$chr & POS > min(cpg_coord$s1) - 75e3 & POS < max(cpg_coord$s2) + 75e3]
-  cgi <- UcscTrack(
-    genome = "hg19", chromosome = unique(cpg_coord$chr), from = min(cpg_snps$POS),
-    to = max(cpg_snps$POS), track = "cpgIslandExt", trackType = "AnnotationTrack",
-    start = "chromStart", end = "chromEnd", id = "name", shape = "box", fill = "#006400",
-    name = "CpG Islands"
-  )
-  gr <- GeneRegionTrack(
-    getGeneRegionTrackForGviz(
-      edb,
-      featureIs = "gene_biotype",
-      chromosome = gsub("chr", "", unique(cpg_coord$chr)),
-      start = min(cpg_snps$POS), end = max(cpg_snps$POS),
+run_mr_per_cpg <- function(mQTL,cur_gwas){
+  mQTL <- mQTL[grepl("rs",V1)]
+  cur_gwas <- cur_gwas[mQTL$V1, on = "SNP", nomatch=0][p < 5e-8]
+  cur_mQTL <- mQTL[cur_gwas$SNP, on = "V1", nomatch=0]
+  if(nrow(cur_mQTL) <= 2){
+    return("No GWAS LOCI")
+  }else{
+    cor_table <- LDmatrix(
+      snps=cur_mQTL$V1,
+      pop="EUR",
+      genome_build = "grch37",
+      token = gsub("\n","",readr::read_file("ldlink_token.txt"))
     )
-  )
-  dat <- DataTrack(
-    start = cpg_snps$POS,
-    width = 1,
-    data = rbind(
-      -log10(mQTLs_brain_trunc[.(cpg_snps$SNP.x, cpgs), on = c("SNP", "gene")]$`p-value`),
-      -log10(mQTL_results_trunc[.(cpg_snps$SNP.y, cpgs), on = c("SNP", "gene")]$`p-value`)
-    ),
-    chromosome = unique(cpg_coord$chr),
-    genome = "hg19",
-    groups = c("Brain", "Blood"),
-    name = "-log10 mQTL P value"
-  )
-  gwas <- DataTrack(
-    start = cpg_snps$POS,
-    width = 1,
-    data = -log10(sum_stats[paste0(cpg_snps$CHR, ":", cpg_snps$POS), on = "SNP"]$p),
-    chromosome = unique(cpg_coord$chr),
-    genome = "hg19",
-    name = "-log10(GWAS P-value)"
-  )
-  plotTracks(
-    list(gr, gwas, dat),
-    collapseTranscripts = "meta", transcriptAnnotation = "symbol"
-  )
+    cor_mat <- as.matrix(cor_table[,-c(1)])
+    rownames(cor_mat) <- as.character(cor_table$RS_number)
+    cur_mQTL <- cur_mQTL[rownames(cor_mat), on="V1"]
+    cur_gwas <- cur_gwas[rownames(cor_mat), on="SNP"]
+    
+    EggerObject <- try(
+      mr_egger(
+        mr_input(
+          bx = cur_mQTL$V3, 
+          bxse = cur_mQTL$V3/cur_mQTL$V4 ,
+          by = cur_gwas$b, 
+          byse = cur_gwas$se,
+          correlation = cor_mat
+        ),
+        correl = TRUE,
+        distribution = "t-dist",
+        alpha = 0.05
+      ),
+      silent =  TRUE
+    )
+    if(class(EggerObject) == 'try-error'){
+      return(glue("{nrow(cur_mQTL)} mQTL, MR not fit"))
+    }else{
+      return(EggerObject)
+    }
+  }
 }
-# plot_cpgs_overlap(top_coloc_loci)
-# plot_cpgs_overlap(top_2_coloc_loci)
-plot_cpgs_overlap(union(top_coloc_loci, top_2_coloc_loci))
-```
-```{r}
-library(ggbio)
-library(biovizBase)
-library(Homo.sapiens)
-if (!"mQTLs_brain" %in% ls()) {
-  mQTLs_brain <- fread("~/mQTLs_all.txt.gz")
-  setkey(mQTLs_brain, "featureName")
-}
-if (!"mQTL_results" %in% ls()) {
-  mQTL_results <- fread("terre_data/cis_all_impute_mQTL_results_9_methy_PC.txt.gz", key = "gene")
-}
-
-mQTL_results_pos <- mQTL_results[snp_pos, on = .(SNP)][probe_pos[, .(geneid, s1, s2)], on = .(gene = geneid)]
-
-gr.brain_cpg <- transformDfToGr(na.omit(mQTLs_brain[top_blood, .(CHR = SNPchromosome, BP = SNPpos, P = pValue), on = "featureName"]), seqnames = "CHR", start = "BP", width = 1)
-gr.brain_cpg$group <- "brain"
-gr.blood_cpg <- transformDfToGr(na.omit(mQTL_results_pos[top_blood, .(CHR = as.numeric(gsub("chr", "", CHR)), BP = as.numeric(POS), P = `p-value`), on = "gene"]), seqnames = "CHR", start = "BP", width = 1)
-gr.blood_cpg$group <- "blood"
-chr_pattern <- "chr(.*):(.*)"
-gwas_locus_1 <- sum_stats[, .(
-  CHR = as.numeric(gsub(chr_pattern, "\\1", SNP)),
-  BP = as.numeric(gsub(chr_pattern, "\\2", SNP)),
-  P = p
-)][CHR == gr.brain_cpg$CHR[1] & BP > gr.brain_cpg$BP[1] & BP < gr.brain_cpg$BP[length(gr.brain_cpg)]]
-gr.pd_gwas <- transformDfToGr(gwas_locus_1, seqnames = "CHR", start = "BP", width = 1)
-gr.pd_gwas$group <- "Parkinson's"
-associations <- c(gr.blood_cpg, gr.brain_cpg, gr.pd_gwas)
-seqlevelsStyle(associations) <- "UCSC"
-genes <- subsetByOverlaps(genes(Homo.sapiens, columns = "SYMBOL"), associations)
-p1 <- autoplot(c(gr.blood_cpg, gr.pd_gwas), geom = "point", coord = "genome", aes(color = group, y = -log10(P)))
-p3 <- autoplot(gr.brain_cpg, geom = "point", coord = "genome", aes(y = -log10(P)))
-p4 <- autoplot(gr.pd_gwas, geom = "point", coord = "genome", aes(y = -log10(P)))
-p2 <- autoplot(Homo.sapiens, which = associations, columns = "SYMBOL", coord = "genome", stat = "identity")
-tracks(p1, gene = p2)
 ```
 
-
-
-#@TODO FIX ISSUE WITH BRAIN RANGE

@@ -103,36 +103,52 @@ prsice_meta <- fread("prsice_data/TERRE_PRSice.prsice")
 ggplot(mapping=aes(Threshold, R2, color = -log10(P))) +
   geom_point(data=prsice_female_meta,size = 1) +
   scale_color_gradient(low="lightpink4",high="lightpink")+
+  labs(color= bquote("Female -log"["10"] ~ "(P)"))+
   new_scale_color() +
   geom_point(data=prsice_male_meta,size = 1,aes(color = -log10(P))) +
   scale_color_gradient(low="lightblue4",high="lightblue")+
-  labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("-log"["10"] ~ "(P)")) +
+  labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("Male -log"["10"] ~ "(P)")) +
   theme_minimal()+
   theme(legend.position = "top")
 ggplot(mapping=aes(Threshold, R2, color = -log10(P))) +
   geom_point(data=prsice_female_meta,size = 1) +
-  scale_color_gradient(low="lightpink4",high="lightpink")+
+  scale_color_gradient(low="lightpink4",high="lightpink",guide=guide_colorbar(order=3))+
+  labs(color = bquote("Female -log"["10"] ~ "(P)")) + 
   new_scale_color() +
   geom_point(data=prsice_meta,size = 1,aes(color = -log10(P))) +
-  scale_color_gradient(low="gray40",high="gray80")+
+  scale_color_gradient(low="gray40",high="gray80",guide=guide_colorbar(order=1))+
+  labs(color = bquote("Cross-sex -log"["10"] ~ "(P)")) + 
   new_scale_color() +
   geom_point(data=prsice_male_meta,size = 1,aes(color = -log10(P))) +
-  scale_color_gradient(low="lightblue4",high="lightblue")+
-  labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("-log"["10"] ~ "(P)")) +
+  scale_color_gradient(low="lightblue4",high="lightblue",guide=guide_colorbar(order=2))+
+  labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("Male -log"["10"] ~ "(P)")) +
   theme_minimal()+
-  theme(legend.position = "top")
+  theme(legend.position = "top",legend.title = element_text(size=7))
 
 ```
 ## Overlap in SNPs for optimal PRS
 ```{r}
 # Get SNPs
-male <- fread("/home1/NEURO/casazza/Blauwendraat_male_female_GWAS/MALE_PD_filtered_sumstats_no_multi_allelics_RSID.QC.txt.gz")[p < 0.00675005 & MAF > 0.01]
-female <- fread("/home1/NEURO/casazza/Blauwendraat_male_female_GWAS/FEMALE_PD_filtered_sumstats_no_multi_allelics_RSID.QC.txt.gz")[p < 0.00240005 & MAF > 0.01]
-all_sex <- fread("/home1/NEURO/casazza/nalls_PD.QC.gz")[p < 0.00030005 & MAF > 0.01]
+male <- fread("/home1/NEURO/casazza/Blauwendraat_male_female_GWAS/MALE_PD_filtered_sumstats_no_multi_allelics_RSID.QC.txt.gz")
+female <- fread("/home1/NEURO/casazza/Blauwendraat_male_female_GWAS/FEMALE_PD_filtered_sumstats_no_multi_allelics_RSID.QC.txt.gz")
+all_sex <- fread("/home1/NEURO/casazza/nalls_PD.QC.gz")
+```
+```{r}
+library(qqman)
+library(hudson)
+all_sex[,`:=`(BP=POS,P=p)]
+male[,`:=`(P=p)]
+female[,`:=`(P=p)]
+manhattan(all_sex,suggestiveline = FALSE)
+manhattan(male,col=c("lightblue4","lightblue"),suggestiveline = FALSE)
+manhattan(female,col=c("lightpink4","lightpink"),suggestiveline = FALSE)
 ```
 
 Plotting this
 ```{r}
+male <- male[p < 0.00645005 & MAF > 0.01]
+female <- female[p < 0.00040005 & MAF > 0.01]
+all_sex <- all_sex[p < 0.00030005 & MAF > 0.01]
 display_venn <- function(x, ...) {
   library(VennDiagram)
   grid.newpage()
@@ -151,9 +167,11 @@ display_venn(
 
 # Step 3 run linear model at different thresholds for SNP inclusion
 ```{r}
-load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/TERRE_processed_2021/betas_combat.RData") # betas_sub
+load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/1-TERRE_RG_filtered.RData") # 
 # Assign genotyping ID to data
+betas_combat <- minfi::getBeta(PD_RG_filtered)
 original_covars <- fread("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv")[, .(patient, IID = gsub("_PAE.*", "", IID))]
+betas_combat <- betas_combat[, colnames(betas_combat) %in% original_covars$patient]
 colnames(betas_combat) <- original_covars$IID[match(colnames(betas_combat), original_covars$patient)]
 betas_combat <- betas_combat[, colnames(betas_combat) %in% covariate$IID]
 ```
@@ -174,7 +192,7 @@ all(covariate_male$IID == prsice_male_all$IID)
 
 covariate_female <- covariate[sex == 0] %>% select(-sex)
 betas_female <- betas_combat[,covariate_female$IID]
-prsice_female_all <- fread("prsice_female_data/TERRE_female_PRSice.all_score")[match(colnames(betas_female), IID), .(FID, IID, `Pt_0.00240005`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+prsice_female_all <- fread("prsice_female_data/TERRE_female_PRSice.all_score")[match(colnames(betas_female), IID), .(FID, IID, `Pt_0.00040005`, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
 covariate_female <- covariate_female[match(colnames(betas_female), IID)]
 all(covariate_female$IID == colnames(betas_female))
 all(covariate_female$IID == prsice_female_all$IID)
@@ -214,17 +232,68 @@ hits_by_thresh_bonf_female <- rbindlist(hits_female, idcol = "threshold", fill =
 ```
 ```{r}
 hits_by_thresh_bonf_male[, .(hits = .N), by = threshold]
-ggplot(hits_by_thresh_bonf_male[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.00675005` = "6.75e-3", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
-  geom_text(vjust = -0.25) +
-  geom_col() +
-  labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +
-  theme_minimal()
 
 
 hits_by_thresh_bonf_female[, .(hits = .N), by = threshold]
-ggplot(hits_by_thresh_bonf_female[, .(hits = .N), by = threshold] %>% mutate(threshold = recode_factor(threshold, `Pt_0.00240005` = "2.40e-3", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")), aes(threshold, hits, label = hits)) +
+
+male_plot <- hits_by_thresh_bonf_male[, .(Sex= "Male",hits = .N), by = threshold] 
+female_plot <- hits_by_thresh_bonf_female[, .(Sex= "Female",hits = .N), by = threshold]
+to_plot <- rbind(male_plot,female_plot) %>% mutate(threshold = recode_factor(threshold,`Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0",`Pt_0.00675005` = "Male-stratified best",`Pt_0.00100005` = "Female-stratified best"))
+ggplot(to_plot, aes(threshold, hits, label = hits,fill=Sex)) +
   geom_text(vjust = -0.25) +
-  geom_col() +
+  geom_col(position="dodge") +
+  scale_fill_manual(values=c("Male"="lightblue","Female"="lightpink"))+
   labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +
-  theme_minimal()
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle=45,hjust=1,vjust=1))
 ```
+```{r}
+prs_thresh <- "Pt_5.005e-05"
+design_prs_female <- model.matrix(~., data = cbind(prs_mat_female[, ..prs_thresh], cov_mat_female))
+prs_fit_female <- lmFit(mvalues_female, design_prs_female)
+prs_fit_female <- eBayes(prs_fit_female)
+top_female_ewas <- data.table(topTable(prs_fit_female, coef = 2, adjust.method = "BH", number = Inf, genelist = rownames(mvalues_female)))
+
+prs_thresh <- "Pt_0.00100005"
+design_prs_male <- model.matrix(~., data = cbind(prs_mat_male[, ..prs_thresh], cov_mat_male))
+prs_fit_male <- lmFit(mvalues_male, design_prs_male)
+prs_fit_male <- eBayes(prs_fit_male)
+top_male_ewas <- data.table(topTable(prs_fit_male, coef = 2, adjust.method = "BH", number = Inf, genelist = rownames(mvalues_male)))
+```
+```{r}
+library(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)
+annotation <- minfi::getAnnotation(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)
+annotation$chr <- factor(annotation$chr,levels=c(paste0("chr",1:22),"chrX","chrY"))
+top_male_ewas <- top_male_ewas[order(annotation[ID,]$chr,annotation[ID,]$pos)]
+top_female_ewas <- top_female_ewas[order(annotation[ID,]$chr,annotation[ID,]$pos)]
+```
+
+```{r}
+gmirror(
+  top=top_male_ewas[,.(
+      SNP=ID,
+      CHR= gsub("chr","",annotation[top_male_ewas$ID,]$chr),
+      POS = annotation[top_male_ewas$ID,]$pos,
+      pvalue=P.Value
+    )],
+  bottom=top_female_ewas[,.(
+      SNP=ID,
+      CHR= gsub("chr","",annotation[top_female_ewas$ID,]$chr),
+      POS = annotation[top_female_ewas$ID,]$pos,
+      pvalue=P.Value
+    )],
+  annotate_p = c(max(top_male_ewas[adj.P.Val<0.26]$P.Value),max(top_female_ewas[adj.P.Val<0.25]$P.Value)),
+  tline =  max(top_male_ewas[adj.P.Val<0.25]$P.Value),
+  bline =  max(top_female_ewas[adj.P.Val<0.25]$P.Value),
+  highlight_p = c(max(top_male_ewas[adj.P.Val<0.26]$P.Value),max(top_female_ewas[adj.P.Val<0.25]$P.Value)),
+  toptitle="Male-stratified",
+  bottomtitle ="Female-stratified",
+  highlighter="green",
+  background="white"
+)
+```
+```{r}
+volcanoplot(prs_fit_male,coef=2,highlight = 3,names = rownames(mvalues_male))
+volcanoplot(prs_fit_female,coef=2,highlight=24,names=rownames(mvalues_female))
+```
+

@@ -26,7 +26,7 @@ error_cov <- numeric()
 cis_dist <- 75000
 print("LOADING METHYLATION")
 methylation <- SlicedData$new()
-methylation$fileDelimiter <- " "
+methylation$fileDelimiter <- "\t"
 methylation$fileOmitCharacters <- "NA"
 methylation$fileSkipRows <- 1
 methylation$fileSkipColumns <- 1
@@ -35,14 +35,14 @@ methylation$LoadFile(methylation_fname)
 probe_pos <- read.delim(paste0(data_dir, argv$probe_pos), sep = "")
 print("LOADING COVARIATES")
 covariates <- SlicedData$new()
-covariates$fileDelimiter <- " "
+covariates$fileDelimiter <- "\t"
 covariates$fileOmitCharacters <- "NA"
 covariates$fileSkipRows <- 1
 covariates$fileSkipColumns <- 1
 covariates$LoadFile(paste0(data_dir, argv$cov_file))
 print("LOADING SNPS")
 snps <- SlicedData$new()
-snps$fileDelimiter <- " "
+snps$fileDelimiter <- "\t"
 snps$fileOmitCharacters <- "NA"
 snps$fileSkipRows <- 1
 snps$fileSkipColumns <- 1

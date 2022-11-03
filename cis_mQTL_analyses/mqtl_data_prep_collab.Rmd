@@ -37,10 +37,34 @@ methy <- as.data.table(methy,keep.rownames = "cpg")
 fwrite(methy[,c("cpg",male_meta$patient),with=FALSE],"male_methy_2022.txt.gz",sep='\t',quote=F)
 fwrite(genotype[,c("SNP",male_meta$patient),with=FALSE],"male_geno_2022.txt.gz",sep='\t',quote=F)
 fwrite(male_meta[,.(PD,age,smoking,alcohol1,head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,ancestryPC1,ancestryPC2,ancestryPC3,plate,SentrixPosition_A,weights)],"male_meta_2022_w_weights.txt.gz",sep='\t',quote=F)
-fwrite(male_meta[,.(PD,age,smoking,alcohol1,head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,ancestryPC1,ancestryPC2,ancestryPC3,plate,SentrixPosition_A)],"male_meta_2022_no_weights.txt.gz",sep='\t',quote=F)
+male_meta_to_write <-as.data.table(model.matrix(~0+.,data=male_meta[,.(PD,age,smoking,alcohol1=factor(alcohol1),head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,ancestryPC1,ancestryPC2,ancestryPC3,plate=factor(plate),SentrixPosition_A=factor(SentrixPosition_A))]))
+fwrite(transpose(male_meta_to_write, keep.names = "id"),"male_meta_2022_no_weights.txt.gz",sep='\t',quote=F)
 # Female data
 fwrite(methy[,c("cpg",female_meta$patient),with=FALSE],"female_methy_2022.txt.gz",sep='\t',quote=F)
 fwrite(genotype[,c("SNP",female_meta$patient),with=FALSE],"female_geno_2022.txt.gz",sep='\t',quote=F)
 fwrite(female_meta[,.(PD,age,smoking,alcohol1,head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,ancestryPC1,ancestryPC2,ancestryPC3,plate,SentrixPosition_A,weights)],"female_meta_2022_w_weights.txt.gz",sep='\t',quote=F)
-fwrite(female_meta[,.(PD,age,smoking,alcohol1,head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,ancestryPC1,ancestryPC2,ancestryPC3,plate,SentrixPosition_A)],"female_meta_2022_no_weights.txt.gz",sep='\t',quote=F)
+female_meta_to_write <- as.data.table(model.matrix(~0+.,data=female_meta[,.(PD,age,smoking,alcohol1=factor(alcohol1),head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,ancestryPC1,ancestryPC2,ancestryPC3,plate=factor(plate),SentrixPosition_A=factor(SentrixPosition_A))]))
+fwrite(transpose(female_meta_to_write, keep.names = "id"),"female_meta_2022_no_weights.txt.gz",sep='\t',quote=F)
 ```
+
+## format for cross-sex and PRS work
+```{r}
+pc_data <- prcomp(methy[,-c(1)][,rbind(male_meta,female_meta)$patient,with=FALSE], center=TRUE,scale.=TRUE, rank.=10)
+```
+
+```{r}
+male_meta$sex <- 1
+female_meta$sex <- 0
+cross <- data.table(cbind(rbind(male_meta,female_meta),pc_data$rotation))
+```
+
+```{r}
+covar_names <- c("sex","age",paste0("ancestryPC",1:3),paste0("PC",1:10))
+cross[,..covar_names]
+fwrite(genotype[,c("SNP",cross$patient),with=FALSE],"all_geno_2022.txt",sep='\t',quote=F)
+fwrite(methy[,c("cpg",cross$patient),with=FALSE],"all_methy_2022.txt",sep='\t',quote=F)
+fwrite(transpose(data.table(model.matrix(~0+.,data=cross[,..covar_names])),keep.names = "id"),"all_meta_2022_prs.txt",sep='\t', quote=F)
+fwrite(transpose(data.table(model.matrix(~0+.-sex,data=cross[sex==1,..covar_names])),keep.names = "id"),"male_meta_2022_prs.txt",sep='\t', quote=F)
+fwrite(transpose(data.table(model.matrix(~0+.-sex,data=cross[sex==0,..covar_names])),keep.names = "id"),"female_meta_2022_prs.txt",sep='\t', quote=F)
+```
+
