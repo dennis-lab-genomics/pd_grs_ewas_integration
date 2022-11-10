@@ -113,11 +113,11 @@ ggplot(mapping=aes(Threshold, R2, color = -log10(P))) +
 ggplot(mapping=aes(Threshold, R2, color = -log10(P))) +
   geom_point(data=prsice_female_meta,size = 1) +
   scale_color_gradient(low="lightpink4",high="lightpink",guide=guide_colorbar(order=3))+
-  labs(color = bquote("Female -log"["10"] ~ "(P)")) + 
+  labs(color = bquote("Female -log"["10"] ~ "(P)")) +
   new_scale_color() +
   geom_point(data=prsice_meta,size = 1,aes(color = -log10(P))) +
   scale_color_gradient(low="gray40",high="gray80",guide=guide_colorbar(order=1))+
-  labs(color = bquote("Cross-sex -log"["10"] ~ "(P)")) + 
+  labs(color = bquote("Cross-sex -log"["10"] ~ "(P)")) +
   new_scale_color() +
   geom_point(data=prsice_male_meta,size = 1,aes(color = -log10(P))) +
   scale_color_gradient(low="lightblue4",high="lightblue",guide=guide_colorbar(order=2))+
@@ -167,7 +167,7 @@ display_venn(
 
 # Step 3 run linear model at different thresholds for SNP inclusion
 ```{r}
-load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/1-TERRE_RG_filtered.RData") # 
+load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/1-TERRE_RG_filtered.RData") #
 # Assign genotyping ID to data
 betas_combat <- minfi::getBeta(PD_RG_filtered)
 original_covars <- fread("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv")[, .(patient, IID = gsub("_PAE.*", "", IID))]
@@ -236,15 +236,29 @@ hits_by_thresh_bonf_male[, .(hits = .N), by = threshold]
 
 hits_by_thresh_bonf_female[, .(hits = .N), by = threshold]
 
-male_plot <- hits_by_thresh_bonf_male[, .(Sex= "Male",hits = .N), by = threshold] 
+male_plot <- hits_by_thresh_bonf_male[, .(Sex= "Male",hits = .N), by = threshold]
 female_plot <- hits_by_thresh_bonf_female[, .(Sex= "Female",hits = .N), by = threshold]
-to_plot <- rbind(male_plot,female_plot) %>% mutate(threshold = recode_factor(threshold,`Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0",`Pt_0.00675005` = "Male-stratified best",`Pt_0.00100005` = "Female-stratified best"))
+to_plot <- rbind(male_plot,female_plot) %>%
+  mutate(threshold = recode_factor(threshold,
+   `Pt_5e-08` = "5e-8",
+   `Pt_5.005e-05` = "5e-5",
+   `Pt_0.00010005` = "1e-4",
+   `Pt_0.00100005` = "1e-3",#female best
+   `Pt_0.00675005` = "6.8e-3", #male best
+   `Pt_0.0101501` = "1e-2",
+   `Pt_0.1` = "0.1",
+   `Pt_0.2` = "0.2",
+   `Pt_0.3` = "0.3",
+   `Pt_0.4` = "0.4",
+   `Pt_0.5` = "0.5",
+   `Pt_1` = "1.0"))
+
 ggplot(to_plot, aes(threshold, hits, label = hits,fill=Sex)) +
-  geom_text(vjust = -0.25) +
-  geom_col(position="dodge") +
+  geom_text(position=position_dodge2(width=0.9,preserve="single"),vjust = -0.25) +
+  geom_col(position=position_dodge2(width=0.9,preserve="single")) +
   scale_fill_manual(values=c("Male"="lightblue","Female"="lightpink"))+
   labs(x = "GWAS P Value Threshold", y = "EWAS Hits") +
-  theme_minimal() + 
+  theme_minimal() +
   theme(axis.text.x = element_text(angle=45,hjust=1,vjust=1))
 ```
 ```{r}
@@ -259,6 +273,7 @@ design_prs_male <- model.matrix(~., data = cbind(prs_mat_male[, ..prs_thresh], c
 prs_fit_male <- lmFit(mvalues_male, design_prs_male)
 prs_fit_male <- eBayes(prs_fit_male)
 top_male_ewas <- data.table(topTable(prs_fit_male, coef = 2, adjust.method = "BH", number = Inf, genelist = rownames(mvalues_male)))
+save(list=c("top_male_ewas","top_female_ewas"),file="prs_blau_sex_stratified.RData")
 ```
 ```{r}
 library(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)
@@ -296,4 +311,3 @@ gmirror(
 volcanoplot(prs_fit_male,coef=2,highlight = 3,names = rownames(mvalues_male))
 volcanoplot(prs_fit_female,coef=2,highlight=24,names=rownames(mvalues_female))
 ```
-

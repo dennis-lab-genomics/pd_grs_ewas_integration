@@ -17,19 +17,19 @@ library(docopt)
 library(glue)
 library(parallel)
 setDTthreads(8)
-# arguments <- docopt(doc)
-# print(arguments)
+arguments <- docopt(doc)
+print(arguments)
 
-arguments <- list(
- n = "245",
- qc_fmt = TRUE,
- plink_loci = TRUE,
- brain_mqtl = FALSE,
- mqtl = "terre_data/cis_all_impute_mQTL_results_9_methy_PC.txt.gz",
- gwas = "~/nalls_PD.QC.gz",
- out = "cross_mqtl_cross_sumstats",
- loci = "~/nalls_PD.clumped"
-)
+# arguments <- list(
+# n = "245",
+# qc_fmt = TRUE,
+# plink_loci = TRUE,
+# brain_mqtl = FALSE,
+# mqtl = "terre_data/cis_all_impute_mQTL_results_9_methy_PC.txt.gz",
+# gwas = "~/nalls_PD.QC.gz",
+# out = "cross_mqtl_cross_sumstats",
+# loci = "~/nalls_PD.clumped"
+# )
 
 # Grab CpG sites within 1MB of risk loci
 probes_1mb <- function(row) {
@@ -51,9 +51,9 @@ localize_per_locus <- function(i,
       snp_set <- mQTL_results[all_probes[j], on = "gene"][!duplicated(SNP)]
       coords <- snp_pos[snp_set$SNP, on = "SNP"][!duplicated(SNP)]
       tmp_stats <- na.omit(sum_stats[paste0(coords$CHR, ":", coords$POS), on = "SNP"])
-      #match up data
-      coords <- coords[match(tmp_stats$SNP,paste0(CHR, ":",POS))]
-      snp_set <- snp_set[match(coords$SNP,SNP)]
+      # match up data
+      coords <- coords[match(tmp_stats$SNP, paste0(CHR, ":", POS))]
+      snp_set <- snp_set[match(coords$SNP, SNP)]
       if (has_methy) {
         mqtl_pval <- data.frame(
           beta = snp_set$beta,
@@ -99,10 +99,10 @@ localize_per_locus <- function(i,
           )
         )
       } else {
-        return(list(summary = data.frame(),result = data.frame()))
+        return(list(summary = data.frame(), result = data.frame()))
       }
     },
-    mc.cores = 8
+    mc.cores = 16
   )
   return(
     list(
@@ -118,10 +118,10 @@ mQTL_results <- fread(arguments$mqtl)
 loci <- fread(arguments$loci)
 
 if (arguments$qc_fmt) {
-  if("BP" %in% colnames(sum_stats)){
+  if ("BP" %in% colnames(sum_stats)) {
     sum_stats[, `:=`(SNP = paste0("chr", CHR, ":", BP), freq = MAF)]
-  }else{
-    sum_stats[, `:=`(SNP = paste0("chr",CHR,":",POS),freq=MAF)]
+  } else {
+    sum_stats[, `:=`(SNP = paste0("chr", CHR, ":", POS), freq = MAF)]
   }
 }
 
@@ -149,7 +149,7 @@ system.time(
   result <- mclapply(
     1:nrow(loci),
     function(i) {
-      localize_per_locus(
+      res <- tryCatch(localize_per_locus(
         i,
         mQTL_results = mQTL_results[possible_probes, on = "gene"],
         snp_pos = snp_pos,
@@ -157,11 +157,19 @@ system.time(
         risk_scores = loci,
         sum_stats = sum_stats,
         N1 = as.numeric(arguments$n)
+      ),
+      error = function(e) e
       )
+      if (inherits(res, "error")) {
+        return(list(summary = data.table(), result = data.table()))
+      } else {
+        return(res)
+      }
     },
     mc.cores = 4
   )
 )
+
 fwrite(
   rbindlist(mclapply(result, function(res) res$summary, mc.cores = 4)),
   glue("{arguments$out}_pd_snp_colocalization_ph4.txt.gz"),

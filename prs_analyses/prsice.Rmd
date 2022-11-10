@@ -132,34 +132,26 @@ ggplot(betas_combat[, 1:5] %>% as.data.table(keep.rownames = T) %>% melt(id.vars
 
 ### Match DNA, PRS, and metadata @TODO fix this after update of PRS etc.
 ```{r}
-prsice_best <- fread("prsice_data/TERRE_PRSice.best")[match(colnames(betas_combat), IID,nomatch=0),.(best=PRS)]
-prsice_all <- cbind(
-  fread("prsice_data/TERRE_PRSice.all_score")[match(colnames(betas_combat), IID,nomatch=0), .(FID, IID, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)],
-  prsice_best
-)
+# prsice_best=0.00030005
+prsice_all <- fread("prsice_data/TERRE_PRSice.all_score")[match(colnames(betas_combat), IID,nomatch=0), .(FID, IID, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.00030005`,`Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
 covariate <- covariate[match(colnames(betas_combat), IID)]
 all(covariate$IID == colnames(betas_combat))
 all(covariate$IID == prsice_all$IID)
 
 covariate_male <- covariate[sex == 1] %>% select(-sex)
 betas_male <- betas_combat[, covariate_male$IID]
-prsice_male_best <- fread("prsice_nalls_male_data/TERRE_PRSice_nalls_male.best")[match(colnames(betas_male), IID,nomatch=0),.(best=PRS)]
-prsice_male_all <- cbind(
-  fread("prsice_nalls_male_data/TERRE_PRSice_nalls_male.all_score")[match(colnames(betas_male), IID,nomatch=0), .(FID, IID, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)],
-  prsice_male_best
-)
+# best = 0.0335001
+prsice_male_all <-fread("prsice_nalls_male_data/TERRE_PRSice_nalls_male.all_score")[match(colnames(betas_male), IID,nomatch=0), .(FID, IID, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.0335001`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+
 covariate_male <- covariate_male[match(colnames(betas_male), IID,nomatch=0)]
 all(covariate_male$IID == colnames(betas_male))
 all(covariate_male$IID == prsice_male_all$IID)
 
-prsice_female_best <- fread("prsice_nalls_female_data/TERRE_PRSice_nalls_female.best")
-covariate_female <- covariate[sex == 0] %>% select(-sex) %>% filter(IID %in% prsice_female_best$IID)
+covariate_female <- covariate[sex == 0] %>% select(-sex) #%>% filter(IID %in% prsice_female_best$IID)
 betas_female <- betas_combat[, covariate_female$IID]
-prsice_female_best <- prsice_female_best[match(colnames(betas_female), IID,nomatch=0),.(best=PRS)]
-prsice_female_all <- cbind(
-  fread("prsice_nalls_female_data/TERRE_PRSice_nalls_female.all_score")[match(colnames(betas_female), IID,nomatch=0), .(FID, IID, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)],
-  prsice_female_best
-)
+#best = 0.00035005
+
+prsice_female_all <- fread("prsice_nalls_female_data/TERRE_PRSice_nalls_female.all_score")[match(colnames(betas_female), IID,nomatch=0), .(FID, IID, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00035005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
 covariate_female <- covariate_female[match(colnames(betas_female), IID,nomatch=0)]
 all(covariate_female$IID == colnames(betas_female))
 all(covariate_female$IID == prsice_female_all$IID)
@@ -219,13 +211,13 @@ hits_by_thresh_bonf_female <- rbindlist(hits_female, idcol = "threshold", fill =
 ```{r}
 to_plot <- rbind(
   hits_by_thresh_bonf[, .(hits = .N, Sex = "Cross-sex"), by = threshold] %>%
-    mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")),
+    mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4",`Pt_0.00030005`="3e-4",`Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")),
   hits_by_thresh_bonf_male[, .(hits = .N, Sex = "Male"), by = threshold] %>%
-    mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")),
+    mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.0335001`="3.4e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")),
   hits_by_thresh_bonf_female[, .(hits = .N, Sex = "Female"), by = threshold] %>%
-    mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0"))
+    mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4",`Pt_0.00035005`="3.5e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0"))
 ) %>% mutate(Sex = factor(Sex, levels = c("Cross-sex", "Male", "Female")))
-plot_pos <- position_dodge(width = 1)
+plot_pos <-position_dodge2(width = 0.9, preserve = "single")
 ggplot(to_plot, aes(threshold, hits, fill = Sex, label = hits)) +
   geom_text(position = plot_pos, vjust = -0.25) +
   geom_col(position = plot_pos) +
@@ -310,7 +302,7 @@ ggplot(prs_plot_data,aes(prs,dnam,color=Sex,shape = PD,group=Sex)) +
   geom_point(size=3)+
   geom_smooth(method="lm",se=F)+
   labs(y=bquote("Methylation"~beta),x="Parkinson's GRS")+
-  scale_color_manual(values=c("Male"="lightblue","Female"="lightpink")) + 
+  scale_color_manual(values=c("Male"="lightblue","Female"="lightpink")) +
   theme_minimal(base_size=20)
 ```
 

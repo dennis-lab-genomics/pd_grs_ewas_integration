@@ -62,132 +62,134 @@ abline(v = qvalres$pi0)
 pi0est(as.numeric(to_check_replication$`p-value.x`) / 0.25)
 ```
 
-## Colocalization with parkinson's loci
-```{r colocalization, eval=FALSE}
-probe_pos <- fread("terre_data/probe_pos.txt")
-snp_pos <- fread("terre_data/snp_pos.txt", key = "SNP")
-methy <- fread("~/prs_ewas_integration/cis_mQTL_analyses/terre_data/methylation_combat.txt", key = "cpg")
-sum_stats <- fread("~/nallsEtAl2019_excluding23andMe_allVariants.tab.gz", key = "SNP")
-risk_scores <- read_xlsx("~/pd_risk_score/Supplementary materials/Table S2. Detailed summary statistics on all nominated risk variants, known and novel_.xlsx") %>%
-  mutate(CHR = as.numeric(CHR), COUNTED = toupper(`Effect allele`), ALT = toupper(`Other allele`), POS = BP) %>%
-  dplyr::filter(!is.na(CHR))
-mQTL_results <- fread("terre_data/cis_all_impute_mQTL_results_9_methy_PC.txt.gz", key = "gene")
-
-# Grab CpG sites within 1MB of risk loci
-probes_1mb <- function(row) {
-  probe_pos[chr == paste0("chr", row$CHR) & s1 >= row$POS - 1e6 & s1 <= row$POS + 1e6]$geneid
-}
-
-localize_per_locus <- function(
-  i,
-  mQTL_results = mQTL_results,
-  snp_pos = snp_pos,
-  has_methy = TRUE,
-  N1 = 245,
-  sum_stats=sum_stats,
-  risk_scores=risk_scores, # Must contain CHR,POS, SNP, and Locus Number column
-  return_summary = TRUE) {
-  all_probes <- unlist(probes_1mb(risk_scores[i, ]))
-  probe_res <- mclapply(
-    1:length(all_probes),
-    function(j) {
-      snp_set <- mQTL_results[all_probes[j], on = "gene"][!duplicated(SNP)]
-      coords <- snp_pos[snp_set$SNP, on = "SNP"][!duplicated(SNP)]
-      tmp_stats <- sum_stats[paste0(coords$CHR, ":", coords$POS), on = "SNP"]
-      if (has_methy) {
-        mqtl_pval <- data.frame(
-          beta = snp_set$beta,
-          varbeta = snp_set$beta / snp_set$`t-stat`,
-          N = N1,
-          snp = paste0(coords$CHR, ":", coords$POS),
-          sdY = sd(methy[all_probes[j], -c(1), on = "cpg"]),
-          type = "quant",
-          stringsAsFactors = F
-        )
-      } else {
-        mqtl_pval <- data.frame(
-          beta = snp_set$beta,
-          N = N1,
-          snp = paste0(coords$CHR, ":", coords$POS),
-          MAF = tmp_stats$freq,
-          pvalues = snp_set$`p-value`,
-          type = "quant",
-          stringsAsFactors = F
-        )
-      }
-      gwas_pval <- data.frame(
-        pvalues = tmp_stats$p,
-        N = tmp_stats$N_cases + tmp_stats$N_controls,
-        s = tmp_stats$N_cases / (tmp_stats$N_cases + tmp_stats$N_controls),
-        snp = tmp_stats$SNP,
-        type = "cc",
-        MAF = tmp_stats$freq,
-        stringsAsFactors = F
-      )
-      mqtl_pval <- as.list(mqtl_pval[!is.na(gwas_pval$pvalues), ])
-      mqtl_pval$N <- unique(mqtl_pval$N)[1]
-      mqtl_pval$type <- unique(mqtl_pval$type)[1]
-      gwas_pval <- as.list(gwas_pval[!is.na(gwas_pval$pvalues), ])
-      gwas_pval$N <- unique(gwas_pval$N)[1]
-      gwas_pval$type <- unique(gwas_pval$type)[1]
-      print(gwas_pval)
-      print(mqtl_pval)
-      if (length(gwas_pval$snp) != 0 | length(mqtl_pval$snp != 0)) {
-        res <- coloc.abf(mqtl_pval, gwas_pval)
-        if (return_summary) {
-          return(cbind(t(data.frame(res$summary)), data.frame(probe = all_probes[j], locus = risk_scores$`Locus Number`[i], locus_snp = risk_scores$SNP[i])))
-        } else {
-          return(cbind(res$results, data.frame(probe = all_probes[j], locus = risk_scores$`Locus Number`[i], locus_snp = risk_scores$SNP[i])))
-        }
-      } else {
-        return(data.frame())
-      }
-    },
-    mc.cores = 4
-  )
-  return(rbindlist(probe_res))
-}
-```
-
+# Colocalization with parkinson's loci and overlap with ewas hits
 ```{r}
-system.time(res1_pval <- rbindlist(mclapply(1:nrow(risk_scores), function(i) localize_per_locus(i, mQTL_results = mQTL_results, snp_pos = snp_pos, has_methy = FALSE, N1 = 245), mc.cores = 4)))
-
-system.time(res1_SNP <- rbindlist(mclapply(1:nrow(risk_scores), function(i) localize_per_locus(i, mQTL_results = mQTL_results, snp_pos = snp_pos, has_methy = FALSE, N1 = 245, return_summary = FALSE), mc.cores = 4)))
-fwrite(res1_SNP, "mqtl_pd_snp_colocalization.txt.gz", sep = "\t", row.names = F, quote = F)
-fwrite(res1_pval, "mqtl_pd_snp_colocalization.txt", sep = "\t", row.names = F, quote = F)
+load("../prs_analyses/prs_nalls_cross_w_sex_stratified.RData")
+manifest <- IlluminaHumanMethylationEPICanno.ilm10b4.hg19::Other %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "name")
 ```
 
-## Sex stratified colocalization
+## cross-sex GWAS
+```{r}
+cross_coloc <- fread("cross_mqtl_cross_sumstats_pd_snp_colocalization_ph4.txt.gz")
+male_coloc <- fread("male_mqtl_cross_sumstats_pd_snp_colocalization_ph4.txt.gz")
+female_coloc <- fread("female_mqtl_cross_sumstats_pd_snp_colocalization_ph4.txt.gz")
+```
+### Cross-sex mQTL
+```{r}
+sig_bonf_cross <- top_prs_hits %>% filter(P.Value < (0.05 / n()))
+cross_coloc %>%
+  filter(PP.H4.abf > 0.9,probe %in% sig_bonf_cross$ID) %>%
+  group_by(probe) %>%
+  slice(which.max(PP.H4.abf)) %>%
+  left_join(manifest,by = c("probe"="name"))
+
+cross_coloc %>%
+  filter(PP.H4.abf < 0.9,probe %in% sig_bonf_cross$ID) %>%
+  group_by(probe) %>%
+  slice(which.max(PP.H4.abf)) %>%
+  left_join(manifest,by = c("probe"="name"))
+
+cross_coloc %>%
+  filter(PP.H4.abf > 0.9,!probe %in% sig_bonf_cross$ID) %>%
+  group_by(probe) %>%
+  slice(which.max(PP.H4.abf)) %>%
+  left_join(manifest,by = c("probe"="name"))
+```
+### Male mQTL
+```{r}
+sig_bonf_male <- top_male_prs_hits %>% filter(P.Value < (0.05 / n()))
+male_coloc %>%
+  filter(PP.H4.abf > 0.9,probe %in% sig_bonf_male$ID) %>%
+  group_by(probe) %>%
+  slice(which.max(PP.H4.abf)) %>%
+  left_join(manifest,by = c("probe"="name"))
+
+male_coloc %>%
+  filter(PP.H4.abf < 0.9,probe %in% sig_bonf_male$ID) %>%
+  group_by(probe) %>%
+  slice(which.max(PP.H4.abf)) %>%
+  left_join(manifest,by = c("probe"="name"))
+
+male_coloc %>%
+  filter(PP.H4.abf > 0.9,!probe %in% sig_bonf_male$ID) %>%
+  group_by(probe) %>%
+  slice(which.max(PP.H4.abf)) %>%
+  left_join(manifest,by = c("probe"="name"))
+```
+
+### Female mQTL
+```{r}
+sig_bonf_female <- top_female_prs_hits %>% filter(P.Value < (0.05 / n()))
+female_coloc %>%
+  filter(PP.H4.abf > 0.9,probe %in% sig_bonf_female$ID) %>%
+  group_by(probe) %>%
+  slice(which.max(PP.H4.abf)) %>%
+  left_join(manifest,by = c("probe"="name"))
+
+female_coloc %>%
+  filter(PP.H4.abf < 0.9,probe %in% sig_bonf_female$ID) %>%
+  group_by(probe) %>%
+  slice(which.max(PP.H4.abf)) %>%
+  left_join(manifest,by = c("probe"="name"))
+
+female_coloc %>%
+  filter(PP.H4.abf > 0.9,!probe %in% sig_bonf_female$ID) %>%
+  group_by(probe) %>%
+  slice(which.max(PP.H4.abf)) %>%
+  left_join(manifest,by = c("probe"="name"))
+```
+
+## Sex stratified GWAS colocalization
+```{r}
+load("../prs_analyses/prs_blau_sex_stratified.RData")
+male_stratified_coloc <- fread("male_mqtl_male_sumstats_pd_snp_colocalization_ph4.txt.gz")
+female_stratified_coloc <- fread("female_mqtl_female_sumstats_pd_snp_colocalization_ph4.txt.gz")
+```
+
 See [Script](run_colocalization.R).
 ### Male results at CpG level
 ```{r}
-male_results <- fread("male_mqtl_male_sumstats_pd_snp_colocalization_ph4.txt.gz")
-```
-Hits at $P(H_4) > 0.9$
-```{r}
-male_results[PP.H4.abf > 0.9,.(unique_loci = uniqueN(locus), unique_probes= uniqueN(probe))]
-male_results[PP.H4.abf > 0.9,.(uniqueN(probe)),by="locus"]
-male_results[PP.H4.abf > 0.9,.(uniqueN(locus)),by="probe"]
-male_results[PP.H4.abf > 0.9]
+sig_FDR_male <- top_male_ewas %>% filter(adj.P.Val < 0.25)
+male_stratified_coloc %>%
+  filter(PP.H4.abf > 0.9,probe %in% sig_FDR_male$ID) %>%
+  group_by(probe) %>%
+  slice(which.max(PP.H4.abf)) %>%
+  left_join(manifest,by = c("probe"="name"))
 
-```
-```{r}
-ggplot(male_results_snp[,.(loci_per_snp=uniqueN(locus)), by = "snp"],aes(loci_per_snp))+
-  geom_histogram(bins=100)
+male_stratified_coloc %>%
+  filter(PP.H4.abf < 0.9,probe %in% sig_FDR_male$ID) %>%
+  group_by(probe) %>%
+  slice(which.max(PP.H4.abf)) %>%
+  left_join(manifest,by = c("probe"="name"))
+
+male_stratified_coloc %>%
+  filter(PP.H4.abf > 0.9,!probe %in% sig_FDR_male$ID) %>%
+  group_by(probe) %>%
+  slice(which.max(PP.H4.abf)) %>%
+  left_join(manifest,by = c("probe"="name"))
 ```
 
 ```{r}
-male_results_snp <- fread("male_mqtl_male_sumstats_pd_snp_colocalization_per_snp.txt.gz")
-```
+sig_FDR_female <- top_female_ewas %>% filter(adj.P.Val < 0.25)
+female_stratified_coloc %>%
+  filter(PP.H4.abf > 0.9,probe %in% sig_FDR_female$ID) %>%
+  group_by(probe) %>%
+  slice(which.max(PP.H4.abf)) %>%
+  left_join(manifest,by = c("probe"="name"))
 
+female_stratified_coloc %>%
+  filter(PP.H4.abf < 0.9,probe %in% sig_FDR_female$ID) %>%
+  group_by(probe) %>%
+  slice(which.max(PP.H4.abf)) %>%
+  left_join(manifest,by = c("probe"="name"))
 
-### Female
-```{r}
-female_results <- fread("female_mqtl_female_sumstats_pd_snp_colocalization_ph4.txt.gz")
-female_results[PP.H4.abf > 0.9,.(unique_loci = uniqueN(locus), unique_probes= uniqueN(probe))]
-female_results[PP.H4.abf > 0.9,.(uniqueN(probe)),by="locus"]
-female_results[PP.H4.abf > 0.9,.(uniqueN(locus)),by="probe"]
-female_results[PP.H4.abf > 0.9]
+female_stratified_coloc %>%
+  filter(PP.H4.abf > 0.9,!probe %in% sig_FDR_female$ID) %>%
+  group_by(probe) %>%
+  slice(which.max(PP.H4.abf)) %>%
+  left_join(manifest,by = c("probe"="name"))
 ```
 
 ### male vs female overlap
@@ -237,6 +239,7 @@ plot_probes_sex(male)
 ```{r}
 plot_probes_sex(female)
 ```
+###
 ## Mendelian Randomization
 ```{r}
 run_mr_per_cpg <- function(mQTL,cur_gwas){
@@ -256,13 +259,13 @@ run_mr_per_cpg <- function(mQTL,cur_gwas){
     rownames(cor_mat) <- as.character(cor_table$RS_number)
     cur_mQTL <- cur_mQTL[rownames(cor_mat), on="V1"]
     cur_gwas <- cur_gwas[rownames(cor_mat), on="SNP"]
-    
+
     EggerObject <- try(
       mr_egger(
         mr_input(
-          bx = cur_mQTL$V3, 
+          bx = cur_mQTL$V3,
           bxse = cur_mQTL$V3/cur_mQTL$V4 ,
-          by = cur_gwas$b, 
+          by = cur_gwas$b,
           byse = cur_gwas$se,
           correlation = cor_mat
         ),
@@ -280,4 +283,3 @@ run_mr_per_cpg <- function(mQTL,cur_gwas){
   }
 }
 ```
-
