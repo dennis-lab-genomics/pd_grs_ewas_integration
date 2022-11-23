@@ -82,14 +82,15 @@ pesticide_interactions[, c("GxEq", "Eq") := .(p.adjust(GxEp, method = "fdr"), p.
 ## Pesticide interactions within GRS hits
 
 ```{r}
-cross <- fread("prs_interaction_results_cross.txt")[,c("GxEq", "Eq") := .(p.adjust(GxEp, method = "fdr"), p.adjust(Ep, method = "fdr"))]
-male <- fread("prs_interaction_results_male.txt")[,c("GxEq", "Eq") := .(p.adjust(GxEp, method = "fdr"), p.adjust(Ep, method = "fdr"))]
-female <- fread("prs_interaction_results_female.txt")[,c("GxEq", "Eq") := .(p.adjust(GxEp, method = "fdr"), p.adjust(Ep, method = "fdr"))]
+load("prs_nalls_cross_w_sex_stratified.RData")
+cross <- fread("prs_interaction_results_cross.txt")[cpg %in% top_prs_hits[top_prs_hits$adj.P.Val < 0.05,]$ID][,c("GxEq", "Eq") := .(p.adjust(GxEp, method = "fdr"), p.adjust(Ep, method = "fdr"))]
+male <- fread("prs_interaction_results_male.txt")[cpg %in% top_male_prs_hits[top_male_prs_hits$adj.P.Val < 0.05,]$ID][,c("GxEq", "Eq") := .(p.adjust(GxEp, method = "fdr"), p.adjust(Ep, method = "fdr"))]
+female <- fread("prs_interaction_results_female.txt")[cpg %in% top_female_prs_hits[top_female_prs_hits$adj.P.Val < 0.05,]$ID][,c("GxEq", "Eq") := .(p.adjust(GxEp, method = "fdr"), p.adjust(Ep, method = "fdr"))]
 cross %>% arrange(GxEq) %>% filter(GxEq < 0.25)
 cross %>% arrange(GxEq) %>% filter(Eq < 0.25)
 
-female %>% arrange(GxEq) %>% filter(GxEq < 0.25)
-female %>% arrange(GxEq) %>% filter(Eq < 0.25)
+male %>% arrange(GxEq) %>% filter(GxEq < 0.25)
+male %>% arrange(GxEq) %>% filter(Eq < 0.25)
 
 female %>% arrange(GxEq) %>% filter(GxEq < 0.25)
 female %>% arrange(GxEq) %>% filter(Eq < 0.25)
@@ -130,6 +131,13 @@ all(prs_mat$IID == colnames(mvals_combat))
 
 ```{r}
 corrplot::corrplot(cor(model.matrix(~.-1,data=covars)),type = "upper",diag = FALSE)
+corrplot::corrplot(
+  cor(
+    model.matrix(~.-1,data=covars) %>%  as.data.frame() %>%select(contains("PC"),-contains("GPC")),
+    model.matrix(~.-1,data=covars) %>% as.data.frame() %>% select(age,alcohol,head_trauma,sex,smoking),
+    use="pairwise"
+  ),
+  diag = FALSE)
 ```
 
 ## Interaction function
@@ -157,4 +165,60 @@ alcohol_res <- fit_interaction(mvals_combat,"alcohol")
 smoking_res <- fit_interaction(mvals_combat,"smoking")
 save(list=c("sex_res","age_res","head_trauma_res","alcohol_res","smoking_res"),file="non-pesticide-interaction-results.RData")
 
+```
+### Testing on hits
+```{r}
+load("non-pesticide-interaction-results.RData")
+
+summarize_limma_res <- function(limma_res){
+  interaction <- limma_res$interaction_effect[(top_prs_hits %>% filter(adj.P.Val < 0.05))$ID,] %>%
+    rownames_to_column(var="ID") %>%
+    mutate(FDR=p.adjust(P.Value,method="BH"), effect = "Interaction") %>%
+    filter(FDR < 0.05)
+  main <- limma_res$main[(top_prs_hits %>% filter(adj.P.Val < 0.05))$ID,] %>%
+    rownames_to_column(var="ID") %>%
+    mutate(FDR=p.adjust(P.Value,method="BH"),effect= "Main") %>%
+    filter(FDR < 0.05)
+  return(rbind(interaction,main))
+}
+to_summarize <- list(
+  "Sex"=sex_res,
+  "Age"=age_res,
+  "Head Trauma"=head_trauma_res,
+  "Alcohol"=alcohol_res,
+  "Smoking"=smoking_res
+)
+(non_pest_summary <- rbindlist(lapply(to_summarize,summarize_limma_res),idcol="Environment"))
+non_pest_summary %>% count(unique("ID"))
+```
+
+```{r}
+cpg_pos <- IlluminaHumanMethylationEPICanno.ilm10b4.hg19::Locations %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "ID")
+manifest <- IlluminaHumanMethylationEPICanno.ilm10b4.hg19::Other %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "ID")
+(annotated_non_pest <-non_pest_summary %>%
+  left_join(manifest,by="ID") %>%
+  left_join(cpg_pos,by="ID") %>%
+  select(ID,UCSC_RefGene_Name,chr,pos,colnames(non_pest_summary)) %>% mutate(UCSC_RefGene_Name = gsub(";.*","",UCSC_RefGene_Name)) %>% arrange(FDR))
+```
+```{r}
+annotated_non_pest %>% dplyr::count(UCSC_RefGene_Name,effect,Environment) %>% arrange(-n)
+```
+```{r}
+for(i in 1:nrow(annotated_non_pest)){
+  cpg <- annotated_non_pest[order(-annotated_non_pest$FDR)]$ID[i]
+  gene <- annotated_non_pest[order(-annotated_non_pest$FDR)]$UCSC_RefGene_Name[i]
+  df<- cbind(data.frame(methy=lumi::m2beta(mvals_combat[cpg,])),covars) %>% mutate(Sex=factor(ifelse(sex==1,"Male","Female"),levels=c("Male","Female")))
+  p <- ggplot(df,aes(SCORE1_AVG,methy,color=Sex)) +
+    geom_smooth(method="lm",se=TRUE)+
+    geom_point() +
+    scale_color_manual(values=c("Male"="lightblue","Female"="pink"))+
+    labs(x="GRS", y=bquote("Methylation"~beta))+
+    ggtitle(bquote("Probe: "~.(cpg)~"; Gene: "~italic(.(gene))))+
+    theme_minimal()
+  print(p)
+}
 ```

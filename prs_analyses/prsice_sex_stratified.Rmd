@@ -276,6 +276,7 @@ top_male_ewas <- data.table(topTable(prs_fit_male, coef = 2, adjust.method = "BH
 save(list=c("top_male_ewas","top_female_ewas"),file="prs_blau_sex_stratified.RData")
 ```
 ```{r}
+load("prs_blau_sex_stratified.RData")
 library(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)
 annotation <- minfi::getAnnotation(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)
 annotation$chr <- factor(annotation$chr,levels=c(paste0("chr",1:22),"chrX","chrY"))
@@ -284,6 +285,22 @@ top_female_ewas <- top_female_ewas[order(annotation[ID,]$chr,annotation[ID,]$pos
 ```
 
 ```{r}
+display_venn <- function(x, ...) {
+  library(VennDiagram)
+  grid.newpage()
+  venn_object <- venn.diagram(x, filename = NULL, ...)
+  grid.draw(venn_object)
+}
+
+display_venn(list(`Cross-sex` = hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID, Male = hits_by_thresh_bonf_male[threshold == "Pt_0.00100005"]$ID, Female = hits_by_thresh_bonf_female[threshold == "Pt_5.005e-05"]$ID), fill = c("gray80", "lightblue", "lightpink"))
+male_ids <- hits_by_thresh_bonf_male[threshold == "Pt_5e-08"]$ID
+cross_ids <- hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID
+male_ids[!male_ids %in% cross_ids]
+```
+```{r}
+library(hudson)
+options(ggrepel.max.overlaps = Inf)
+
 gmirror(
   top=top_male_ewas[,.(
       SNP=ID,
@@ -297,12 +314,12 @@ gmirror(
       POS = annotation[top_female_ewas$ID,]$pos,
       pvalue=P.Value
     )],
-  annotate_p = c(max(top_male_ewas[adj.P.Val<0.26]$P.Value),max(top_female_ewas[adj.P.Val<0.25]$P.Value)),
+  annotate_p = c(max(top_male_ewas[adj.P.Val<0.25]$P.Value)+1e-8,max(top_female_ewas[adj.P.Val<0.25]$P.Value)+1e-8),
   tline =  max(top_male_ewas[adj.P.Val<0.25]$P.Value),
   bline =  max(top_female_ewas[adj.P.Val<0.25]$P.Value),
-  highlight_p = c(max(top_male_ewas[adj.P.Val<0.26]$P.Value),max(top_female_ewas[adj.P.Val<0.25]$P.Value)),
-  toptitle="Male-stratified",
-  bottomtitle ="Female-stratified",
+  highlight_p = c(max(top_male_ewas[adj.P.Val<0.25]$P.Value)+1e-8,max(top_female_ewas[adj.P.Val<0.25]$P.Value)+1e-8),
+  toptitle="Male",
+  bottomtitle ="Female",
   highlighter="green",
   background="white"
 )

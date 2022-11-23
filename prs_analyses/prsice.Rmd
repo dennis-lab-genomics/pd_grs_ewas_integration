@@ -180,7 +180,7 @@ hits <- foreach(prs_thresh = colnames(prs_mat)) %dopar% {
   design_prs <- model.matrix(~., data = cbind(prs_mat[, ..prs_thresh], cov_mat))
   prs_fit <- lmFit(mvalues, design_prs)
   prs_fit <- eBayes(prs_fit)
-  topTable(prs_fit, coef = 2, adjust.method = "bonf", p.value = 0.05, number = Inf, genelist = rownames(mvalues))
+  topTable(prs_fit, coef = 2, adjust.method = "BH", p.value = 0.05, number = Inf, genelist = rownames(mvalues))
 }
 names(hits) <- colnames(prs_mat)
 hits_by_thresh_bonf <- rbindlist(hits, idcol = "threshold", fill = TRUE)
@@ -190,7 +190,7 @@ hits_male <- foreach(prs_thresh = colnames(prs_mat_male)) %dopar% {
   design_prs_male <- model.matrix(~., data = cbind(prs_mat_male[, ..prs_thresh], cov_mat_male))
   prs_fit_male <- lmFit(mvalues_male, design_prs_male)
   prs_fit_male <- eBayes(prs_fit_male)
-  topTable(prs_fit_male, coef = 2, adjust.method = "bonf", p.value = 0.05, number = Inf, genelist = rownames(mvalues_male))
+  topTable(prs_fit_male, coef = 2, adjust.method = "BH", p.value = 0.05, number = Inf, genelist = rownames(mvalues_male))
 }
 names(hits_male) <- colnames(prs_mat_male)
 hits_by_thresh_bonf_male <- rbindlist(hits_male, idcol = "threshold", fill = TRUE)
@@ -200,7 +200,7 @@ hits_female <- foreach(prs_thresh = colnames(prs_mat_female)) %dopar% {
   design_prs_female <- model.matrix(~., data = cbind(prs_mat_female[, ..prs_thresh], cov_mat_female))
   prs_fit_female <- lmFit(mvalues_female, design_prs_female)
   prs_fit_female <- eBayes(prs_fit_female)
-  topTable(prs_fit_female, coef = 2, adjust.method = "bonf", p.value = 0.05, number = Inf, genelist = rownames(mvalues_female))
+  topTable(prs_fit_female, coef = 2, adjust.method = "BH", p.value = 0.05, number = Inf, genelist = rownames(mvalues_female))
 }
 names(hits_female) <- colnames(prs_mat_female)
 hits_by_thresh_bonf_female <- rbindlist(hits_female, idcol = "threshold", fill = TRUE)
@@ -210,13 +210,14 @@ hits_by_thresh_bonf_female <- rbindlist(hits_female, idcol = "threshold", fill =
 ### Plotting EWAS vs Threshold Experiment by Sex
 ```{r}
 to_plot <- rbind(
-  hits_by_thresh_bonf[, .(hits = .N, Sex = "Cross-sex"), by = threshold] %>%
-    mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4",`Pt_0.00030005`="3e-4",`Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")),
-  hits_by_thresh_bonf_male[, .(hits = .N, Sex = "Male"), by = threshold] %>%
-    mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.0335001`="3.4e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")),
-  hits_by_thresh_bonf_female[, .(hits = .N, Sex = "Female"), by = threshold] %>%
-    mutate(threshold = recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4",`Pt_0.00035005`="3.5e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0"))
-) %>% mutate(Sex = factor(Sex, levels = c("Cross-sex", "Male", "Female")))
+    hits_by_thresh_bonf[, .(hits = .N, Sex = "Cross-sex"), by = threshold],
+    hits_by_thresh_bonf_male[, .(hits = .N, Sex = "Male"), by = threshold],
+    hits_by_thresh_bonf_female[, .(hits = .N, Sex = "Female"), by = threshold]
+  )%>%
+  mutate(
+    Sex = factor(Sex, levels = c("Cross-sex", "Male", "Female")),
+    threshold=recode_factor(threshold, `Pt_0.0219001` = "0.0219", `Pt_5e-08` = "5e-8", `Pt_5.005e-05` = "5e-5", `Pt_0.00010005` = "1e-4",`Pt_0.00030005`="3.0e-4",`Pt_0.00035005`="3.5e-4", `Pt_0.00100005` = "1e-3", `Pt_0.0101501` = "1e-2", `Pt_0.1` = "0.1", `Pt_0.2` = "0.2", `Pt_0.3` = "0.3", `Pt_0.4` = "0.4", `Pt_0.5` = "0.5", `Pt_1` = "1.0")
+  )
 plot_pos <-position_dodge2(width = 0.9, preserve = "single")
 ggplot(to_plot, aes(threshold, hits, fill = Sex, label = hits)) +
   geom_text(position = plot_pos, vjust = -0.25) +
@@ -247,7 +248,7 @@ get_full_fit <- function(prs_mat,cov_mat,mvalues){
   top_design_prs <- model.matrix(~., data = cbind(prs_mat[, `Pt_5e-08`], cov_mat))
   top_prs_fit <- lmFit(mvalues, top_design_prs)
   top_prs_fit <- eBayes(top_prs_fit)
-  top_prs_hits <- topTable(top_prs_fit, coef = 2, adjust.method = "bonf", number = Inf, genelist = rownames(mvalues))
+  top_prs_hits <- topTable(top_prs_fit, coef = 2, adjust.method = "BH", number = Inf, genelist = rownames(mvalues))
 }
 top_prs_hits <- get_full_fit(prs_mat,cov_mat,mvalues)
 top_male_prs_hits <- get_full_fit(prs_mat_male, cov_mat_male, mvalues_male)
@@ -306,29 +307,22 @@ ggplot(prs_plot_data,aes(prs,dnam,color=Sex,shape = PD,group=Sex)) +
   theme_minimal(base_size=20)
 ```
 
-## go enrichment?
-```{r,eval=FALSE}
-library(gprofiler2)
-cross_sex <- unique(gsub(";.*","",manifest[manifest$name %in% hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID,]$UCSC_RefGene_Name))
-background <- unique(gsub(";.*","",manifest$UCSC_RefGene_Name))
-gost_res <- gost(query=cross_sex,custom_bg = background)
-gostplot(gost_res)
-```
+
 ```{r}
 cpg_pos <- IlluminaHumanMethylationEPICanno.ilm10b4.hg19::Locations %>%
   as.data.frame() %>%
   rownames_to_column(var = "name")
-male_annot_cpg <- (prs_annot_male %>% filter(adj.P.Val < 0.25) %>% left_join(cpg_pos,by=c("ID"="name")) %>% group_by(chr) %>% top_n(-10,P.Value))$ID
-female_annot_cpg <- (prs_annot_female %>% filter(adj.P.Val < 0.25) %>% left_join(cpg_pos,by=c("ID"="name")) %>% group_by(chr) %>% top_n(-10,P.Value))$ID
+male_annot_cpg <- (prs_annot_male %>% filter(adj.P.Val < 0.05) %>% left_join(cpg_pos,by=c("ID"="name")) %>% group_by(chr) %>% top_n(-10,P.Value))$ID
+female_annot_cpg <- (prs_annot_female %>% filter(adj.P.Val < 0.05) %>% left_join(cpg_pos,by=c("ID"="name")) %>% group_by(chr) %>% top_n(-10,P.Value))$ID
 library(hudson)
 options(ggrepel.max.overlaps = Inf)
 gmirror(
   prs_annot_male[,.(SNP=ID,CHR=gsub("chr","",cpg_pos[match(ID,cpg_pos$name),]$chr),POS=cpg_pos[match(ID,cpg_pos$name),]$pos,pvalue=P.Value)],
   prs_annot_female[,.(SNP=ID,CHR=gsub("chr","",cpg_pos[match(ID,cpg_pos$name),]$chr),POS=cpg_pos[match(ID,cpg_pos$name),]$pos,pvalue=P.Value)],
   annotate_snp = c(male_annot_cpg,female_annot_cpg),
-  tline =  max(prs_annot_male[adj.P.Val<0.25]$P.Value),
-  bline =  max(prs_annot_female[adj.P.Val<0.25]$P.Value),
-  highlight_p = c(max(prs_annot_male[adj.P.Val<0.25]$P.Value),max(prs_annot_female[adj.P.Val<0.25]$P.Value)),
+  tline =  max(prs_annot_male[adj.P.Val<0.05]$P.Value),
+  bline =  max(prs_annot_female[adj.P.Val<0.05]$P.Value),
+  highlight_p = c(max(prs_annot_male[adj.P.Val<0.05]$P.Value)+1e-8,max(prs_annot_female[adj.P.Val<0.05]$P.Value)+1e-8),
   toptitle="Male",
   bottomtitle ="Female",
   highlighter="green",
@@ -337,29 +331,75 @@ gmirror(
 
 ```
 
-# Manhattan plot vs GWAS manhattan plot
+# Manhattan plot of Cross-sex
 ```{r,eval=FALSE}
 library(qqman)
 
 copy_annot <- prs_annot[cpg_pos, on = c(ID = "name")] %>%
-  mutate(chr = as.numeric(recode(gsub("chr", "", chr),X="23",Y="24")))
-to_plot <- copy_annot[, .(SNP = gene, CHR = chr, BP = pos, P = P.Value, FDR = adj.P.Val)][!is.na(P)]
-manhattan(to_plot,
-  annotatePval = max(to_plot[FDR < 0.05]$P),
-  annotateTop = TRUE,
-  genomewideline = min(-log10(to_plot[FDR < 0.05]$P)),
-  suggestiveline = FALSE
-)
-manhattan(to_plot[CHR == 17],
-  annotatePval = max(to_plot[FDR < 0.05]$P),
-  annotateTop = FALSE,
-  genomewideline = min(-log10(to_plot[FDR < 0.05]$P)),
-  suggestiveline = FALSE
-)
-qq(to_plot$P)
+  mutate(chr = factor(chr,levels=paste0("chr",c(1:22,"X","Y"))))
+to_plot <- copy_annot[, .(SNP = ID, chr,bp = pos, p = P.Value, FDR = adj.P.Val)][!is.na(p)]
+data_cum <- to_plot %>%
+  group_by(chr) %>%
+  summarise(max_bp = max(bp)) %>%
+  mutate(bp_add = dplyr::lag(cumsum(as.numeric(max_bp)), default = 0)) %>%
+  select(chr, bp_add)
+to_plot <- to_plot %>%
+  left_join(data_cum, by = "chr") %>%
+  mutate(bp_cum = bp + bp_add)
+annotated <- (to_plot%>% filter(FDR < 0.05) %>% group_by(chr) %>% top_n(-10,p))$SNP
+axis_set <- to_plot %>%
+  group_by(chr) %>%
+  summarize(center = mean(bp_cum))
+
+ylim <- to_plot %>%
+  filter(p == min(p)) %>%
+  mutate(ylim = abs(floor(log10(p))) + 2) %>%
+  pull(ylim)
+ggplot(to_plot, aes(x = bp_cum, y = -log10(p),
+                                  color = as_factor(chr))) +
+  geom_hline(yintercept = -log10(max(to_plot[FDR < 0.05]$p)), color = "red") +
+  geom_point() +
+  geom_point(data=to_plot[FDR < 0.05],color="green")+
+  geom_text_repel(data=to_plot[SNP %in% annotated],mapping=aes(label=SNP),color="black",size=3)+
+  scale_x_continuous(label = axis_set$chr, breaks = axis_set$center) +
+  scale_y_continuous(expand = c(0,0), limits = c(0, ylim)) +
+  scale_color_manual(values = rep(c("#AAAAAA", "#4D4D4D"), unique(length(axis_set$chr)))) +
+  labs(x = NULL,
+       y = bquote("-log"[10]~"(p-value)")) +
+  theme_classic() +
+  theme(
+    legend.position = "none",
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    axis.text.x = element_text(angle = 60, size = 8, vjust = 0.5)
+  )
+annotated17 <- (to_plot%>% filter(chr=="chr17",FDR < 0.05) %>% mutate(bins= cut(bp,breaks = seq(0,8e7,1e7))) %>% group_by(bins)  %>% top_n(-20,p))$SNP
+
+ggplot(to_plot[chr == "chr17"], aes(x = bp, y = -log10(p),
+                                  color = as_factor(chr))) +
+  geom_hline(yintercept = -log10(max(to_plot[FDR < 0.05]$p)), color = "red") +
+  geom_point() +
+  geom_point(data=to_plot[chr == "chr17" & FDR < 0.05],color="green")+
+  geom_text_repel(data=to_plot[SNP %in% annotated17],mapping=aes(label=SNP),color="black",size=3)+
+  scale_y_continuous(expand = c(0,0), limits = c(0, ylim)) +
+  scale_color_manual(values = rep(c("#AAAAAA", "#4D4D4D"), unique(length(axis_set$chr)))) +
+  labs(x = "BP",
+     y = bquote("-log"[10]~"(p-value)")) +
+  theme_classic()+
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 60, size = 8, vjust = 0.5)
+  )
 ```
 
-
+## go enrichment?
+```{r,eval=FALSE}
+library(gprofiler2)
+cross_sex <- unique(gsub(";.*","",manifest[manifest$name %in% hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID,]$UCSC_RefGene_Name))
+background <- unique(gsub(";.*","",manifest$UCSC_RefGene_Name))
+gost_res <- gost(query=cross_sex,custom_bg = background)
+gostplot(gost_res)
+```
 ## DMRs
 
 ```{r}

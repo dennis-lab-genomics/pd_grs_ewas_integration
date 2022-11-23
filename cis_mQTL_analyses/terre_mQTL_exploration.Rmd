@@ -68,6 +68,10 @@ load("../prs_analyses/prs_nalls_cross_w_sex_stratified.RData")
 manifest <- IlluminaHumanMethylationEPICanno.ilm10b4.hg19::Other %>%
   as.data.frame() %>%
   rownames_to_column(var = "name")
+
+positions <- IlluminaHumanMethylationEPICanno.ilm10b4.hg19::Locations %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "name")
 ```
 
 ## cross-sex GWAS
@@ -78,12 +82,18 @@ female_coloc <- fread("female_mqtl_cross_sumstats_pd_snp_colocalization_ph4.txt.
 ```
 ### Cross-sex mQTL
 ```{r}
-sig_bonf_cross <- top_prs_hits %>% filter(P.Value < (0.05 / n()))
+sig_bonf_cross <- top_prs_hits %>% filter(p.adjust(P.Value,method="BH") < 0.05)
 cross_coloc %>%
   filter(PP.H4.abf > 0.9,probe %in% sig_bonf_cross$ID) %>%
   group_by(probe) %>%
   slice(which.max(PP.H4.abf)) %>%
   left_join(manifest,by = c("probe"="name"))
+
+cross_coloc_probes <- cross_coloc %>%
+  filter(PP.H4.abf > 0.9,probe %in% sig_bonf_cross$ID) %>%
+  group_by(probe) %>%
+  slice(which.max(PP.H4.abf)) %>%
+  left_join(manifest,by = c("probe"="name")) %>% select(probe)
 
 cross_coloc %>%
   filter(PP.H4.abf < 0.9,probe %in% sig_bonf_cross$ID) %>%
@@ -97,6 +107,13 @@ cross_coloc %>%
   slice(which.max(PP.H4.abf)) %>%
   left_join(manifest,by = c("probe"="name"))
 ```
+```{r}
+(non_colocalized_cross <- sig_bonf_cross %>% left_join(manifest,by=c("ID" = "name"))  %>% left_join(positions,by=c("ID"="name")) %>% filter(!ID %in% cross_coloc_probes$probe) %>% arrange(chr,pos)  %>% select(ID,UCSC_RefGene_Name,chr,pos))
+
+non_colocalized_cross %>% count(gsub(";.*","",UCSC_RefGene_Name))
+```
+
+
 ### Male mQTL
 ```{r}
 sig_bonf_male <- top_male_prs_hits %>% filter(P.Value < (0.05 / n()))
@@ -156,7 +173,8 @@ male_stratified_coloc %>%
   filter(PP.H4.abf > 0.9,probe %in% sig_FDR_male$ID) %>%
   group_by(probe) %>%
   slice(which.max(PP.H4.abf)) %>%
-  left_join(manifest,by = c("probe"="name"))
+  left_join(manifest,by = c("probe"="name")) %>%
+  select(contains("PP.H"),probe,locus,locus_snp,UCSC_RefGene_Name)
 
 male_stratified_coloc %>%
   filter(PP.H4.abf < 0.9,probe %in% sig_FDR_male$ID) %>%
@@ -169,6 +187,16 @@ male_stratified_coloc %>%
   group_by(probe) %>%
   slice(which.max(PP.H4.abf)) %>%
   left_join(manifest,by = c("probe"="name"))
+
+
+```
+```{r}
+sig_FDR_male %>%
+  group_by(ID) %>%
+  left_join(manifest,by = c("ID"="name")) %>%
+  left_join(positions,by= c("ID"="name")) %>%
+  select(ID,chr,pos,UCSC_RefGene_Name) %>%
+  arrange(chr,pos)
 ```
 
 ```{r}
@@ -190,6 +218,18 @@ female_stratified_coloc %>%
   group_by(probe) %>%
   slice(which.max(PP.H4.abf)) %>%
   left_join(manifest,by = c("probe"="name"))
+```
+```{r}
+(sig_summary_FDR_female <- sig_FDR_female %>%
+  group_by(ID) %>%
+  left_join(manifest,by = c("ID"="name")) %>%
+  left_join(positions,by= c("ID"="name")) %>%
+  select(ID,chr,pos,UCSC_RefGene_Name)%>%
+  arrange(as.numeric(gsub("chr","",chr)),pos) )
+```
+```{r}
+fdr_female_gostres<- gprofiler2::gost(gsub(";.*","",sig_summary_FDR_female$UCSC_RefGene_Name),organism = "hsapiens",custom_bg = gsub(";.*","",manifest$UCSC_RefGene_Name),correction_method = "fdr",user_threshold = 0.1)
+gprofiler2::gostplot(fdr_female_gostres)
 ```
 
 ### male vs female overlap
@@ -239,47 +279,198 @@ plot_probes_sex(male)
 ```{r}
 plot_probes_sex(female)
 ```
-###
 ## Mendelian Randomization
 ```{r}
+library(MendelianRandomization)
+library(LDlinkR)
+library(glue)
 run_mr_per_cpg <- function(mQTL,cur_gwas){
-  mQTL <- mQTL[grepl("rs",V1)]
-  cur_gwas <- cur_gwas[mQTL$V1, on = "SNP", nomatch=0][p < 5e-8]
-  cur_mQTL <- mQTL[cur_gwas$SNP, on = "V1", nomatch=0]
-  if(nrow(cur_mQTL) <= 2){
-    return("No GWAS LOCI")
-  }else{
-    cor_table <- LDmatrix(
-      snps=cur_mQTL$V1,
-      pop="EUR",
-      genome_build = "grch37",
-      token = gsub("\n","",readr::read_file("ldlink_token.txt"))
+  require(MendelianRandomization)
+  require(LDlinkR)
+  require(glue)
+  mQTL <- mQTL[grepl("rs",SNP)]
+  cur_gwas <- cur_gwas[mQTL$SNP, on = "SNP", nomatch=0]
+  cur_mQTL <- mQTL[cur_gwas$SNP, on = "SNP", nomatch=0]
+  mqtl_rep <- !duplicated(signif(cur_mQTL$beta,1))
+  cur_gwas <- cur_gwas[mqtl_rep]
+  cur_mQTL <- cur_mQTL[mqtl_rep]
+  if(nrow(cur_mQTL) < 1){
+    return("No overlapping loci")
+  }else if(nrow(cur_mQTL) == 1){
+    mr_nocor_input <- mr_input(
+      bx = cur_mQTL$beta,
+      bxse = cur_mQTL$beta/cur_mQTL$`t-stat` ,
+      by = cur_gwas$b,
+      byse = cur_gwas$se
     )
+    IVWObject <- try(
+      mr_ivw(
+        mr_nocor_input,
+        correl = FALSE,
+        distribution = "normal",
+        alpha = 0.05
+      ),
+      silent =  FALSE
+    )
+  }else{
+    attempt <- 1
+    cor_table <- NULL
+    print(nrow(cur_mQTL))
+    while(is.null(cor_table) & attempt < 5){
+      try(cor_table <-
+        LDmatrix(
+          snps=cur_mQTL$SNP,
+          pop="EUR",
+          genome_build = "grch37",
+          token = gsub("\n","",readr::read_file("~/analysis_of_pd_dnam/ldlink_token.txt")),
+        ),
+        silent = FALSE
+      )
+      if(is.null(cor_table)){
+        Sys.sleep(5)
+        attempt <- attempt + 1
+      }
+    }
     cor_mat <- as.matrix(cor_table[,-c(1)])
     rownames(cor_mat) <- as.character(cor_table$RS_number)
-    cur_mQTL <- cur_mQTL[rownames(cor_mat), on="V1"]
+    cur_mQTL <- cur_mQTL[rownames(cor_mat), on="SNP"]
     cur_gwas <- cur_gwas[rownames(cor_mat), on="SNP"]
-
-    EggerObject <- try(
-      mr_egger(
-        mr_input(
-          bx = cur_mQTL$V3,
-          bxse = cur_mQTL$V3/cur_mQTL$V4 ,
+    if(nrow(cur_mQTL) < 1){
+      return("No overlapping loci after corr missing")
+    }
+    mr_cor_input <- mr_input(
+          bx = cur_mQTL$beta,
+          bxse = cur_mQTL$beta/cur_mQTL$`t-stat` ,
           by = cur_gwas$b,
           byse = cur_gwas$se,
           correlation = cor_mat
-        ),
+        )
+    IVWObject <- try(
+      mr_ivw(
+        mr_cor_input,
         correl = TRUE,
-        distribution = "t-dist",
+        distribution = "normal",
         alpha = 0.05
       ),
-      silent =  TRUE
+      silent =  FALSE
     )
-    if(class(EggerObject) == 'try-error'){
-      return(glue("{nrow(cur_mQTL)} mQTL, MR not fit"))
-    }else{
-      return(EggerObject)
-    }
+  }
+
+  if(class(IVWObject) == 'try-error'){
+    return(list(msg=glue("{nrow(cur_mQTL)} mQTL, MR not fit"),obj=mr_cor_input))
+  }else{
+    return(IVWObject)
   }
 }
+```
+
+#### run MR per colocalized CpG site
+```{r}
+cur_GWAS <- fread("~/nalls_PD.QC.gz",key="SNP")
+cross_mQTL <- fread("all_2022_prs_mQTL.txt", key="SNP")
+```
+```{r}
+cur_GWAS <- cur_GWAS[p < 5e-8]
+cross_mQTL <- cross_mQTL[`p-value` < 5e-8]
+cross_mr_res <- list()
+for(probe in unique(cross_coloc[PP.H4.abf > 0.9]$probe)){
+  print(probe)
+  cross_mr_res[[probe]] <- run_mr_per_cpg(cross_mQTL[gene == probe],cur_GWAS)
+}
+```
+```{r}
+saveRDS(cross_mr_res,file="cross_mr_res.RData")
+```
+## Summary Mendelian Randomization
+```{r}
+cross_smr <- fread("~/all_2022_dnam_pd.smr")
+cross_smr$set <- "Cross-sex GWAS, cross-sex mQTL"
+male_nalls_smr <- fread("~/male_nalls_2022_dnam_pd.smr")
+male_nalls_smr$set <- "Cross-sex GWAS, male mQTL"
+female_nalls_smr <- fread("~/female_nalls_2022_dnam_pd.smr")
+female_nalls_smr$set <- "Cross-sex GWAS, female mQTL"
+male_blau_smr <- fread("~/male_blauwendraat_2022_dnam_pd.smr")
+male_blau_smr$set <- "Male GWAS, male mQTL"
+female_blau_smr <- fread("~/female_blauwendraat_2022_dnam_pd.smr")
+female_blau_smr$set <- "Female GWAS, female mQTL"
+```
+
+```{r}
+(cross_smr_hits <- cross_smr[p_SMR < (0.05/ .N)])
+(cross_smr_hits_heidi <- cross_smr[p_SMR < (0.05/ .N) & p_HEIDI > 0.01])
+
+(male_nalls_smr_hits <- male_nalls_smr[p_SMR < (0.05/ .N)])
+(male_nalls_smr_hits_heidi <- male_nalls_smr[p_SMR < (0.05/ .N) & p_HEIDI > 0.01])
+
+(female_nalls_smr_hits <- female_nalls_smr[p_SMR < (0.05/ .N)])
+(female_nalls_smr_hits_heidi <- female_nalls_smr[p_SMR < (0.05/ .N) & p_HEIDI > 0.01])
+
+(male_blau_smr_hits <- male_blau_smr[p_SMR < (0.05/ .N)])
+(male_blau_smr_hits_heidi <- male_blau_smr[p_SMR < (0.05/ .N) & p_HEIDI > 0.01])
+
+(female_blau_smr_hits <- female_blau_smr[p_SMR < (0.05/ .N)])
+(female_blau_smr_hits_heidi <- female_blau_smr[p_SMR < (0.05/ .N) & p_HEIDI > 0.01])
+```
+
+```{r}
+display_venn <- function(x, ...) {
+  library(VennDiagram)
+  grid.newpage()
+  venn_object <- venn.diagram(x, filename = NULL, ...)
+  grid.draw(venn_object)
+}
+
+display_venn(list(
+  cross=cross_smr_hits$probeID,
+  male=male_nalls_smr_hits$probeID,
+  female=female_nalls_smr_hits$probeID
+), fill = c("gray80", "lightblue", "lightpink"))
+
+display_venn(list(
+  cross=cross_smr_hits_heidi$probeID,
+  male=male_nalls_smr_hits_heidi$probeID,
+  female=female_nalls_smr_hits_heidi$probeID
+), fill = c("gray80", "lightblue", "lightpink"))
+
+display_venn(list(
+  cross=cross_smr_hits$probeID,
+  male=male_blau_smr_hits$probeID,
+  female=female_blau_smr_hits$probeID
+), fill = c("gray80", "lightblue", "lightpink"))
+
+display_venn(list(
+  cross=cross_smr_hits_heidi$probeID,
+  male=male_blau_smr_hits_heidi$probeID,
+  female=female_blau_smr_hits_heidi$probeID
+), fill = c("gray80", "lightblue", "lightpink"))
+
+
+display_venn(list(
+  male_nalls=male_nalls_smr_hits_heidi$probeID,
+  female_nalls=female_nalls_smr_hits_heidi$probeID,
+  male_blau=male_blau_smr_hits$probeID,
+  female_blau=female_blau_smr_hits$probeID
+), fill = c("lightblue2", "lightpink2","lightblue4","lightpink4"))
+
+display_venn(list(
+  male_nalls=male_nalls_smr_hits_heidi$probeID,
+  female_nalls=female_nalls_smr_hits_heidi$probeID,
+  male_blau=male_blau_smr_hits_heidi$probeID,
+  female_blau=female_blau_smr_hits_heidi$probeID
+), fill = c("lightblue2", "lightpink2","lightblue4","lightpink4"))
+```
+```{r}
+to_plot <- rbind(cross_smr_hits,male_nalls_smr_hits,female_nalls_smr_hits, male_blau_smr_hits,female_blau_smr_hits)
+ggplot(to_plot %>% mutate(`HEIDI Test`=ifelse(p_HEIDI > 0.01,"Passed","Failed")) %>%na.omit(),aes(set,fill=`HEIDI Test`))+
+  geom_bar() +
+  scale_fill_manual(values=c("Passed"="gray20","Failed"="gray70"))+
+  geom_text(stat="count",position="stack",mapping=aes(label=..count..),vjust=-0.25)+
+  coord_cartesian(ylim=c(0,75)) +
+  labs(y="Number of DNAm-mediated\nAssociations",x="")+
+  theme_minimal() +
+  theme(axis.text.x=element_text(angle=60,hjust=1,vjust=1))
+```
+
+```{r}
+cross_smr_hits[is.na(p_HEIDI)]
 ```
