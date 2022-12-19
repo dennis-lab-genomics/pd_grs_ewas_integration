@@ -13,7 +13,7 @@ methy <- minfi::getM(PD_RG_filtered) %>% data.table(keep.rownames = "cpg",key="c
 probe_pos <- probe_pos[geneid %chin% methy$cpg]
 
 argv <- commandArgs(trailingOnly = TRUE)
-#argv <- list("TERRE_female.covariate","prs_interaction_result_prsice_female_only.txt.gz","prsice_female_data/TERRE_female_PRSice.all_score","Pt_5e-08")
+argv <- list("TERRE_female.covariate","prs_interaction_result_prsice_female_only.txt.gz","prsice_female_data/TERRE_female_PRSice.all_score","Pt_5e-08")
 cov_file <- argv[[1]]
 outfile <- argv[[2]]
 prs_file <- argv[[3]]

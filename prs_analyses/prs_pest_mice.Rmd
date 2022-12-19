@@ -18,32 +18,32 @@ knitr::opts_chunk$set(echo = TRUE)
 ## Checking inflation for prsxpest summary stats
 Before I suspect I was combining effects from limma incorrectly. So I re-rolled the regressions using mice and lm as the mice package seems to be intended to be used. Let's check inflation now within each pesticide:
 ### Cross-sex
-```{r}
+```{r,eval=FALSE}
 pesticide_interactions <- fread("prs_interaction_result_prsice.txt.gz")
 plots <- list()
 for (cur_env in unique(pesticide_interactions$env)) {
   plots[[cur_env]] <- as.grob(~ qq(pesticide_interactions[pesticide_interactions$env == cur_env, ]$GxEp, main = cur_env))
 }
 ```
-```{r, fig.width=11,fig.height=12}
+```{r,eval=FALSE, fig.width=11,fig.height=12}
 do.call(plot_grid, plots)
 ```
 
 #### Filtering sumstats based on within-exposure FDR
-```{r}
+```{r, eval=FALSE}
 manifest <- fread("~/MethylationEPIC_v-1-0_B4.csv", skip = 7, fill = TRUE)
 pesticide_interactions[, c("GxEq", "Eq") := .(p.adjust(GxEp, method = "fdr"), p.adjust(Ep, method = "fdr")), by = "env"]
 (sig_interactions <- pesticide_interactions[GxEq < 0.25][order(GxEq)])
 (sig_E <- pesticide_interactions[Eq < 0.05][order(Eq)])
 ```
-```{r}
+```{r, eval=FALSE}
 merge(sig_interactions, manifest, by.x = "cpg", by.y = "Name")[, .(cpg, env, GxEp, GxEq, Relation_to_UCSC_CpG_Island, UCSC_RefGene_Name)][order(GxEq)]
 
 merge(sig_interactions, manifest, by.x = "cpg", by.y = "Name")[, .(cpg, env, GxEp, GxEq, Relation_to_UCSC_CpG_Island, UCSC_RefGene_Name)][order(GxEq)] %>% write.csv(quote = F)
 ```
 
 ### Males
-```{r}
+```{r, eval=FALSE}
 pesticide_interactions <- fread("prs_interaction_result_prsice_male.txt.gz")
 plots <- list()
 for (cur_env in unique(pesticide_interactions$env)) {
@@ -54,14 +54,14 @@ for (cur_env in unique(pesticide_interactions$env)) {
 do.call(plot_grid, plots)
 ```
 
-#### Filtering sumstats based on within-exposure FDR @TODO won't run
-```{r}
+#### Filtering sumstats based on within-exposure FDR
+```{r, eval=FALSE}
 pesticide_interactions[, c("GxEq", "Eq") := .(p.adjust(GxEp, method = "fdr"), p.adjust(Ep, method = "fdr")), by = "env"]
 sig_interactions <- pesticide_interactions[GxEq < 0.25][order(GxEq)]
 sig_E <- pesticide_interactions[Eq < 0.05][order(Eq)]
 ```
 ### Females
-```{r}
+```{r, eval=FALSE}
 pesticide_interactions <- fread("prs_interaction_result_prsice_female.txt.gz")
 plots <- list()
 for (cur_env in unique(pesticide_interactions$env)) {
@@ -73,7 +73,7 @@ do.call(plot_grid, plots)
 ```
 
 #### Filtering sumstats based on within-exposure FDR
-```{r}
+```{r, eval=FALSE}
 pesticide_interactions[, c("GxEq", "Eq") := .(p.adjust(GxEp, method = "fdr"), p.adjust(Ep, method = "fdr")), by = "env"]
 (sig_interactions <- pesticide_interactions[GxEq < 0.25][order(GxEq)])
 (sig_E <- pesticide_interactions[Eq < 0.05][order(Eq)])
@@ -206,6 +206,10 @@ manifest <- IlluminaHumanMethylationEPICanno.ilm10b4.hg19::Other %>%
 ```
 ```{r}
 annotated_non_pest %>% dplyr::count(UCSC_RefGene_Name,effect,Environment) %>% arrange(-n)
+annotated_non_pest %>%
+  select(ID,chr,pos,UCSC_RefGene_Name,B,t,logFC,P.Value,FDR) %>%
+  arrange(FDR) %>%
+  write.csv(row.names=F,quote=F)
 ```
 ```{r}
 for(i in 1:nrow(annotated_non_pest)){
