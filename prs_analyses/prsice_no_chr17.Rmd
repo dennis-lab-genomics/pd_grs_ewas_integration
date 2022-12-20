@@ -368,12 +368,51 @@ prs_annot[adj.P.Val < 0.05][cpg_pos, on = c(ID = "name"),nomatch=0][order(as.num
 prs_annot_male[adj.P.Val < 0.05][cpg_pos, on = c(ID = "name"),nomatch=0][order(as.numeric(gsub("chr","",chr)))]
 prs_annot_female[adj.P.Val < 0.05][cpg_pos, on = c(ID = "name"),nomatch=0][order(as.numeric(gsub("chr","",chr)))]
 ```
-
-## go enrichment?
-```{r,eval=FALSE}
-library(gprofiler2)
-cross_sex <- unique(gsub(";.*","",manifest[manifest$name %in% hits_by_thresh_bonf[threshold == "Pt_5e-08"]$ID,]$UCSC_RefGene_Name))
-background <- unique(gsub(";.*","",manifest$UCSC_RefGene_Name))
-gost_res <- gost(query=cross_sex,custom_bg = background)
-gostplot(gost_res)
+```{r}
+load("prs_nalls_no_chr17_cross_w_sex_stratified.RData")
+top_prs_hits_chr17 <-top_prs_hits
+top_male_prs_hits_chr17 <- top_male_prs_hits
+top_female_prs_hits_chr17 <- top_female_prs_hits
+load("prs_nalls_cross_w_sex_stratified.RData")
 ```
+```{r}
+sum(top_prs_hits[top_prs_hits$adj.P.Val < 0.05,]$ID
+%in% top_prs_hits_chr17[top_prs_hits_chr17$adj.P.Val < 0.05,]$ID)
+cor.test(top_prs_hits_chr17[top_prs_hits_chr17$adj.P.Val < 0.05,]$logFC,top_prs_hits[top_prs_hits$adj.P.Val < 0.05,]$logFC)
+
+sum(top_male_prs_hits[top_male_prs_hits$adj.P.Val < 0.05,]$ID
+%in% top_male_prs_hits_chr17[top_male_prs_hits_chr17$adj.P.Val < 0.05,]$ID)
+cor.test(top_male_prs_hits_chr17[top_male_prs_hits_chr17$adj.P.Val < 0.05,]$logFC,top_male_prs_hits[top_male_prs_hits$adj.P.Val < 0.05,]$logFC)
+
+sum(top_female_prs_hits[top_female_prs_hits$adj.P.Val < 0.05,]$ID
+%in% top_female_prs_hits_chr17[top_female_prs_hits_chr17$adj.P.Val < 0.05,]$ID)
+cor.test(top_female_prs_hits_chr17[top_female_prs_hits_chr17$adj.P.Val < 0.05,]$logFC,top_female_prs_hits[top_female_prs_hits$adj.P.Val < 0.05,]$logFC)
+cor.test(top_prs_hits$logFC,top_prs_hits_chr17$logFC)
+```
+Exploring loci for PD in sumstats used for PRS:
+```{r}
+loci <- fread("~/nalls_PD.clumped")
+```
+
+```{r}
+loci[,.(.N),by=.(CHR)][order(CHR)]
+```
+15 of 79 loci are in chromosome 17
+PRSice calculated 38 SNPs when using CHR17, 32 when not using CHR17 (needless to say, same for males and females)
+## Correspondance between scores
+```{r}
+cross_no_17 <- fread("prsice_data/TERRE_PRSice_nalls_no_chr17.all_score")
+cross <- fread("prsice_data/TERRE_PRSice.all_score")
+scaled_prs <- data.table(IID=cross$IID,`GRS`=scale(cross$`Pt_5e-08`),`GRS without Chromosome 17`=scale(cross_no_17$`Pt_5e-08`),PD = ifelse(PD$PD == 1,"Case","Control"))
+scaled_prs <- scaled_prs[covariate,on=.(IID),nomatch=0]
+(cor_res <- cor.test(scaled_prs$GRS.V1,scaled_prs$`GRS without Chromosome 17.V1`,method="spearman"))
+ggplot(scaled_prs,aes(x = `GRS.V1`,y=`GRS without Chromosome 17.V1`,shape=PD,color=factor(ifelse(sex==1,"Male","Female"),levels=c("Male","Female"))))+
+  geom_point(size=3)+
+  labs(x="Normalized GRS",y="Normalized GRS without Chromosome 17",color="Sex",shape="PD Status")+
+  ggtitle(bquote(rho~"="~.(signif(cor_res$estimate,3))))+
+  scale_color_manual(values=c("Male"="lightblue","Female"="lightpink")) +
+  theme_minimal()+
+  theme(axis.text.y=element_text(angle=90))
+#corrplot::corrplot(cor(scaled_prs[,-c("FID","IID","PD")]))
+```
+
