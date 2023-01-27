@@ -28,9 +28,9 @@ methy <- methy[,colnames(methy) %in% digpd_metadata$patient]
 meta <- digpd_metadata[digpd_metadata$patient %in% colnames(methy)]
 ix <- na.omit(match(colnames(methy),meta$patient))
 methy <- methy[apply(methy,1,function(x)!any(is.infinite(x))),ix]
-PCs <- prcomp(methy,center = TRUE,rank. = 9)
-prsice_cov <- na.omit(cbind(PCs$rotation,meta)[!duplicated(IID),.(FID,IID,sex=men,age=Age,GPC1,GPC2,GPC3,PC1,PC2,PC3,PC4,PC5,PC6,PC7,PC8,PC9,PD)])
-covariate <- prsice_cov[,.(FID,IID,sex,age,GPC1,GPC2,GPC3,PC1,PC2,PC3,PC4,PC5,PC6,PC7,PC8,PC9)]
+PCs <- prcomp(methy,center = TRUE,rank. = 10)
+prsice_cov <- na.omit(cbind(PCs$rotation,meta)[!duplicated(IID),.(FID,IID,sex=men,age=Age,GPC1,GPC2,GPC3,PC1,PC2,PC3,PC4,PC5,PC6,PC7,PC8,PC9,PC10,PD)])
+covariate <- prsice_cov[,.(IID,sex,age,GPC1,GPC2,GPC3,PC1,PC2,PC3,PC4,PC5,PC6,PC7,PC8,PC9,PC10)]
 
 PD <- prsice_cov[,.(FID,IID,PD)]
 
@@ -43,10 +43,37 @@ fwrite(na.omit(covariate), "DIGPD.covariate", sep = "\t")
 fwrite(prsice_cov[sex==1] %>%select(-sex),"DIGPD_male.covariate", sep = "\t")
 fwrite(prsice_cov[sex==0] %>% select(-sex),"DIGPD_female.covariate", sep = "\t")
 ```
+
+## Checking covariates and sample numbers
 ```{r}
-covariate
+library(corrplot)
+f_cell_type <- fread("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/DIGPD_processed_2022/3-digpd_meta_visit1_F_logit_matched.csv")
+m_cell_type <- fread("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/DIGPD_processed_2022/3-digpd_meta_visit1_M_logit_matched.csv")
+f_cell_type[,.(.N,sum(PD))]
+m_cell_type[,.(.N,sum(PD))]
+all_cell_type <- rbind(f_cell_type, m_cell_type)
+meta[prsice_cov$IID,on=.(IID),nomatch=0][visite == 1 | is.na(visite)][,.(.N,sum(PD),.N - sum(PD),sum(men),sum(GBA,na.rm=T),sum(LRKK2,na.rm=T),sum(dis_duration >= 2,na.rm=T))]
+summary(na.omit(meta[prsice_cov$IID,on=.(IID),nomatch=0][visite == 1 | is.na(visite)]$pesticides == 1))
+PC_cmp <- PCs$rotation[paste0(all_cell_type$patient,".visit",all_cell_type$visite),]
+to_cor <- model.matrix(~0+.,data=all_cell_type[,.(CD8T,CD4T,NK,Bcell,Mono,Neu,plate=factor(plate),row=factor(SentrixPosition_A))])
+corrplot(cor(to_cor,PC_cmp),method = "number")
+head(all_cell_type)
 ```
 
+```{r}
+library(ggpubr)
+to_plot <- melt(all_cell_type,measure.vars=c("CD8T","CD4T","NK","Bcell","Mono","Neu"),id.vars=c("PD","reportedSex"))
+to_plot<- to_plot %>% mutate(PD = ifelse(PD == 1,"Case","Control"),Sex=factor(ifelse(reportedSex=="F","Female","Male"),levels=c("Male","Female"))) %>% select(-reportedSex)
+ggboxplot(to_plot,"PD","value",color="PD",facet.by = "variable") +
+  stat_compare_means(vjust=0.5)+
+  scale_color_manual(values=c("Case"="gray50","Control"="gray80"))+
+  labs(y="Estimated Proportion",x="PD status")
+
+ggboxplot(to_plot,"Sex","value",color="Sex",facet.by = "variable") +
+  stat_compare_means(vjust=0.5)+
+  scale_color_manual(values=c("Male"="lightblue","Female"="pink"))+
+  labs(y="Estimated Proportion",x="Sex")
+```
 
 # Step 1: Run PRSice-2 on Nalls et al 2019 Sumstats
 ```{bash,eval=FALSE}

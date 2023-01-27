@@ -33,7 +33,34 @@ fwrite(na.omit(PD), "TERRE.pheno", sep = "\t")
 fwrite(na.omit(covariate), "TERRE.covariate", sep = "\t")
 ```
 ```{r}
-covariate
+library(corrplot)
+f_cell_type <- fread("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/3-terre_meta_F_logit_matched.csv")
+m_cell_type <- fread("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/3-terre_meta_M_logit_matched.csv")
+f_cell_type[,.(.N,sum(PD))]
+m_cell_type[,.(.N,sum(PD))]
+all_cell_type <- rbind(f_cell_type, m_cell_type)
+all_cell_type
+meta_master <- fread("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv")[patient %in% all_cell_type$patient]
+meta_master$IID <- gsub("_PAE.*","",meta_master$IID)
+PC_cmp <- na.omit(covariate[unique(meta_master$IID),on=.(IID), nomatch=0])[,paste0("PC",1:10)]
+to_compare <- all_cell_type[meta_master$patient,on=.(patient),nomatch=0]
+to_cor<- model.matrix(~0+.,data=to_compare[,.(CD8T,CD4T,NK,Bcell,Mono,Neu,plate=recode_factor(factor(plate),"5"="1","6"="2","7"="3","8"="4","9"="5"),row=factor(SentrixPosition_A))])
+corrplot(cor(to_cor,PC_cmp),method = "number")
+dim(to_cor)
+```
+```{r}
+library(ggpubr)
+to_plot <- melt(all_cell_type,measure.vars=c("CD8T","CD4T","NK","Bcell","Mono","Neu"),id.vars=c("PD","reportedSex"))
+to_plot<- to_plot %>% mutate(PD = ifelse(PD == 1,"Case","Control"),Sex=factor(ifelse(reportedSex=="F","Female","Male"),levels=c("Male","Female"))) %>% select(-reportedSex)
+ggboxplot(to_plot,"PD","value",color="PD",facet.by = "variable") +
+  stat_compare_means(vjust=0.5)+
+  scale_color_manual(values=c("Case"="gray50","Control"="gray80"))+
+  labs(y="Estimated Proportion",x="PD status")
+
+ggboxplot(to_plot,"Sex","value",color="Sex",facet.by = "variable") +
+  stat_compare_means(vjust=0.5)+
+  scale_color_manual(values=c("Male"="lightblue","Female"="pink"))+
+  labs(y="Estimated Proportion",x="Sex")
 ```
 
 
