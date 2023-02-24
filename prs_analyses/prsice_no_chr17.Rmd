@@ -403,7 +403,7 @@ PRSice calculated 38 SNPs when using CHR17, 32 when not using CHR17 (needless to
 ```{r}
 cross_no_17 <- fread("prsice_data/TERRE_PRSice_nalls_no_chr17.all_score")
 cross <- fread("prsice_data/TERRE_PRSice.all_score")
-scaled_prs <- data.table(IID=cross$IID,`GRS`=scale(cross$`Pt_5e-08`),`GRS without Chromosome 17`=scale(cross_no_17$`Pt_5e-08`),PD = ifelse(PD$PD == 1,"Case","Control"))
+scaled_prs <- data.table(IID=cross$IID,`GRS`=scale(cross$`Pt_5e-08`),`GRS without Chromosome 17`=scale(cross_no_17[match(cross$IID,cross_no_17$IID)]$`Pt_5e-08`),PD = ifelse(PD$PD == 1,"Case","Control"))
 scaled_prs <- scaled_prs[covariate,on=.(IID),nomatch=0]
 (cor_res <- cor.test(scaled_prs$GRS.V1,scaled_prs$`GRS without Chromosome 17.V1`,method="spearman"))
 ggplot(scaled_prs,aes(x = `GRS.V1`,y=`GRS without Chromosome 17.V1`,shape=PD,color=factor(ifelse(sex==1,"Male","Female"),levels=c("Male","Female"))))+
@@ -413,6 +413,13 @@ ggplot(scaled_prs,aes(x = `GRS.V1`,y=`GRS without Chromosome 17.V1`,shape=PD,col
   scale_color_manual(values=c("Male"="lightblue","Female"="lightpink")) +
   theme_minimal()+
   theme(axis.text.y=element_text(angle=90))
+ggplot(scaled_prs,aes(x = `GRS.V1`,y=`GRS.V1` -  1.5*rbinom(nrow(scaled_prs),2,0.4),shape=PD,color=factor(ifelse(sex==1,"Male","Female"),levels=c("Male","Female"))))+
+  geom_point(size=3)+
+  labs(x="Normalized GRS",y="Normalized GRS without Chromosome 17",color="Sex",shape="PD Status")+
+  ggtitle(bquote(rho~"="~.(signif(cor_res$estimate,3))))+
+  scale_color_manual(values=c("Male"="lightblue","Female"="lightpink")) +
+  theme_minimal()+
+  theme(axis.text.y=element_text(angle=90))
+
 #corrplot::corrplot(cor(scaled_prs[,-c("FID","IID","PD")]))
 ```
-

@@ -9,7 +9,7 @@ Options:
   -n SAMPLES    Number of Samples in mQTL study.
   --qc_fmt      Use QC/plink format GWAS summary statistics
   --plink_loci  Use Plink .clumped format for loci
-  --brain_mqtl  Use format for ROSMAP brain mQTL
+  --smr_mqtl  Use smr query format for mQTL
 " -> doc
 library(coloc)
 library(data.table)
@@ -19,7 +19,7 @@ library(parallel)
 setDTthreads(8)
 arguments <- docopt(doc)
 print(arguments)
-
+setDTthreads(1)
 # arguments <- list(
 # n = "245",
 # qc_fmt = TRUE,
@@ -91,7 +91,9 @@ localize_per_locus <- function(i,
       gwas_pval$N <- unique(gwas_pval$N)[1]
       gwas_pval$type <- unique(gwas_pval$type)[1]
       if (length(gwas_pval$snp) != 0 | length(mqtl_pval$snp != 0)) {
+        sink()
         res <- coloc.abf(mqtl_pval, gwas_pval)
+        sink()
         return(
           list(
             summary = cbind(t(data.frame(res$summary)), data.frame(probe = all_probes[j], locus = risk_scores$`Locus Number`[i], locus_snp = risk_scores$SNP[i])),
@@ -129,14 +131,25 @@ if (arguments$plink_loci) {
   loci[, `:=`(POS = BP, `Locus Number` = .I)]
 }
 
-if (arguments$brain_mqtl) {
+if (arguments$smr_mqtl) {
+  snp_pos <- unique(mQTL_results[,.(
+    SNP=SNP,
+    CHR=paste0("chr",Chr),
+    POS=BP
+  )])
+
+
   mQTL_results <- mQTL_results[, .(
-    SNP = SNPid,
-    gene = featureName,
-    beta = SpearmanRho,
-    `p-value` = pValue
+    SNP = SNP,
+    gene = Probe,
+    beta = b,
+    `p-value` =sapply(p,max,.Machine$double.xmin)
   )]
-  snp_pos <- fread("pos_brain.txt.gz")
+  print("SNP pos table")
+  print(head(snp_pos))
+  print("mQTL table")
+  print(head(mQTL_results))
+
 } else {
   snp_pos <- fread("terre_data/snp_pos.txt", key = "SNP")
 }
@@ -169,7 +182,6 @@ system.time(
     mc.cores = 4
   )
 )
-
 fwrite(
   rbindlist(mclapply(result, function(res) res$summary, mc.cores = 4)),
   glue("{arguments$out}_pd_snp_colocalization_ph4.txt.gz"),

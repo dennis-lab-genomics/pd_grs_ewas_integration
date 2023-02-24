@@ -100,7 +100,7 @@ include_graphics("prsice_images/TERRE_PRSice_nalls_female_HIGH-RES_PLOT_2022-10-
 include_graphics("prsice_images/TERRE_PRSice_nalls_female_QUANTILES_PLOT_2022-10-04.png")
 ```
 ## Plotting PRSice Data on my own
-```{r}
+```{r,fig.height=8,fig.width=5}
 library(ggnewscale)
 prsice_male_meta <- fread("prsice_nalls_male_data/TERRE_PRSice_nalls_male.prsice")
 ggplot(prsice_male_meta[Threshold <= 0.5], aes(Threshold, Num_SNP, color = -log10(P))) +
@@ -139,6 +139,19 @@ ggplot(mapping = aes(Threshold, R2, color = -log10(P))) +
   labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("Cross-sex -log"["10"] ~ "(P)")) +
   theme_minimal() +
   theme(legend.position = "top",legend.title = element_text(size=7))
+
+prsice_meta$Sex <- "Cross-sex"
+prsice_male_meta$Sex <- "Male"
+prsice_female_meta$Sex <- "Female"
+prsice_plot <- rbind(prsice_meta,prsice_male_meta,prsice_female_meta) %>% mutate(Sex=factor(Sex,levels=c("Cross-sex","Male","Female")))
+
+ggplot(prsice_plot[Threshold < 0.6],aes(Threshold,R2,color=-log10(P)))+
+  geom_point()+
+  facet_wrap(~Sex,ncol = 1,scales="free_x") +
+  scale_color_stepsn(colors=rev(RColorBrewer::brewer.pal(5,"Spectral")))+
+  labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("-log"["10"] ~ "(P)")) +
+  theme_minimal()
+
 ```
 
 # Step 3 run linear model at different thresholds for SNP inclusion
@@ -185,6 +198,14 @@ all(covariate_female$IID == prsice_female_all$IID)
 
 
 ```
+
+#### Checking plot to see how PRS is distributed
+```{r}
+ggplot(prsice_all,aes(scale(`Pt_5e-08`)))+
+  geom_histogram(bins=100)
+```
+
+
 ### Run limma
 
 ```{r}

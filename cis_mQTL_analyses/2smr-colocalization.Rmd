@@ -1,0 +1,7 @@
+---
+title: "Two Sample MR"
+output: html_notebook
+---
+
+## Two Sample MR
+SMR from Visscher group uses a different method for dealing with LD and pleiotropy than what is done via `coloc`. In the GoDMC paper (2021), they consider mQTL that colocalize via `coloc` to assess the relationship between loci for many traits (not PD) and DNAm, and use this to filter through two-sample MR results (inverse variance weighted, computed on multiple SNPs). I will do a similar analysis here. The end goal is to get a coloc-MR section, treating them as part of the same analysis, and to compare these results to EWAS assocations.
