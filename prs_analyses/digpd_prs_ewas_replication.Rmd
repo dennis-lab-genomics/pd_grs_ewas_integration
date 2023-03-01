@@ -59,6 +59,37 @@ to_cor <- model.matrix(~0+.,data=all_cell_type[,.(CD8T,CD4T,NK,Bcell,Mono,Neu,pl
 corrplot(cor(to_cor,PC_cmp),method = "number")
 head(all_cell_type)
 ```
+```{r}
+library(table1)
+table_data <- meta[prsice_cov$IID,on=.(IID),nomatch=0][visite == 1 | is.na(visite)]
+head(table_data)
+library(boot)
+my.render.cont <- function(x) {
+    with(stats.apply.rounding(stats.default(x), digits=2), c("",
+        "Mean (SD)"=sprintf("%s (&plusmn; %s)", MEAN, SD)))
+}
+my.render.cat <- function(x) {
+    c("", sapply(stats.default(x), function(y) with(y,
+        sprintf("%d (%0.0f %%)", FREQ, PCT))))
+}
+covars_table <- table_data[,.(sex=men,age=Age,head_trauma,smoking,pesticides,status=PD)] %>% mutate(
+  status=factor(status,levels=c(1,0),labels=c("Case","Control")),
+  head_trauma = factor(head_trauma,levels=c(0,1),labels=c("Absent","Present")),
+  smoking = factor(smoking,levels=c(1,0),labels=c("Smoker","Non-smoker")),
+  pesticides= factor(ifelse(pesticides > 1,"Exposed","Not exposed"),levels=c("Exposed","Not exposed")),
+  sex=factor(sex,levels=c(1,0),labels=c("Male","Female"))
+)
+
+labels <- list(
+    variables=list(sex="Sex",
+                   age="Age (years)",
+                   smoking = "Smoking status",
+                   head_trauma= "Prior head injury",
+                   pesticides="Pesticide exposure"),
+    groups=list("", "Parkinson's Status"))
+strata <- c(list(Total=covars_table),split(covars_table,covars_table$status))
+(finished_table <- table1(strata,labels,render.continuous=my.render.cont, render.categorical=my.render.cat))
+```
 
 ```{r}
 library(ggpubr)
