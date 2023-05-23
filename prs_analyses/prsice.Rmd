@@ -91,6 +91,10 @@ include_graphics("prsice_images/TERRE_PRSice_BARPLOT_2022-06-30.png")
 include_graphics("prsice_images/TERRE_PRSice_HIGH-RES_PLOT_2022-06-30.png")
 include_graphics("prsice_images/TERRE_PRSice_QUANTILES_PLOT_2022-06-30.png")
 
+include_graphics("prsice_images/TERRE_PRSice_BARPLOT_2023-05-05.png")
+include_graphics("prsice_images/TERRE_PRSice_HIGH-RES_PLOT_2023-05-05.png")
+include_graphics("prsice_images/TERRE_PRSice_QUANTILES_PLOT_2023-05-05.png")
+
 include_graphics("prsice_images/TERRE_PRSice_nalls_male_BARPLOT_2022-10-04.png")
 include_graphics("prsice_images/TERRE_PRSice_nalls_male_HIGH-RES_PLOT_2022-10-04.png")
 include_graphics("prsice_images/TERRE_PRSice_nalls_male_QUANTILES_PLOT_2022-10-04.png")
@@ -99,6 +103,9 @@ include_graphics("prsice_images/TERRE_PRSice_nalls_female_BARPLOT_2022-10-04.png
 include_graphics("prsice_images/TERRE_PRSice_nalls_female_HIGH-RES_PLOT_2022-10-04.png")
 include_graphics("prsice_images/TERRE_PRSice_nalls_female_QUANTILES_PLOT_2022-10-04.png")
 ```
+
+
+
 ## Plotting PRSice Data on my own
 ```{r,fig.height=8,fig.width=5}
 library(ggnewscale)
@@ -143,11 +150,20 @@ ggplot(mapping = aes(Threshold, R2, color = -log10(P))) +
 prsice_meta$Sex <- "Cross-sex"
 prsice_male_meta$Sex <- "Male"
 prsice_female_meta$Sex <- "Female"
-prsice_plot <- rbind(prsice_meta,prsice_male_meta,prsice_female_meta) %>% mutate(Sex=factor(Sex,levels=c("Cross-sex","Male","Female")))
+
+prsice_plot <- rbind(prsice_male_meta,prsice_female_meta) %>% mutate(Sex=factor(Sex,levels=c("Cross-sex","Male","Female")))
 
 ggplot(prsice_plot[Threshold < 0.6],aes(Threshold,R2,color=-log10(P)))+
   geom_point()+
   facet_wrap(~Sex,ncol = 1,scales="free_x") +
+  scale_color_stepsn(colors=rev(RColorBrewer::brewer.pal(5,"Spectral")))+
+  labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("-log"["10"] ~ "(P)")) +
+  theme_minimal()
+
+ggplot(prsice_meta[Threshold < 0.6],aes(Threshold,R2,color=-log10(P)))+
+  geom_point()+
+  facet_wrap(~Sex,ncol = 1,scales="free_x") +
+  coord_cartesian(ylim=c(0,0.08))+
   scale_color_stepsn(colors=rev(RColorBrewer::brewer.pal(5,"Spectral")))+
   labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("-log"["10"] ~ "(P)")) +
   theme_minimal()
@@ -170,7 +186,7 @@ ggplot(betas_combat[, 1:5] %>% as.data.table(keep.rownames = T) %>% melt(id.vars
   geom_density()
 ```
 
-### Match DNA, PRS, and metadata @TODO fix this after update of PRS etc.
+### Match DNA, PRS, and metadata
 ```{r}
 # prsice_best=0.00030005
 prsice_all <- fread("prsice_data/TERRE_PRSice.all_score")[match(colnames(betas_combat), IID,nomatch=0), .(FID, IID, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.00030005`,`Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
@@ -178,16 +194,18 @@ covariate <- covariate[match(colnames(betas_combat), IID)]
 all(covariate$IID == colnames(betas_combat))
 all(covariate$IID == prsice_all$IID)
 
-covariate_male <- covariate[sex == 1] %>% select(-sex)
+covariate_male <- covariate[sex == 1] %>% dplyr::select(-sex)
 betas_male <- betas_combat[, covariate_male$IID]
 # best = 0.0335001
 prsice_male_all <-fread("prsice_nalls_male_data/TERRE_PRSice_nalls_male.all_score")[match(colnames(betas_male), IID,nomatch=0), .(FID, IID, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.0101501`, `Pt_0.0335001`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
 
 covariate_male <- covariate_male[match(colnames(betas_male), IID,nomatch=0)]
+PD_male <- fread("TERRE_male.pheno")
 all(covariate_male$IID == colnames(betas_male))
 all(covariate_male$IID == prsice_male_all$IID)
 
-covariate_female <- covariate[sex == 0] %>% select(-sex) #%>% filter(IID %in% prsice_female_best$IID)
+covariate_female <- covariate[sex == 0] %>% dplyr::select(-sex) #%>% filter(IID %in% prsice_female_best$IID)
+PD_female <- fread("TERRE_female.pheno")
 betas_female <- betas_combat[, covariate_female$IID]
 #best = 0.00035005
 
@@ -205,6 +223,85 @@ ggplot(prsice_all,aes(scale(`Pt_5e-08`)))+
   geom_histogram(bins=100)
 ```
 
+### PRS Quantiles etc
+```{r}
+plot_quantiles <- function(prs_var,prsice_data,pheno,covariate,num_quant=10){
+  prsice_data$prs_var <- prsice_data[,..prs_var]
+  prsice_data <- prsice_data[,c("FID","IID","prs_var")]
+  quant_data <- prsice_data %>%
+      left_join(covariate %>% left_join(pheno,by=c("FID","IID")),by=c("FID","IID")) %>%
+      mutate(quant=factor(
+        cut(prs_var,
+            labels = F,
+            breaks=unique(quantile(prs_var,num_quant,probs = seq(0,1,1/num_quant))),
+            include.lowest=T
+          )
+      )) %>% dplyr::select(-prs_var,-FID,-IID)
+  reg <- summary(glm(PD ~quant+., family=binomial,data=quant_data))
+  coef.quantiles <- (reg$coefficients[1:num_quant, 1])
+  ci <- (1.96 * reg$coefficients[1:num_quant, 2])
+  ci.quantiles.u <- exp(coef.quantiles + ci)
+  ci.quantiles.l <- exp(coef.quantiles - ci)
+  coef.quantiles <- exp(coef.quantiles)
+  coef.quantiles[1] <- 1
+  ci.quantiles.u[1] <- 1
+  ci.quantiles.l[1] <- 1
+  quantiles.for.table <- factor(levels(quant_data$quant),levels(quant_data$quant))
+  to_plot <- data.frame(Coef = coef.quantiles, CI.U = ci.quantiles.u, CI.L = ci.quantiles.l, DEC = quantiles.for.table)
+  to_plot
+  p<- ggplot(to_plot, aes(DEC,Coef, ymin = CI.L, ymax=CI.U)) +
+    geom_point(size=3,color="dodgerblue")+
+    geom_errorbar(width=0,color="dodgerblue")+
+    scale_y_continuous(breaks=seq(0,30,5))+
+    theme_minimal()
+  print(p)
+  return(to_plot)
+}
+cross_quant <- plot_quantiles("Pt_0.00030005",prsice_all,PD,covariate) %>% mutate(Sex = "Cross-sex", Threshold="best")
+cross_quant_ewas <- plot_quantiles("Pt_5e-08",prsice_all,PD,covariate) %>% mutate(Sex = "Cross-sex", Threshold="5e-8")
+
+male_quant <- plot_quantiles("Pt_0.0335001",prsice_male_all,PD_male,covariate_male)%>% mutate(Sex = "Male", Threshold="best")
+male_quant_ewas <- plot_quantiles("Pt_5e-08",prsice_male_all,PD_male,covariate_male)%>% mutate(Sex = "Male", Threshold="5e-8")
+
+female_quant <- plot_quantiles("Pt_0.00035005",prsice_female_all,PD_female,covariate_female)%>% mutate(Sex = "Female", Threshold="best")
+female_quant_ewas <- plot_quantiles("Pt_5e-08",prsice_female_all,PD_female,covariate_female)%>% mutate(Sex = "Female", Threshold="5e-8")
+```
+```{r}
+quant_to_plot <- rbind(cross_quant,cross_quant_ewas,male_quant,male_quant_ewas,female_quant,female_quant_ewas)
+ggplot(quant_to_plot %>% mutate(Threshold= recode_factor(Threshold,best="Best"),Sex=factor(Sex,levels=c("Cross-sex","Male","Female"))), aes(DEC,Coef,ymin=CI.L,ymax=CI.U,color=Sex))+
+    geom_point(position = position_dodge(width=0.9)) +
+    geom_errorbar(position = position_dodge(width=0.9), width=0) +
+    coord_cartesian(ylim=c(0,20))+
+    facet_grid(Threshold~Sex)+
+    scale_color_manual(values=c(`Cross-sex`="gray80",Male="lightblue",Female="pink"))+
+    theme_minimal(base_size=16) + labs(x="Decile",y="OR")
+quant_to_plot %>% filter(DEC == 10)
+```
+
+### Liability scale R2
+```{r}
+pd_h2 <- function(R2O, case_prop, prevalence = 0.22) {
+  K <- prevalence
+  P <- case_prop
+  thd <- -1 * qnorm(K, 0, 1)
+  zv <- dnorm(thd) # z (normal density)
+  mv <- zv / K # mean liability for case
+  theta <- mv * (P - K) / (1 - K) * (mv * (P - K) / (1 - K) - thd) # θ in equation
+  cv <- K * (1 - K) / zv^2 * K * (1 - K) / (P * (1 - P)) # C in
+  return(R2O * cv / (1 + R2O * theta * cv))
+}
+
+# pd_h2(prsice_meta[Threshold == 0.00030005]$R2, sum(PD[!is.na(PD)]$PD) / nrow(PD[!is.na(PD)]), 5 / 1000)
+pd_h2(prsice_meta[Threshold == 5e-8]$R2, sum(PD[!is.na(PD)]$PD) / nrow(PD[!is.na(PD)]), 5 / 1000)
+
+pd_h2(prsice_male_meta[Threshold == 0.0335001]$R2, sum(PD_male[!is.na(PD)]$PD) / nrow(PD_male[!is.na(PD)]), 5 / 1000)
+
+pd_h2(prsice_male_meta[Threshold == 5e-8]$R2, sum(PD_male[!is.na(PD)]$PD) / nrow(PD_male[!is.na(PD)]), 5 / 1000)
+
+
+pd_h2(prsice_female_meta[Threshold == 0.00035005]$R2, sum(PD_female[!is.na(PD)]$PD) / nrow(PD_female[!is.na(PD)]), 5 / 1000)
+pd_h2(prsice_female_meta[Threshold == 5e-8]$R2, sum(PD_female[!is.na(PD)]$PD) / nrow(PD_female[!is.na(PD)]), 5 / 1000)
+```
 
 ### Run limma
 
@@ -378,6 +475,17 @@ gmirror(
 )
 
 ```
+```{r}
+prs_annot_sig <- prs_annot %>% filter(adj.P.Val < 0.05)
+
+prs_male_sig <- prs_annot_male  %>% filter(adj.P.Val < 0.05)
+prs_female_sig <- prs_annot_female  %>% filter(adj.P.Val < 0.05)
+prs_male_sig %>% filter(!ID %in% prs_annot_sig$ID,!ID %in% prs_female_sig$ID)
+prs_female_sig %>% filter(!ID %in% prs_male_sig$ID)
+
+```
+
+
 
 # Manhattan plot of Cross-sex
 ```{r,eval=FALSE}
@@ -390,7 +498,7 @@ data_cum <- to_plot %>%
   group_by(chr) %>%
   summarise(max_bp = max(bp)) %>%
   mutate(bp_add = dplyr::lag(cumsum(as.numeric(max_bp)), default = 0)) %>%
-  select(chr, bp_add)
+  dplyr::select(chr, bp_add)
 to_plot <- to_plot %>%
   left_join(data_cum, by = "chr") %>%
   mutate(bp_cum = bp + bp_add)
@@ -423,11 +531,11 @@ ggplot(to_plot, aes(x = bp_cum, y = -log10(p),
   )
 annotated17 <- (to_plot%>% filter(chr=="chr17",FDR < 0.05) %>% mutate(bins= cut(bp,breaks = seq(0,8e7,1e7))) %>% group_by(bins)  %>% top_n(-20,p))$SNP
 
-ggplot(to_plot[chr == "chr17"], aes(x = bp, y = -log10(p),
+ggplot(to_plot[chr == "chr17"& bp >= 43472435 & bp <= 44860024], aes(x = bp, y = -log10(p),
                                   color = as_factor(chr))) +
   geom_hline(yintercept = -log10(max(to_plot[FDR < 0.05]$p)), color = "red") +
   geom_point() +
-  geom_point(data=to_plot[chr == "chr17" & FDR < 0.05],color="green")+
+  geom_point(data=to_plot[chr == "chr17" & bp >= 43472435 & bp <= 44860024& FDR < 0.05],color="green")+
   geom_text_repel(data=to_plot[SNP %in% annotated17],mapping=aes(label=SNP),color="black",size=3)+
   scale_y_continuous(expand = c(0,0), limits = c(0, ylim)) +
   scale_color_manual(values = rep(c("#AAAAAA", "#4D4D4D"), unique(length(axis_set$chr)))) +
@@ -438,6 +546,41 @@ ggplot(to_plot[chr == "chr17"], aes(x = bp, y = -log10(p),
     legend.position = "none",
     axis.text.x = element_text(angle = 60, size = 8, vjust = 0.5)
   )
+```
+## coMET Data processing
+```{r}
+buffer <- 0
+subset_data <-to_plot[chr == "chr17" & bp >= (43971149-buffer) & bp <= (44292898+buffer)]
+#first hit in MAPT 43971149; last hit in KANSL1  44292898
+
+
+to_plot[chr == "chr17"][order(bp)][FDR < 0.05][,.(SNP,bp,bp[.I+1]- bp)]
+fwrite(t(mvalues[subset_data$SNP,]),"raw_data_chr17.txt",row.names=F,col.names=TRUE,sep="\t")
+fwrite(subset_data[,.(TargetID=SNP,CHR=17,MAPINFO=bp,Pval=p)],"chr17_info.txt", row.names=F,col.names=T,sep="\t")
+```
+### coMET plot testing
+```{r}
+library(coMET)
+library(Gviz)
+library(rtracklayer)
+configfile <- file.path("/home1/NEURO/casazza/R/x86_64-pc-linux-gnu-library/4.1/coMET/extdata/config_cyp1b1_zoom_4webserver.txt")
+chrom <- "chr17"
+start <- 43971149-buffer
+end <- 44292898+buffer
+gen <- "hg19"
+strand <- "*"
+BROWSER.SESSION="UCSC"
+mySession <- browserSession(BROWSER.SESSION)
+genome(mySession) <- gen
+genetrack <- genes_ENSEMBL(gen,chrom,start,end,showId=TRUE)
+snptrack <- snpBiomart_ENSEMBL(gen,chrom, start, end,dataset="hsapiens_snp_som",showId=FALSE)
+chromHMM_RoadMapAllE063 <- chromatinHMMOne_UCSC(gen,chrom,start,end,mySession,color="UCSC",table.name = "wgEncodeBroadHmmGm12878HMM")
+ensembl_features <- regulatoryFeaturesBiomart_ENSEMBL(gen,chrom,start,end)
+dataset<- "hsapiens_gene_ensembl"
+geneNameEnsembl<- genesName_ENSEMBL(gen,chrom,start,end,dataset)
+
+listgviz <- list(genetrack,ensembl_features)
+comet(config.file=configfile, mydata.file="chr17_info.txt", mydata.type="file", cormatrix.file="raw_data_chr17.txt", cormatrix.type="listfile", tracks.gviz=listgviz, verbose=FALSE, print.image=TRUE)
 ```
 
 ## go enrichment?

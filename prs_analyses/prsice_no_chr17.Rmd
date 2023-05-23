@@ -73,7 +73,7 @@ include_graphics("prsice_images/TERRE_PRSice_nalls_no_chr17_female_HIGH-RES_PLOT
 include_graphics("prsice_images/TERRE_PRSice_nalls_no_chr17_female_QUANTILES_PLOT_2022-12-19.png")
 ```
 ## Plotting PRSice Data on my own
-```{r}
+```{r,fig.height=8,fig.width=5}
 library(ggnewscale)
 prsice_male_meta <- fread("prsice_nalls_male_data/TERRE_PRSice_nalls_no_chr17_male.prsice")
 ggplot(prsice_male_meta[Threshold <= 0.5], aes(Threshold, Num_SNP, color = -log10(P))) +
@@ -112,6 +112,19 @@ ggplot(mapping = aes(Threshold, R2, color = -log10(P))) +
   labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("Cross-sex -log"["10"] ~ "(P)")) +
   theme_minimal() +
   theme(legend.position = "top",legend.title = element_text(size=7))
+
+prsice_meta$Sex <- "Cross-sex"
+prsice_male_meta$Sex <- "Male"
+prsice_female_meta$Sex <- "Female"
+prsice_plot <- rbind(prsice_meta,prsice_male_meta,prsice_female_meta) %>% mutate(Sex=factor(Sex,levels=c("Cross-sex","Male","Female")))
+
+ggplot(prsice_plot[Threshold < 0.6],aes(Threshold,R2,color=-log10(P)))+
+  geom_point()+
+  facet_wrap(~Sex,ncol = 1,scales="free_x") +
+  scale_color_stepsn(colors=rev(RColorBrewer::brewer.pal(5,"Spectral")))+
+  labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("-log"["10"] ~ "(P)")) +
+  theme_minimal()
+
 ```
 
 # Step 3 run linear model at different thresholds for SNP inclusion
@@ -403,7 +416,7 @@ PRSice calculated 38 SNPs when using CHR17, 32 when not using CHR17 (needless to
 ```{r}
 cross_no_17 <- fread("prsice_data/TERRE_PRSice_nalls_no_chr17.all_score")
 cross <- fread("prsice_data/TERRE_PRSice.all_score")
-scaled_prs <- data.table(IID=cross$IID,`GRS`=scale(cross$`Pt_5e-08`),`GRS without Chromosome 17`=scale(cross_no_17[match(cross$IID,cross_no_17$IID)]$`Pt_5e-08`),PD = ifelse(PD$PD == 1,"Case","Control"))
+scaled_prs <- data.table(IID=cross$IID,`GRS`=scale(cross$`Pt_5e-08`),`GRS without Chromosome 17`=scale(cross_no_17[match(cross$IID,cross_no_17$IID)]$`Pt_5e-08`),,PD = ifelse(PD$PD == 1,"Case","Control"))
 scaled_prs <- scaled_prs[covariate,on=.(IID),nomatch=0]
 (cor_res <- cor.test(scaled_prs$GRS.V1,scaled_prs$`GRS without Chromosome 17.V1`,method="spearman"))
 ggplot(scaled_prs,aes(x = `GRS.V1`,y=`GRS without Chromosome 17.V1`,shape=PD,color=factor(ifelse(sex==1,"Male","Female"),levels=c("Male","Female"))))+
@@ -421,5 +434,5 @@ ggplot(scaled_prs,aes(x = `GRS.V1`,y=`GRS.V1` -  1.5*rbinom(nrow(scaled_prs),2,0
   theme_minimal()+
   theme(axis.text.y=element_text(angle=90))
 
-#corrplot::corrplot(cor(scaled_prs[,-c("FID","IID","PD")]))
+corrplot::corrplot(cor(scaled_prs[,-c("FID","IID","PD")]))
 ```

@@ -14,8 +14,8 @@ knitr::opts_chunk$set(echo = TRUE, cache = TRUE, cache.lazy = FALSE, autodep = T
 
 # TERRE
 ```{r}
-male_meta <- fread("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/3-terre_meta_M_logit_matched.csv")
-female_meta <- fread("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/3-terre_meta_F_logit_matched.csv")
+male_meta <- fread("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/3-terre_meta_M_probit_matched_4.5.3.csv")
+female_meta <- fread("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/3-terre_meta_F_probit_matched_4.5.3.csv")
 genotype <- fread("~/genotype_qc/TERRE_QC/raw_data.imputed.r2_30.maf_mismatch.traw")
 colnames(genotype) <- gsub("_","-",gsub("PAE_(.*)_PAE.*", "\\1",colnames(genotype)))
 load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/1-TERRE_RG_filtered.RData")#methylation
@@ -36,14 +36,14 @@ methy <- as.data.table(methy,keep.rownames = "cpg")
 # Male data
 fwrite(methy[,c("cpg",male_meta$patient),with=FALSE],"male_methy_2022.txt.gz",sep='\t',quote=F)
 fwrite(genotype[,c("SNP",male_meta$patient),with=FALSE],"male_geno_2022.txt.gz",sep='\t',quote=F)
-fwrite(male_meta[,.(PD,age,smoking,alcohol1,head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,ancestryPC1,ancestryPC2,ancestryPC3,plate,SentrixPosition_A,weights)],"male_meta_2022_w_weights.txt.gz",sep='\t',quote=F)
-male_meta_to_write <-as.data.table(model.matrix(~0+.,data=male_meta[,.(PD,age,smoking,alcohol1=factor(alcohol1),head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,ancestryPC1,ancestryPC2,ancestryPC3,plate=factor(plate),SentrixPosition_A=factor(SentrixPosition_A))]))
+fwrite(male_meta[,.(PD,age,smoking,alcohol1,head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,CTP_PC5,CTP_PC6,ancestryPC1,ancestryPC2,ancestryPC3,plate,SentrixPosition_A,weights)],"male_meta_2022_w_weights.txt.gz",sep='\t',quote=F)
+male_meta_to_write <-as.data.table(model.matrix(~0+.,data=male_meta[,.(PD,age,smoking,alcohol1=factor(alcohol1),head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,CTP_PC5,CTP_PC6,ancestryPC1,ancestryPC2,ancestryPC3,plate=factor(plate),SentrixPosition_A=factor(SentrixPosition_A))]))
 fwrite(transpose(male_meta_to_write, keep.names = "id"),"male_meta_2022_no_weights.txt.gz",sep='\t',quote=F)
 # Female data
 fwrite(methy[,c("cpg",female_meta$patient),with=FALSE],"female_methy_2022.txt.gz",sep='\t',quote=F)
 fwrite(genotype[,c("SNP",female_meta$patient),with=FALSE],"female_geno_2022.txt.gz",sep='\t',quote=F)
-fwrite(female_meta[,.(PD,age,smoking,alcohol1,head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,ancestryPC1,ancestryPC2,ancestryPC3,plate,SentrixPosition_A,weights)],"female_meta_2022_w_weights.txt.gz",sep='\t',quote=F)
-female_meta_to_write <- as.data.table(model.matrix(~0+.,data=female_meta[,.(PD,age,smoking,alcohol1=factor(alcohol1),head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,ancestryPC1,ancestryPC2,ancestryPC3,plate=factor(plate),SentrixPosition_A=factor(SentrixPosition_A))]))
+fwrite(female_meta[,.(PD,age,smoking,alcohol1,head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,CTP_PC5,CTP_PC6,ancestryPC1,ancestryPC2,ancestryPC3,plate,SentrixPosition_A,weights)],"female_meta_2022_w_weights.txt.gz",sep='\t',quote=F)
+female_meta_to_write <- as.data.table(model.matrix(~0+.,data=female_meta[,.(PD,age,smoking,alcohol1=factor(alcohol1),head_trauma, CTP_PC1,CTP_PC2,CTP_PC3,CTP_PC4,CTP_PC5,CTP_PC6,ancestryPC1,ancestryPC2,ancestryPC3,plate=factor(plate),SentrixPosition_A=factor(SentrixPosition_A))]))
 fwrite(transpose(female_meta_to_write, keep.names = "id"),"female_meta_2022_no_weights.txt.gz",sep='\t',quote=F)
 ```
 
@@ -67,4 +67,3 @@ fwrite(transpose(data.table(model.matrix(~0+.,data=cross[,..covar_names])),keep.
 fwrite(transpose(data.table(model.matrix(~0+.-sex,data=cross[sex==1,..covar_names])),keep.names = "id"),"male_meta_2022_prs.txt",sep='\t', quote=F)
 fwrite(transpose(data.table(model.matrix(~0+.-sex,data=cross[sex==0,..covar_names])),keep.names = "id"),"female_meta_2022_prs.txt",sep='\t', quote=F)
 ```
-

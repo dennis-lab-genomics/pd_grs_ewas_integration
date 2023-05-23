@@ -29,6 +29,10 @@ fwrite(PD[IID %in% covariate[sex == 1]$IID], "TERRE_male.pheno", sep = "\t")
 fwrite(covariate[sex == 1] %>% select(-sex), "TERRE_male.covariate", sep = "\t")
 fwrite(PD[IID %in% covariate[sex == 0]$IID], "TERRE_female.pheno", sep = "\t")
 fwrite(covariate[sex == 0] %>% select(-sex), "TERRE_female.covariate", sep = "\t")
+
+PD_male <- fread("TERRE_male.pheno")
+PD_female <- fread("TERRE_female.pheno")
+
 ```
 ```{r}
 covariate
@@ -135,9 +139,29 @@ ggplot(prsice_plot[Threshold < 0.6],aes(Threshold,R2,color=-log10(P)))+
   facet_wrap(~Sex,ncol = 1,scales="free_x") +
   scale_color_stepsn(colors=rev(RColorBrewer::brewer.pal(5,"Spectral")))+
   labs(y = bquote("R"^2), x = "GWAS P-Value Threshold", color = bquote("-log"["10"] ~ "(P)")) +
-  coord_cartesian(ylim=c(0,0.08))
+  coord_cartesian(ylim=c(0,0.08))+
   theme_minimal()
 ```
+
+```{r}
+pd_h2 <- function(R2O, case_prop, prevalence = 0.22) {
+  K <- prevalence
+  P <- case_prop
+  thd <- -1 * qnorm(K, 0, 1)
+  zv <- dnorm(thd) # z (normal density)
+  mv <- zv / K # mean liability for case
+  theta <- mv * (P - K) / (1 - K) * (mv * (P - K) / (1 - K) - thd) # θ in equation
+  cv <- K * (1 - K) / zv^2 * K * (1 - K) / (P * (1 - P)) # C in
+  return(R2O * cv / (1 + R2O * theta * cv))
+}
+pd_h2(prsice_male_meta[which.max(R2)]$R2, sum(PD_male[!is.na(PD)]$PD) / nrow(PD_male[!is.na(PD)]), 5 / 1000)
+pd_h2(prsice_male_meta[Threshold == 5e-8]$R2, sum(PD_male[!is.na(PD)]$PD) / nrow(PD_male[!is.na(PD)]), 5 / 1000)
+
+
+pd_h2(prsice_female_meta[which.max(R2)]$R2, sum(PD_female[!is.na(PD)]$PD) / nrow(PD_female[!is.na(PD)]), 5 / 1000)
+pd_h2(prsice_female_meta[Threshold == 5e-8]$R2, sum(PD_female[!is.na(PD)]$PD) / nrow(PD_female[!is.na(PD)]), 5 / 1000)
+```
+
 
 ## Overlap in SNPs for optimal PRS
 ```{r}

@@ -1,0 +1,122 @@
+---
+title: "Table 1"
+output: html_notebook
+---
+*Goal:* Generate demographics table along all assessed variables, convert to latex, and insert into paper as "table 1" or "table S1"
+## Libraries
+```{r setup}
+library(tidyverse)
+library(data.table)
+library(knitr)
+library(table1)
+Sys.setlocale("LC_MESSAGES", "en_US.utf8")
+knitr::opts_knit$set(root.dir = "~/prs_ewas_integration/prs_analyses/")
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE, cache.lazy = FALSE, autodep = TRUE)
+```
+
+## Load in and format TERRE data
+```{r}
+load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/1-TERRE_RG_filtered.RData") # PD_RG_filtered
+
+mvals_combat <- minfi::getM(PD_RG_filtered)
+(covars <- fread("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv"))
+covars$IID <- gsub("_PAE.*", "", covars$IID)
+prs_mat <- fread("prsice_data/TERRE_PRSice.all_score")
+
+# filtering
+covars <- covars[patient %in% colnames(mvals_combat) & IID %in% prs_mat$IID]
+prs_mat <- prs_mat[IID %in% covars$IID]
+mvals_combat <- mvals_combat[, colnames(mvals_combat) %in% covars$patient]
+
+# matching
+covars <- covars[match(patient, colnames(mvals_combat))]
+colnames(mvals_combat) <- covars$IID[match(covars$patient, colnames(mvals_combat))]
+prs_mat <- prs_mat[match(IID, colnames(mvals_combat))]
+
+
+computed_covars <- fread("prsice_data/TERRE.covariate")[IID %in% colnames(mvals_combat)]
+
+
+all(covars$IID == computed_covars$IID)
+covars <- cbind(covars[, -c("age", "men")], prs_mat[, .(SCORE1_AVG = `Pt_5e-08`)], computed_covars)
+covars <- covars[, .(SCORE1_AVG, age, alcohol = ifelse(alcohol1 > 2, 1, 0), smoking = ifelse(smoking > 1, 1, 0), pesticides = ifelse(pesticides_work == 1, "Occupational", ifelse(pesticides_domestic == 1, "Domestic", "None")), status, GPC1 = V3, GPC2 = V4, GPC3 = V5, PC1, PC2, PC3, PC4, PC5, PC6, PC7, PC8, PC9, PC10, head_trauma = head_trauma_loc, sex)]
+
+all(covars$IID == prs_mat$IID)
+all(prs_mat$IID == colnames(mvals_combat))
+```
+
+```{r}
+library(boot)
+my.render.cont <- function(x) {
+  with(stats.apply.rounding(stats.default(x), digits = 2), c("",
+    "Mean (SD)" = sprintf("%s (&plusmn; %s)", MEAN, SD)
+  ))
+}
+my.render.cat <- function(x) {
+  c("", sapply(stats.default(x), function(y) {
+    with(
+      y,
+      sprintf("%d (%0.0f %%)", FREQ, PCT)
+    )
+  }))
+}
+covars_table <- covars[, .(sex, age, head_trauma, smoking, pesticides, status)] %>% mutate(
+  status = factor(status, levels = c(1, 0), labels = c("Case", "Control")),
+  head_trauma = factor(head_trauma, levels = c(0, 1), labels = c("Absent", "Present")),
+  smoking = factor(smoking, levels = c(1, 0), labels = c("Smoker", "Non-smoker")),
+  pesticides = factor(pesticides, levels = c("Occupational", "Domestic")),
+  sex = factor(sex, levels = c(1, 0), labels = c("Male", "Female"))
+)
+
+labels <- list(
+  variables = list(
+    sex = "Sex",
+    age = "Age (years)",
+    smoking = "Smoking status",
+    head_trauma = "Prior head injury",
+    pesticides = "Pesticide exposure"
+  ),
+  groups = list("", "Parkinson's Status")
+)
+strata <- c(list(Total = covars_table), split(covars_table, covars_table$status))
+(finished_table <- table1(strata, labels, render.continuous = my.render.cont, render.categorical = my.render.cat))
+```
+```{r}
+t1kable(finished_table, format = "latex")
+```
+
+```{r}
+library(mice)
+env_data <- fread("/home1/NEURO/SHARE_DECIPHER/TERRE_pesticides/pesticides.csv")
+mapping <- fread("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv")
+terre_prs <- fread("prsice_data/TERRE_PRSice.all_score")[, c("FID", "IID", "Pt_5e-08")]
+colnames(terre_prs) <- c("FID", "IID", "SCORE1_AVG")
+mapping$IID <- gsub("_PAE.*", "", mapping$IID)
+env_data$num <- mapping$IID[match(env_data$num, mapping$patient)]
+
+pest_missing <- read.csv("/home1/NEURO/SHARE_DECIPHER/TERRE_pesticides/pesticides.csv")
+pest_imputed <- read.csv("/home1/NEURO/SHARE_DECIPHER/TERRE_pesticides/pesticides_imputed.csv")
+
+pre_mids <- rbind(cbind(data.frame(X_imputation_ = 0), pest_missing)[, colnames(pest_imputed)], pest_imputed)
+pre_mids$num <- as.character(pre_mids$num)
+pre_mids <- pre_mids[pre_mids$num %in% mapping$patient & !is.na(mapping$IID[match(pre_mids$num, mapping$patient)]), ]
+ix <- match(mapping$IID[match(pre_mids$num, mapping$patient)], terre_prs$IID)
+pest_mids <- cbind(pre_mids, mapping[ix, .(status, sex = men)])
+
+pest_names <- fread("~/pesticide-key.csv") %>% mutate(`English name` = ifelse(`English name` != Class & Class != "", paste0(`English name`, " (", Class, ")"), `English name`))
+pest_key <- pest_names$Exposure
+names(pest_key) <- pest_names$`English name`
+pest_table <- pest_mids %>%
+  select(-X_imputation_) %>%
+  group_by(num) %>%
+  summarize_at(vars(!contains("sex|status")), ~ mean(., na.rm = T)) %>%
+  select(-num) %>%
+  mutate(
+    status = factor(status, levels = c(1, 0), labels = c("Case", "Control")),
+    sex = factor(sex, levels = c(1, 0), labels = c("Male", "Female"))
+  ) %>%
+  rename(all_of(pest_key)) %>%
+  select(-contains("_"))
+
+(pesticide_table1 <- table1(~ . | status, overall = "Total", render.continuous = my.render.cont, data = pest_table))
+```
