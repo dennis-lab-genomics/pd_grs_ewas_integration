@@ -225,7 +225,7 @@ ggplot(prsice_all,aes(scale(`Pt_5e-08`)))+
 
 ### PRS Quantiles etc
 ```{r}
-plot_quantiles <- function(prs_var,prsice_data,pheno,covariate,num_quant=10){
+plot_quantiles <- function(prs_var,prsice_data,pheno,covariate,num_quant=4){
   prsice_data$prs_var <- prsice_data[,..prs_var]
   prsice_data <- prsice_data[,c("FID","IID","prs_var")]
   quant_data <- prsice_data %>%
@@ -271,11 +271,11 @@ quant_to_plot <- rbind(cross_quant,cross_quant_ewas,male_quant,male_quant_ewas,f
 ggplot(quant_to_plot %>% mutate(Threshold= recode_factor(Threshold,best="Best"),Sex=factor(Sex,levels=c("Cross-sex","Male","Female"))), aes(DEC,Coef,ymin=CI.L,ymax=CI.U,color=Sex))+
     geom_point(position = position_dodge(width=0.9)) +
     geom_errorbar(position = position_dodge(width=0.9), width=0) +
-    coord_cartesian(ylim=c(0,20))+
+    coord_cartesian(ylim=c(0,5))+
     facet_grid(Threshold~Sex)+
     scale_color_manual(values=c(`Cross-sex`="gray80",Male="lightblue",Female="pink"))+
-    theme_minimal(base_size=16) + labs(x="Decile",y="OR")
-quant_to_plot %>% filter(DEC == 10)
+    theme_minimal(base_size=16) + labs(x="Quartile",y="OR")
+quant_to_plot %>% filter(DEC == 4)
 ```
 
 ### Liability scale R2
@@ -292,14 +292,16 @@ pd_h2 <- function(R2O, case_prop, prevalence = 0.22) {
 }
 
 # pd_h2(prsice_meta[Threshold == 0.00030005]$R2, sum(PD[!is.na(PD)]$PD) / nrow(PD[!is.na(PD)]), 5 / 1000)
+prsice_meta[Threshold == 5e-8]$R2
 pd_h2(prsice_meta[Threshold == 5e-8]$R2, sum(PD[!is.na(PD)]$PD) / nrow(PD[!is.na(PD)]), 5 / 1000)
 
-pd_h2(prsice_male_meta[Threshold == 0.0335001]$R2, sum(PD_male[!is.na(PD)]$PD) / nrow(PD_male[!is.na(PD)]), 5 / 1000)
-
+# pd_h2(prsice_male_meta[Threshold == 0.0335001]$R2, sum(PD_male[!is.na(PD)]$PD) / nrow(PD_male[!is.na(PD)]), 5 / 1000)
+prsice_male_meta[Threshold == 5e-8]$R2
 pd_h2(prsice_male_meta[Threshold == 5e-8]$R2, sum(PD_male[!is.na(PD)]$PD) / nrow(PD_male[!is.na(PD)]), 5 / 1000)
 
 
-pd_h2(prsice_female_meta[Threshold == 0.00035005]$R2, sum(PD_female[!is.na(PD)]$PD) / nrow(PD_female[!is.na(PD)]), 5 / 1000)
+# pd_h2(prsice_female_meta[Threshold == 0.00035005]$R2, sum(PD_female[!is.na(PD)]$PD) / nrow(PD_female[!is.na(PD)]), 5 / 1000)
+prsice_female_meta[Threshold == 5e-8]$R2
 pd_h2(prsice_female_meta[Threshold == 5e-8]$R2, sum(PD_female[!is.na(PD)]$PD) / nrow(PD_female[!is.na(PD)]), 5 / 1000)
 ```
 

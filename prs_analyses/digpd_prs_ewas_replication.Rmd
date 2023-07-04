@@ -22,12 +22,14 @@ load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/DIGPD_processed_2022/
 methy <- minfi::getM(DIGPD_RG_filtered)
 digpd_pcs <- fread("~/genotype_qc/DIGPD_merged_post_imputation_QC/raw_data.preimpute.pcs")
 digpd_metadata <- fread("/home1/NEURO/SHARE_DECIPHER/digpd_meta_master.csv") %>%
+  filter(is.na(visite) | visite == 1) %>%
   mutate(FID=gsub("PAL_[0-9]*_", "", FID),IID = gsub("PAL_[0-9]*_", "", IID),patient=paste0(patient,".visit",visite)) %>%
   left_join(digpd_pcs %>% mutate(GPC1=PC1,GPC2=PC2,GPC3=PC3) %>%select(FID,IID,GPC1,GPC2,GPC3) ,by=c("FID","IID"))
 methy <- methy[,colnames(methy) %in% digpd_metadata$patient]
 meta <- digpd_metadata[digpd_metadata$patient %in% colnames(methy)]
 ix <- na.omit(match(colnames(methy),meta$patient))
 methy <- methy[apply(methy,1,function(x)!any(is.infinite(x))),ix]
+colnames(methy) <- meta$IID[na.omit(match(meta$patient,colnames(methy)))]
 PCs <- prcomp(methy,center = TRUE,rank. = 10)
 prsice_cov <- na.omit(cbind(PCs$rotation,meta)[!duplicated(IID),.(FID,IID,sex=men,age=Age,GPC1,GPC2,GPC3,PC1,PC2,PC3,PC4,PC5,PC6,PC7,PC8,PC9,PC10,PD)])
 covariate <- prsice_cov[,.(IID,sex,age,GPC1,GPC2,GPC3,PC1,PC2,PC3,PC4,PC5,PC6,PC7,PC8,PC9,PC10)]
@@ -59,37 +61,7 @@ to_cor <- model.matrix(~0+.,data=all_cell_type[,.(CD8T,CD4T,NK,Bcell,Mono,Neu,pl
 corrplot(cor(to_cor,PC_cmp),method = "number")
 head(all_cell_type)
 ```
-```{r}
-library(table1)
-table_data <- meta[prsice_cov$IID,on=.(IID),nomatch=0][visite == 1 | is.na(visite)]
-head(table_data)
-library(boot)
-my.render.cont <- function(x) {
-    with(stats.apply.rounding(stats.default(x), digits=2), c("",
-        "Mean (SD)"=sprintf("%s (&plusmn; %s)", MEAN, SD)))
-}
-my.render.cat <- function(x) {
-    c("", sapply(stats.default(x), function(y) with(y,
-        sprintf("%d (%0.0f %%)", FREQ, PCT))))
-}
-covars_table <- table_data[,.(sex=men,age=Age,head_trauma,smoking,pesticides,status=PD)] %>% mutate(
-  status=factor(status,levels=c(1,0),labels=c("Case","Control")),
-  head_trauma = factor(head_trauma,levels=c(0,1),labels=c("Absent","Present")),
-  smoking = factor(smoking,levels=c(1,0),labels=c("Smoker","Non-smoker")),
-  pesticides= factor(ifelse(pesticides > 1,"Exposed","Not exposed"),levels=c("Exposed","Not exposed")),
-  sex=factor(sex,levels=c(1,0),labels=c("Male","Female"))
-)
 
-labels <- list(
-    variables=list(sex="Sex",
-                   age="Age (years)",
-                   smoking = "Smoking status",
-                   head_trauma= "Prior head injury",
-                   pesticides="Pesticide exposure"),
-    groups=list("", "Parkinson's Status"))
-strata <- c(list(Total=covars_table),split(covars_table,covars_table$status))
-(finished_table <- table1(strata,labels,render.continuous=my.render.cont, render.categorical=my.render.cat))
-```
 
 ```{r}
 library(ggpubr)
@@ -195,8 +167,11 @@ ggplot(methy[, 1:5] %>% as.data.table(keep.rownames = T) %>% melt(id.vars = "rn"
 ### Match DNA, PRS, and metadata
 ```{r}
 # prsice_best=0.00030005
-prsice_all <- fread("prsice_data/DIGPD_PRSice.all_score")[match(colnames(methy), IID,nomatch=0), .(FID, IID, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.00030005`,`Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
-covariate <- covariate[match(colnames(methy), covariate$IID,nomatch=0),]
+prsice_all <- fread("prsice_data/DIGPD_PRSice.all_score")
+methy <- methy[,colnames(methy) %in%prsice_all$IID]
+prsice_all <-prsice_all[match(colnames(methy), IID,nomatch=0), .(FID, IID, `Pt_5e-08`, `Pt_5.005e-05`, `Pt_0.00010005`, `Pt_0.00100005`, `Pt_0.00030005`,`Pt_0.0101501`, `Pt_0.1`, `Pt_0.2`, `Pt_0.3`, `Pt_0.4`, `Pt_0.5`, `Pt_1`)]
+covariate<- covariate[match(colnames(methy),IID,nomatch=0),]
+
 all(covariate$IID == colnames(methy))
 all(covariate$IID == prsice_all$IID)
 betas_combat <- methy[,covariate$IID]
@@ -220,12 +195,30 @@ all(covariate_female$IID == prsice_female_all$IID)
 
 
 ```
+### Model fits and fits on liability scale
+```{r}
+pd_h2 <- function(R2O, case_prop, prevalence = 0.22) {
+  K <- prevalence
+  P <- case_prop
+  thd <- -1 * qnorm(K, 0, 1)
+  zv <- dnorm(thd) # z (normal density)
+  mv <- zv / K # mean liability for case
+  theta <- mv * (P - K) / (1 - K) * (mv * (P - K) / (1 - K) - thd) # θ in equation
+  cv <- K * (1 - K) / zv^2 * K * (1 - K) / (P * (1 - P)) # C in
+  return(R2O * cv / (1 + R2O * theta * cv))
+}
+prsice_meta[Threshold == 0.00030005]$R2
+pd_h2(prsice_meta[Threshold == 0.00030005]$R2, sum(PD[!is.na(PD)]$PD) / nrow(PD[!is.na(PD)]), 5 / 1000)
+prsice_meta[Threshold == 5e-8]$R2
+pd_h2(prsice_meta[Threshold == 5e-8]$R2, sum(PD[!is.na(PD)]$PD) / nrow(PD[!is.na(PD)]), 5 / 1000)
+```
+
 ### Run limma
 
 ```{r}
 mvalues <- betas_combat
-prs_mat <- prsice_all[, -c(1, 2)]
-cov_mat <- covariate[, -c(1, 2)]
+prs_mat <- prsice_all[, -c(1)]
+cov_mat <- covariate[, -c(1)]
 
 mvalues_male <- betas_male
 prs_mat_male <- prsice_male_all[, -c(1, 2)]
@@ -314,7 +307,53 @@ get_full_fit <- function(prs_mat,cov_mat,mvalues){
 digpd_top_prs_hits <- get_full_fit(prs_mat,cov_mat,mvalues)
 digpd_top_male_prs_hits <- get_full_fit(prs_mat_male, cov_mat_male, mvalues_male)
 digpd_top_female_prs_hits <- get_full_fit(prs_mat_female, cov_mat_female, mvalues_female)
+```
+
+## Save main EWAS
+```{r}
 save(list=c("digpd_top_prs_hits","digpd_top_male_prs_hits","digpd_top_female_prs_hits"),file="digpd_prs_nalls_cross_w_sex_stratified.RData")
+```
+## Interaction with Sex and age
+```{r}
+
+base_model <- ~ sex + age + GPC1 + GPC2 + GPC3 + PC1 + PC2 + PC3 + PC4 + PC5 + PC6 + PC7 + PC8 + PC9 + PC10
+fit_interaction  <- function(methy, term){
+  
+  interaction_term <- paste0("SCORE1_AVG*",term)
+  design <- model.matrix(update(base_model,paste("~ . +", interaction_term)), data=cbind(data.frame(SCORE1_AVG=prs_mat$`Pt_5e-08`),cov_mat))
+  fit <- lmFit(methy, design)
+  fit <- eBayes(fit)
+  if(paste0(term,":SCORE1_AVG") %in% colnames(fit$coefficients)){
+    res <- topTable(fit, number = Inf, coef = paste0(term,":SCORE1_AVG"))
+  }else{
+    res <- topTable(fit, number = Inf, coef = paste0("SCORE1_AVG:",term))
+  }
+  main_res <- topTable(fit, number = Inf, coef = term)
+  return(list(interaction_effect=res,main=main_res))
+}
+
+sex_res <- fit_interaction(mvalues,"sex")
+age_res <- fit_interaction(mvalues,"age")
+```
+```{r}
+load("digpd_prs_nalls_cross_w_sex_stratified.RData")
+summarize_limma_res <- function(limma_res){
+  interaction <- limma_res$interaction_effect[(digpd_top_prs_hits %>% filter(adj.P.Val < 0.05))$ID,] %>%
+    rownames_to_column(var="ID") %>%
+    mutate(FDR=p.adjust(P.Value,method="BH"), effect = "Interaction") %>%
+    filter(FDR < 0.05)
+  main <- limma_res$main[(digpd_top_prs_hits %>% filter(adj.P.Val < 0.05))$ID,] %>%
+    rownames_to_column(var="ID") %>%
+    mutate(FDR=p.adjust(P.Value,method="BH"),effect= "Main") %>%
+    filter(FDR < 0.05)
+  return(rbind(interaction,main))
+}
+to_summarize <- list(
+  "Sex"=sex_res,
+  "Age"=age_res
+)
+(non_pest_summary <- rbindlist(lapply(to_summarize,summarize_limma_res),idcol="Environment"))
+non_pest_summary %>% count(unique("ID"))
 ```
 
 

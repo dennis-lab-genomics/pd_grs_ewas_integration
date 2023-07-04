@@ -508,17 +508,17 @@ prs_regulation %>%  mutate(
     regulatory_feature=recode_factor(regulatory_feature,`Enhancer`="Enhancer",`CTCF Binding Site,Enhancer`="Enhancer",`CTCF Binding Site`="CTCF binding site",`TSS1500`="TSS1500",`TSS200`="TSS200",`Promoter Flanking Region` = "Promoter flanking region", `Promoter Flanking Region,CTCF Binding Site`="Promoter flanking region",`Promoter`="Promoter",`CTCF Binding Site,Promoter`="Promoter", `Promoter,CTCF Binding Site`="Promoter",`5'UTR`="5'UTR",`1stExon`="1stExon",`Body`="Gene body",`3'UTR`="3'UTR",`Intergenic`="Intergenic")
   ) %>% group_by(Methyl450_Loci,regulatory_feature) %>% summarize(ct = n()) %>% mutate(freq = ct/ sum(ct))
 ```
-
+### Paper Supplementary Tables
 ```{r}
-prs_regulation %>%
+prs_mf_regulation %>%
   mutate(
     regulatory_feature = ifelse(regulatory_feature == "",ifelse(UCSC_RefGene_Group =="","Intergenic",gsub(";.*", "", UCSC_RefGene_Group)),regulatory_feature)
   )  %>%
   mutate(
     regulatory_feature=recode_factor(regulatory_feature,`Enhancer`="Enhancer",`CTCF Binding Site,Enhancer`="Enhancer",`CTCF Binding Site`="CTCF binding site",`TSS1500`="TSS1500",`TSS200`="TSS200",`Promoter Flanking Region` = "Promoter flanking region", `Promoter Flanking Region,CTCF Binding Site`="Promoter flanking region",`Promoter`="Promoter",`CTCF Binding Site,Promoter`="Promoter", `Promoter,CTCF Binding Site`="Promoter",`5'UTR`="5'UTR",`1stExon`="1stExon",`Body`="Gene body",`3'UTR`="3'UTR",`Intergenic`="Intergenic"),
     Gene = gsub(";.*", "",UCSC_RefGene_Name)
-  )  %>%
-  dplyr::select(1:9,Gene,regulatory_feature) #%>% write.csv(file=,row.names=F,quote=F)
+  )  %>% mutate(Sex = factor(Sex,levels=c("Cross-sex","Male","Female"))) %>%
+  dplyr::select(1:10,Gene,regulatory_feature) %>% arrange(Sex,P.Value) %>% write.csv(file=,row.names=F,quote=F)
 
 godmc_regulation %>%
   mutate(
