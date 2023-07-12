@@ -49,7 +49,7 @@ all(prs_mat$IID == colnames(mvals_combat))
 ```{r}
 library(boot)
 get_or_covariate <- function(dat){
-  reg <- summary(glm(PD ~ .,family="binomial", data=dat)) 
+  reg <- summary(glm(PD ~ .,family="binomial", data=dat))
   coef.quantiles <- (reg$coefficients[-c(1), 1])
   ci <- (1.96 * reg$coefficients[-c(1), 2])
   ci.quantiles.u <- exp(coef.quantiles + ci)
@@ -134,8 +134,8 @@ labels <- list(
 )
 strata <- c(list(Total = covars_table), split(covars_table, covars_table$PD))
 (finished_table <- table1(
-  strata, 
-  labels, 
+  strata,
+  labels,
   render.continuous = my.render.cont,
   render.categorical = my.render.cat,
   extra.col = list("Odds Ratio [95% CI]"=function(x,...){},"P-value"=function(x,...){})
@@ -143,6 +143,20 @@ strata <- c(list(Total = covars_table), split(covars_table, covars_table$PD))
 )
 #t1kable(finished_table, format = "latex")
 ```
+### Checking GRS SNPs available at different thresholds
+```{r}
+snps <- fread("TERRE_PRSice.snp")
+snps[P  < 0.00030005]
+snps[P  < 5e-8]
+```
+### Checking if these match with different mQTL
+```{r}
+godmc <- fread("~/sig_GWAS_godmc.txt")
+godmc[V1 %in% c("rs356203", "rs28412513", "rs1372518")][order(V14)][!duplicated(V1)]
+godmc[V1 %in% c("rs356203","rs1372518","rs10025915","rs3775439",   "rs151186370","rs2619362","rs10433953","rs2737032")][order(V14)][!duplicated(V1)]
+```
+
+
 ## DIGPD table1
 ```{r}
 IDs <- fread("~/genotype_qc/DIGPD_merged_post_imputation_QC/all_imputed_r2_30_rsid.fam")[, .(FID = V1, IID = V2)]
