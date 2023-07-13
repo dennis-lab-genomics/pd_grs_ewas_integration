@@ -442,6 +442,10 @@ plot_prs_hits(prs_annot,"gray40")
 plot_prs_hits(prs_annot_male,"lightblue")
 plot_prs_hits(prs_annot_female,"pink")
 ```
+### Check for select genes in association list
+```{r}
+prs_annot[ID == "cg10917602"]
+```
 
 
 ```{r}
