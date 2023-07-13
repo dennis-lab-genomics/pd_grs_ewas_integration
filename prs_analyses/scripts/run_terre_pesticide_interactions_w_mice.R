@@ -6,14 +6,14 @@ library(mice)
 num_cores <- 32L
 setDTthreads(1)
 probe_pos <- fread("~/prs_ewas_integration/cis_mQTL_analyses/terre_data/probe_pos.txt")
-load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/1-TERRE_RG_filtered.RData") #PD_RG_filtered
+load("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/1-TERRE_RG_filtered.RData") # PD_RG_filtered
 
-methy <- minfi::getM(PD_RG_filtered) %>% data.table(keep.rownames = "cpg",key="cpg")
+methy <- minfi::getM(PD_RG_filtered) %>% data.table(keep.rownames = "cpg", key = "cpg")
 
 probe_pos <- probe_pos[geneid %chin% methy$cpg]
 
 argv <- commandArgs(trailingOnly = TRUE)
-argv <- list("TERRE_female.covariate","prs_interaction_result_prsice_female_only.txt.gz","prsice_female_data/TERRE_female_PRSice.all_score","Pt_5e-08")
+argv <- list("TERRE_female.covariate", "prs_interaction_result_prsice_female_only.txt.gz", "prsice_female_data/TERRE_female_PRSice.all_score", "Pt_5e-08")
 cov_file <- argv[[1]]
 outfile <- argv[[2]]
 prs_file <- argv[[3]]
@@ -21,7 +21,7 @@ prs_thresh <- argv[[4]]
 shared_covariates <- fread(cov_file)
 env_data <- fread("/home1/NEURO/SHARE_DECIPHER/TERRE_pesticides/pesticides.csv")
 mapping <- fread("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv")
-terre_prs <- fread(prs_file)[,c("FID","IID",..prs_thresh)]
+terre_prs <- fread(prs_file)[, c("FID", "IID", ..prs_thresh)]
 colnames(terre_prs) <- c("FID", "IID", "SCORE1_AVG")
 mapping$IID <- gsub("_PAE.*", "", mapping$IID)
 env_data$num <- mapping$IID[match(env_data$num, mapping$patient)]
@@ -38,8 +38,8 @@ envs <- colnames(pest_mids$where)
 fit_interaction <- function(rows) {
   tmp_res <- mclapply(
     1:nrow(rows),
-    function(i){
-      row <- rows[i,]
+    function(i) {
+      row <- rows[i, ]
       df <- data.frame(
         y = unlist(methy[row$cpg, -c(1), on = "cpg"])
       )
@@ -73,13 +73,13 @@ fit_interaction <- function(rows) {
       res <- data.frame(c(row, G, E, GxE))
       return(res)
     },
-    mc.cores=num_cores
+    mc.cores = num_cores
   )
   return(rbindlist(tmp_res))
 }
 load("~/prs_ewas_integration/prs_analyses/prs_nalls_cross_w_sex_stratified.RData")
 manifest <- expand_grid(cpg = probe_pos$gene, env = envs)
-just_hits <- top_prs_hits[top_prs_hits$adj.P.Val < 0.25,]$ID
-system.time(results <- fit_interaction(manifest[manifest$cpg %in% just_hits,]))
+just_hits <- top_prs_hits[top_prs_hits$adj.P.Val < 0.25, ]$ID
+system.time(results <- fit_interaction(manifest[manifest$cpg %in% just_hits, ]))
 
 fwrite(results, outfile, sep = "\t", row.names = F, quote = F)
