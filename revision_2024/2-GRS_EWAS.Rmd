@@ -1,0 +1,249 @@
+---
+title: "TERRE GRS: Epigenome-wide asssociation analysis"
+output: html_notebook
+---
+
+The manuscript "A Parkinson’s disease genetic risk score associates with blood DNAm on chromosome 17" explores how a genetic risk score (GRS) for Parkinson's disease (PD) associates with blood DNA methylation in the TERRE study of French agricultural workers, and evaluates GRS associations with DNAm in each sex as well as their sensitivity to non-genetic factors. This was originally spearheaded by Will Casazza and was posted as a pre-print on medRxiv in 2023. The current revision (2024, led by Sam Schaffner) aims to address previous reviewer feedback and prepare the manuscript for re-submission.
+
+
+In this script, EWAS is conducted to identify DNAm patterns associated with the GRS in the cross-sex and sex-stratified samples in TERRE. The models are adjusted for batch, cell type, and disease status. Results will be compared with the previous models (adjusted for 10 DNAm PCs).
+
+
+Last updated June 16, 2024 by Samantha Schaffner
+
+Based on code by Will Casazza
+
+```{r setup, include=FALSE, eval=F}
+library(lumi)
+library(limma)
+library(minfi)
+library(rcompanion)
+library(readxl)
+library(tidyverse)
+library(ggpubr)
+library(glue)
+library(data.table)
+library(car)
+library(bacon)
+library(ggplot2)
+library(ggrepel)
+library(dplyr)
+library(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)
+source("~/kobor_shared_coding_resource/qqplot_NG.R")
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### Loading in and preparing data
+```{r load dat, eval=FALSE}
+meta <- read.csv("~/PD_GRS/meta_geno_DNAm_PCs.csv")
+
+# DNAm data (2022, most recent QC'ed, same as npj PD 2024 article)
+load("~/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/1-TERRE_RG_filtered.RData")
+mvals <- getM(PD_RG_filtered)
+```
+
+# Association analysis
+
+## EWAS model checks
+
+Prior to looking at results, I'll assess whether the new EWAS model seems appropriate using three measures:
+
+*1. Variance inflation factor*: The variance inflation factor (VIF) can be used to detect collinearity. Higher VIF values indicate a greater degree of collinearity. Typically VIF < 5 is considered acceptable.
+
+
+*2. Q-Q plot of nominal p-values*: If the variable of interest does not affect global DNAm, p-values should distribute close to the center line on a normal Q-Q plot, with some deviation at the tail indicating associations detected. The shape of the Q-Q plot can visually indicate model inflation or deflation.
+
+
+*3. Bias and inflation calculations*: The "bacon" package (van Iterson et al., 2017) was developed to calculate and optionally, correct for, bias and inflation observed in epigenome-wide association studies. It models test statistics using a Bayesian mixture model, and estimates the model parameters: bias (mean) and inflation (standard deviation). The Bayesian mixture model is proposed to more accurately model the quantitative nature and technical/biological influences on epigenomic and transcriptomic data, as opposed to the traditional genomic inflation factor (based on discrete genotypes).
+
+
+```{r ewas models, eval=F}
+## Preparing data
+# match meta data and M-values
+meta <- meta[complete.cases(meta$CTP_PC1),]
+mvals <- mvals[,match(meta$patient, colnames(mvals))]
+all(colnames(mvals)==meta$patient) #TRUE
+
+# subset meta data to relevant columns and re-format
+meta_sub <- meta[,c("patient","SCORE1_AVG","PD","age","sex","geno_V3","geno_V4","geno_V5","CTP_PC1","CTP_PC2","CTP_PC3","CTP_PC4","CTP_PC5","CTP_PC6","smoking","pesticides","head_trauma","alcohol1","levodopa","agonist","plate","SentrixPosition_A")]
+str(meta_sub)
+meta_sub$PD <- as.factor(meta_sub$PD)
+meta_sub$sex <- as.factor(meta_sub$sex)
+meta_sub$smoking <- as.factor(meta_sub$smoking)
+meta_sub$pesticides <- as.factor(meta_sub$pesticides)
+meta_sub$head_trauma <- as.factor(meta_sub$head_trauma)
+meta_sub$alcohol1 <- as.factor(meta_sub$alcohol1)
+meta_sub$levodopa <- as.factor(meta_sub$levodopa)
+meta_sub$plate <- as.factor(meta_sub$plate)
+meta_sub$SentrixPosition_A <- as.factor(meta_sub$SentrixPosition_A)
+
+## Variance inflation factor
+# check for one CpG (result is the same as when applied to all CpGs and averaged)
+vif(lm(mvals[1,] ~ meta_sub$SCORE1_AVG + meta_sub$age + meta_sub$sex + meta_sub$geno_V3 + meta_sub$geno_V4 + meta_sub$geno_V5 + meta_sub$CTP_PC1 + meta_sub$CTP_PC2 + meta_sub$CTP_PC3 + meta_sub$CTP_PC4 + meta_sub$CTP_PC5 + meta_sub$CTP_PC6 + meta_sub$plate + meta_sub$SentrixPosition_A + meta_sub$PD))[,3]
+
+#       meta_sub$SCORE1_AVG               meta_sub$age               meta_sub$sex 
+#                  1.047923                   1.104620                   1.541255 
+#          meta_sub$geno_V3           meta_sub$geno_V4           meta_sub$geno_V5 
+#                  1.081889                   1.103137                   1.068439 
+#          meta_sub$CTP_PC1           meta_sub$CTP_PC2           meta_sub$CTP_PC3 
+#                  1.096261                   1.133180                   1.316482 
+#          meta_sub$CTP_PC4           meta_sub$CTP_PC5           meta_sub$CTP_PC6 
+#                  1.142075                   1.244627                   1.160119 
+#            meta_sub$plate meta_sub$SentrixPosition_A                meta_sub$PD 
+#                  1.135407                   1.051032                   1.072224 
+
+
+## Q-Q plot
+pvals <- sapply(1:nrow(mvals), function(x) {
+  coef(summary(lm(mvals[x,] ~ meta_sub$SCORE1_AVG + meta_sub$age + meta_sub$sex + meta_sub$geno_V3 + meta_sub$geno_V4 + meta_sub$geno_V5 + meta_sub$CTP_PC1 + meta_sub$CTP_PC2 + meta_sub$CTP_PC3 + meta_sub$CTP_PC4 + meta_sub$CTP_PC5 + meta_sub$CTP_PC6 + meta_sub$plate + meta_sub$SentrixPosition_A + meta_sub$PD)))[2,4]
+   })
+qqunif.plot(pvals, title="Model adjusted for PD, batch, and cell type")
+
+## Bias and inflation (based on Z-values)
+zvals <- qnorm(pvals)
+bacon(zvals)
+#...estimated bias: -0.088.
+#...estimated inflation: 1.
+```
+![Q-Q plot for updated EWAS model](/home1/NEURO/schaffner/PD_GRS/qqplot.png)
+
+The majority of p-values follow the expected distribution, while the tail branches off strongly. This is similar to the previous Q-Q plot generated by Will, and demonstrates an appropriate model (mostly null p-values) with an expected strong effect of genotype on DNA methylation.
+
+Despite an association between cell type PC2 and PD status, the VIF calculations indicate low (if any) collinearity, and the bacon results indicate low bias (number should be near zero) and no inflation (number should be near 1, and is exactly 1 here).
+
+## Differential methylation analysis
+
+Will used limma on all EPIC probes passing QC, modeling the data with M-values. I'll continue with this approach and transform results back to beta values later for plotting and interpretation purposes.
+
+First, as Will did, I'll apply the updated models to (1) the cross-sex sample, (2) males, (3) females, (4) PD cases, and (5) controls. This permits us to detect whether GRS associations with DNAm are dependent on sex and/or disease status.
+
+```{r prs ewas, eval=F}
+# set up meta data
+na_row <- !apply(meta_sub[, c("SCORE1_AVG", "age", "sex", "geno_V3", "geno_V4", "geno_V5", "CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5", "CTP_PC6", "plate", "SentrixPosition_A", "PD")], 1, function(x) any(is.na(x)))
+summary(na_row) #no NA's for these covariates
+str(meta_sub[,c("SCORE1_AVG", "age", "sex", "geno_V3", "geno_V4", "geno_V5", "CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5", "CTP_PC6", "plate", "SentrixPosition_A", "PD")]) #checking format again - good
+
+# limma design matrix and linear model fit
+design_prs <- model.matrix(~ 1 + SCORE1_AVG + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD, data = meta_sub)
+prs_fit <- lmFit(mvals, design_prs)
+prs_fit <- eBayes(prs_fit)
+
+# Cases only
+design_prs_case <- model.matrix(~ 1 + SCORE1_AVG + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A, data = meta_sub[meta_sub$PD=="1",])
+prs_fit_case <- lmFit(mvals[,match(unlist(meta_sub[meta_sub$PD=="1","patient"]), colnames(mvals))], design_prs_case)
+prs_fit_case <- eBayes(prs_fit_case)
+
+# Controls only
+design_prs_control <- model.matrix(~ 1 + SCORE1_AVG + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A, data = meta_sub[meta_sub$PD=="0",])
+prs_fit_control <- lmFit(mvals[,match(unlist(meta_sub[meta_sub$PD=="0","patient"]), colnames(mvals))], design_prs_control)
+prs_fit_control <- eBayes(prs_fit_control)
+
+# Males
+design_prs_male <- model.matrix(~ 1 + SCORE1_AVG + age + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD, data = meta_sub[meta_sub$sex=="M",])
+prs_fit_male <- lmFit(mvals[,match(unlist(meta_sub[meta_sub$sex=="M","patient"]), colnames(mvals))], design_prs_male)
+# Coefficients not estimable: plate6 plate9 
+# Partial NA coefficients for 803777 probe(s)
+prs_fit_male <- eBayes(prs_fit_male)
+# Estimation of var.prior failed - set to default value
+
+# Females
+design_prs_female <- model.matrix(~ 1 + SCORE1_AVG + age + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD, data = meta_sub[meta_sub$sex=="F",])
+prs_fit_female <- lmFit(mvals[,match(unlist(meta_sub[meta_sub$sex=="F","patient"]), colnames(mvals))], design_prs_female)
+prs_fit_female <- eBayes(prs_fit_female)
+
+design_pd <- model.matrix(~ 1 + PD + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A, data = meta_sub)
+pd_fit <- lmFit(mvals, design_pd)
+pd_fit <- eBayes(pd_fit)
+pd_res <- limma::topTable(pd_fit, coef = 2, number = Inf, genelist=rownames(mvals))
+prs_res <- limma::topTable(prs_fit, coef = 2, number = Inf, genelist=rownames(mvals))
+control_res <- limma::topTable(prs_fit_control, coef = 2, number = Inf, genelist=rownames(mvals))
+case_res <- limma::topTable(prs_fit_case, coef = 2, number = Inf, genelist=rownames(mvals))
+male_res <- limma::topTable(prs_fit_male, coef = 2, number = Inf, genelist=rownames(mvals))
+female_res <- limma::topTable(prs_fit_female, coef = 2, number = Inf, genelist=rownames(mvals))
+
+# save everything
+# put limma results in separate csv's and together as one RData object for ease later
+save(mvals, file="~/PD_GRS/TERRE_Mvals.RData")
+write.csv(meta_sub, file="~/PD_GRS/meta_for_GRS_EWAS.csv", row.names=F)
+save(pd_res, prs_res, control_res, case_res, male_res, female_res, file="~/PD_GRS/EWAS_limma_all.RData")
+write.csv(pd_res, file="~/PD_GRS/EWAS_PD.csv", row.names=F)
+write.csv(prs_res, file="~/PD_GRS/EWAS_GRS_cross_sex.csv", row.names=F)
+write.csv(case_res, file="~/PD_GRS/EWAS_GRS_cases.csv", row.names=F)
+write.csv(control_res, file="~/PD_GRS/EWAS_GRS_controls.csv", row.names=F)
+write.csv(male_res, file="~/PD_GRS/EWAS_GRS_males.csv", row.names=F)
+write.csv(female_res, file="~/PD_GRS/EWAS_GRS_females.csv", row.names=F)
+```
+
+### Plotting results
+
+For now, I am plotting adjusted delta M-values (model coefficients) to compare with the previous result, and will use the same thresholds reported by Will (delta M > 1.5, padj < 0.05). After, I'll calculate the delta betas for the same model.
+
+```{r volcano plot, eval=F}
+meta_sub <- read.csv("~/PD_GRS/meta_for_GRS_EWAS.csv")
+prs_res <- read.csv("~/PD_GRS/EWAS_GRS_cross_sex.csv")
+load("~/PD_GRS/TERRE_Mvals.RData")
+
+# annotate topTable
+load("~/kobor_shared_coding_resource/EPIC_fdat.RData")
+fdat <- fData_EPIC[match(rownames(mvals), fData_EPIC$TargetID),]
+all(fdat$TargetID==rownames(mvals))
+colnames(prs_res)[1] <- "TargetID"
+prs_res <- left_join(prs_res, fdat, by="TargetID")
+
+# logFC: delta M
+# AveExpr: average M
+colnames(prs_res)[2:3] <- c("delta_M", "avgM")
+write.csv(prs_res, file="~/PD_GRS/EWAS_GRS_cross_sex.csv", row.names=F)
+
+# plot with delta M threshold
+summary(prs_res$threshold_M <- (prs_res$adj.P.Val <= 0.05 & abs(prs_res$delta_M)>=1.5)) #27
+prs_hits <- prs_res[prs_res$threshold_M==TRUE,]
+write.csv(prs_hits, file="~/PD_GRS/EWAS_GRS_cross_sex_hits.csv", row.names=F)
+
+max(prs_res[prs_res$threshold_M==TRUE,"P.Value"]) #1.670565e-06
+prs_res$DNAm_change <- "NS"
+prs_res[prs_res$threshold_M==TRUE & prs_res$delta_M>0,"DNAm_change"] <- "Increase"
+prs_res[prs_res$threshold_M==TRUE & prs_res$delta_M<0,"DNAm_change"] <- "Decrease"
+summary(as.factor(prs_res$DNAm_change))
+#Decrease Increase       NS 
+#       9       18   803750 
+
+# check gene names of hits
+View(prs_hits[,c("TargetID","UCSC_REFGENE_NAME")])
+prs_hits$UCSC_REFGENE_NAME
+# replace repeated gene names
+prs_hits$UCSC_REFGENE_NAME <- as.character(prs_hits$UCSC_REFGENE_NAME)
+prs_hits$UCSC_REFGENE_NAME <- c("MAPT","KIAA1267","","KANSL1","ARHGAP27","","","KANSL1","","MGC57346-CRHR1","MAPT",
+                               "MAPT","","MAPT","","ARHGAP27","KANSL1","","MAPT","","KANSL1","ALK","MGC57346-CRHR1",
+                               "MAPT","SORCS3","NRP2","ARHGAP27")
+prs_res_hits <- prs_res[match(prs_hits$TargetID, prs_res$TargetID),]
+all(prs_res_hits$TargetID==prs_hits$TargetID)
+prs_res_hits$UCSC_REFGENE_NAME <- prs_hits$UCSC_REFGENE_NAME
+prs_res_other <- prs_res[-(which(prs_res$TargetID %in% prs_hits$TargetID)),]
+prs_res_other$UCSC_REFGENE_NAME <- as.character(prs_res_other$UCSC_REFGENE_NAME)
+prs_res <- rbind(prs_res_hits, prs_res_other)
+write.csv(prs_res, file="~/PD_GRS/EWAS_GRS_cross_sex.csv", row.names=F)
+write.csv(prs_res_hits, file="~/PD_GRS/EWAS_GRS_cross_sex_hits.csv", row.names=F)
+
+max(abs(prs_res$delta_M)) #195.2651
+max(-log10(prs_res$P.Value)) #11.95357
+
+png("~/PD_GRS/volcano_GRS_cross_sex_Mvals.png", width=200, height=250)
+ggplot(prs_res[,c("delta_M","P.Value","DNAm_change","UCSC_REFGENE_NAME")], aes(x=delta_M, y=-log10(P.Value), colour=DNAm_change)) +
+  geom_point(size=1.75) +
+  labs(legend.position = "none") +
+  xlab("Adjusted Delta M") + ylab("-log10 P-Value") + theme_classic() + scale_color_manual(values=c("black","black","gray70")) + geom_hline(yintercept=-log10(1.670565e-06)) + geom_vline(xintercept=-1.5) + geom_vline(xintercept=1.5) +
+    geom_label_repel(data = prs_res[prs_res$threshold==TRUE,c("delta_M","P.Value","DNAm_change","UCSC_REFGENE_NAME")],
+            aes(label = UCSC_REFGENE_NAME), size = 4, force = 10, max.overlaps=8) + theme(legend.position="none")+ ylim(c(0,15)) + xlim(c(-200,200))
+dev.off()
+
+# Compare with previous result - how many overlap?
+SI <- read_xlsx("~/PD_GRS/Table SI.xlsx", skip=2)
+length(prs_res_hits$TargetID[prs_res_hits$TargetID %in% SI$Probe]) #25
+```
+![Updated EWAS model](/home1/NEURO/schaffner/PD_GRS/volcano_GRS_cross_sex_Mvals.png)
+
+Most of the associations were also found previously, and many are on chromosome 17, mapping to the MAPT gene. This is consistent with Will's previous findings and demonstrative of the very strong association between the GRS and chr 17 DNA methylation.
+
+
