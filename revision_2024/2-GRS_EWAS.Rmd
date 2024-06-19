@@ -9,7 +9,7 @@ The manuscript "A Parkinson’s disease genetic risk score associates with blood
 In this script, EWAS is conducted to identify DNAm patterns associated with the GRS in the cross-sex and sex-stratified samples in TERRE. The models are adjusted for batch, cell type, and disease status. Results will be compared with the previous models (adjusted for 10 DNAm PCs).
 
 
-Last updated June 16, 2024 by Samantha Schaffner
+Last updated June 19, 2024 by Samantha Schaffner: Adding sex- and disease-stratified EWAS results
 
 Based on code by Will Casazza
 
@@ -179,7 +179,8 @@ write.csv(female_res, file="~/PD_GRS/EWAS_GRS_females.csv", row.names=F)
 
 For now, I am plotting adjusted delta M-values (model coefficients) to compare with the previous result, and will use the same thresholds reported by Will (delta M > 1.5, padj < 0.05). After, I'll calculate the delta betas for the same model.
 
-```{r volcano plot, eval=F}
+#### Cross-sex GRS EWAS
+```{r volcano cross sex, eval=F}
 meta_sub <- read.csv("~/PD_GRS/meta_for_GRS_EWAS.csv")
 prs_res <- read.csv("~/PD_GRS/EWAS_GRS_cross_sex.csv")
 load("~/PD_GRS/TERRE_Mvals.RData")
@@ -240,10 +241,336 @@ dev.off()
 
 # Compare with previous result - how many overlap?
 SI <- read_xlsx("~/PD_GRS/Table SI.xlsx", skip=2)
-length(prs_res_hits$TargetID[prs_res_hits$TargetID %in% SI$Probe]) #25
+SI_cross_sex <- SI[SI$`TERRE Sample`=="Cross-sex",]
+length(prs_res_hits$TargetID[prs_res_hits$TargetID %in% SI_cross_sex$Probe]) #25
+
+# join data together to compare effects and p-values from each analysis
+SI_sub <- SI_cross_sex[,c("Probe","logFC","BH Adjusted P Value")]
+colnames(SI_sub) <- c("TargetID", "delta_M_orig", "adj.P.Val.orig")
+combine <- left_join(prs_res_hits, SI_sub, by="TargetID")
+combine <- combine[complete.cases(combine$delta_M_orig),]
+max(c(combine$delta_M, combine$delta_M_orig)) #195.2651
+min(c(combine$delta_M, combine$delta_M_orig)) #-177.9853
+
+png("~/PD_GRS/EWAS_cross_sex_Mval_comparison.png", width=200, height=225)
+ggplot(combine, aes(x=delta_M, y=delta_M_orig)) + geom_point() + geom_smooth(method="lm", col="grey") + theme_bw() + xlab("New adjusted delta M") + ylab("Original adjusted delta M") + xlim(c(-200,200)) + ylim(c(-200,200)) + ggtitle("Cross-sex EWAS M-value \ncomparison") + stat_cor(label.y=150)
+dev.off()
 ```
 ![Updated EWAS model](/home1/NEURO/schaffner/PD_GRS/volcano_GRS_cross_sex_Mvals.png)
 
 Most of the associations were also found previously, and many are on chromosome 17, mapping to the MAPT gene. This is consistent with Will's previous findings and demonstrative of the very strong association between the GRS and chr 17 DNA methylation.
 
+![](/home1/NEURO/schaffner/PD_GRS/EWAS_cross_sex_Mval_comparison.png)
+
+Adjusted delta M-values for the 25 overlapping probes are strongly correlated between the two methods.
+
+#### Cross-sex PD status EWAS
+```{r volcano pd, eval=F}
+pd_res <- read.csv("~/PD_GRS/EWAS_PD.csv")
+
+# annotate topTable
+all(fdat$TargetID==rownames(mvals))
+colnames(pd_res)[1] <- "TargetID"
+pd_res <- left_join(pd_res, fdat, by="TargetID")
+
+# logFC: delta M
+# AveExpr: average M
+colnames(pd_res)[2:3] <- c("delta_M", "avgM")
+
+# plot with delta M threshold
+summary(pd_res$threshold_M <- (pd_res$adj.P.Val <= 0.05 & abs(pd_res$delta_M)>=1.5)) #none pass threshold
+min(pd_res$adj.P.Val) #0.9940453
+pd_res$DNAm_change <- "NS"
+write.csv(pd_res, file="~/PD_GRS/EWAS_PD.csv", row.names=F)
+
+max(abs(pd_res$delta_M)) #1.526025
+max(-log10(pd_res$P.Value)) #5.597638
+
+# with the same plot parameters as above (for comparison)
+png("~/PD_GRS/volcano_PD_Mvals.png", width=200, height=250)
+ggplot(pd_res[,c("delta_M","P.Value","DNAm_change")], aes(x=delta_M, y=-log10(P.Value), colour=DNAm_change)) +
+  geom_point(size=1.75) +
+  labs(legend.position = "none") +
+  xlab("Adjusted Delta M") + ylab("-log10 P-Value") + theme_classic() + scale_color_manual(values=c("gray70")) + geom_hline(yintercept=-log10(1.7e-06)) + geom_vline(xintercept=-1.5) + geom_vline(xintercept=1.5) + theme(legend.position="none")+ ylim(c(0,15)) + xlim(c(-200,200))
+dev.off()
+
+# zoomed in
+png("~/PD_GRS/volcano_PD_Mvals_zoom.png", width=200, height=250)
+ggplot(pd_res[,c("delta_M","P.Value","DNAm_change")], aes(x=delta_M, y=-log10(P.Value), colour=DNAm_change)) +
+  geom_point(size=1.75) +
+  labs(legend.position = "none") +
+  xlab("Adjusted Delta M") + ylab("-log10 P-Value") + theme_classic() + scale_color_manual(values=c("gray70")) + geom_vline(xintercept=-1.5) + geom_vline(xintercept=1.5) + theme(legend.position="none")+ ylim(c(0,6)) + xlim(c(-2,2))
+dev.off()
+```
+![Cross-sex EWAS for PD status](/home1/NEURO/schaffner/PD_GRS/volcano_PD_Mvals_zoom.png)
+
+There are no DNAm changes related to PD status in the cross-sex sample (neither the effect sizes nor p-values come close to any thresholds). 
+
+
+#### Cross-sex GRS EWAS in PD cases
+```{r volcano cases, eval=F}
+case_res <- read.csv("~/PD_GRS/EWAS_GRS_cases.csv")
+
+# annotate topTable
+all(fdat$TargetID==rownames(mvals))
+colnames(case_res)[1] <- "TargetID"
+case_res <- left_join(case_res, fdat, by="TargetID")
+
+# logFC: delta M
+# AveExpr: average M
+colnames(case_res)[2:3] <- c("delta_M", "avgM")
+
+# plot with delta M threshold
+summary(case_res$threshold_M <- (case_res$adj.P.Val <= 0.05 & abs(case_res$delta_M)>=1.5)) #none
+case_res$DNAm_change <- "NS"
+write.csv(case_res, file="~/PD_GRS/EWAS_GRS_cases.csv", row.names=F)
+
+max(abs(case_res$delta_M)) #318.9209
+max(-log10(case_res$P.Value)) #5.01351
+
+png("~/PD_GRS/volcano_GRS_cases_Mvals.png", width=200, height=250)
+ggplot(case_res[,c("delta_M","P.Value","DNAm_change")], aes(x=delta_M, y=-log10(P.Value), colour=DNAm_change)) +
+  geom_point(size=1.75) +
+  labs(legend.position = "none") +
+  xlab("Adjusted Delta M") + ylab("-log10 P-Value") + theme_classic() + scale_color_manual(values=c("gray70")) + geom_hline(yintercept=-log10(1.7e-06)) + geom_vline(xintercept=-1.5) + geom_vline(xintercept=1.5) + theme(legend.position="none")+ ylim(c(0,15)) + xlim(c(-350,350))
+dev.off()
+```
+![EWAS in PD cases](/home1/NEURO/schaffner/PD_GRS/volcano_GRS_cases_Mvals.png)
+
+There are no DNAm changes related to the GRS in PD cases (p-values are not significant, indicating high variability in effect sizes). 
+
+
+#### Cross-sex GRS EWAS in controls
+```{r volcano control, eval=F}
+control_res <- read.csv("~/PD_GRS/EWAS_GRS_controls.csv")
+
+# annotate topTable
+all(fdat$TargetID==rownames(mvals))
+colnames(control_res)[1] <- "TargetID"
+control_res <- left_join(control_res, fdat, by="TargetID")
+
+# logFC: delta M
+# AveExpr: average M
+colnames(control_res)[2:3] <- c("delta_M", "avgM")
+
+# plot with delta M threshold
+summary(control_res$threshold_M <- (control_res$adj.P.Val <= 0.05 & abs(control_res$delta_M)>=1.5)) #14
+control_hits <- control_res[control_res$threshold_M==TRUE,]
+write.csv(control_hits, file="~/PD_GRS/EWAS_GRS_controls_hits.csv", row.names=F)
+
+max(control_res[control_res$threshold_M==TRUE,"P.Value"]) #6.823928e-07
+control_res$DNAm_change <- "NS"
+control_res[control_res$threshold_M==TRUE & control_res$delta_M>0,"DNAm_change"] <- "Increase"
+control_res[control_res$threshold_M==TRUE & control_res$delta_M<0,"DNAm_change"] <- "Decrease"
+summary(as.factor(control_res$DNAm_change))
+#Decrease Increase       NS 
+#       6        8   803763 
+
+# check gene names of hits
+View(control_hits[,c("TargetID","UCSC_REFGENE_NAME")])
+control_hits$UCSC_REFGENE_NAME
+# replace repeated gene names
+control_hits$UCSC_REFGENE_NAME <- as.character(control_hits$UCSC_REFGENE_NAME)
+control_hits$UCSC_REFGENE_NAME <- c("", "KANSL1", "ARGHAP27", "KANSL1", "MAPT", "KIAA1267", "", "", "", "MAPT", "MAPT", "SORCSC3", "MGC57346-CRHR1", "MAPT")
+control_res_hits <- control_res[match(control_hits$TargetID, control_res$TargetID),]
+all(control_res_hits$TargetID==control_hits$TargetID)
+control_res_hits$UCSC_REFGENE_NAME <- control_hits$UCSC_REFGENE_NAME
+control_res_other <- control_res[-(which(control_res$TargetID %in% control_hits$TargetID)),]
+control_res_other$UCSC_REFGENE_NAME <- as.character(control_res_other$UCSC_REFGENE_NAME)
+control_res <- rbind(control_res_hits, control_res_other)
+write.csv(control_res, file="~/PD_GRS/EWAS_GRS_controls.csv", row.names=F)
+write.csv(control_res_hits, file="~/PD_GRS/EWAS_GRS_controls_hits.csv", row.names=F)
+
+max(abs(control_res$delta_M)) #218.4101
+max(-log10(control_res$P.Value)) #9.334038
+
+png("~/PD_GRS/volcano_GRS_controls_Mvals.png", width=200, height=250)
+ggplot(control_res[,c("delta_M","P.Value","DNAm_change","UCSC_REFGENE_NAME")], aes(x=delta_M, y=-log10(P.Value), colour=DNAm_change)) +
+  geom_point(size=1.75) +
+  labs(legend.position = "none") +
+  xlab("Adjusted Delta M") + ylab("-log10 P-Value") + theme_classic() + scale_color_manual(values=c("black","black","gray70")) + geom_hline(yintercept=-log10(6.823928e-07)) + geom_vline(xintercept=-1.5) + geom_vline(xintercept=1.5) +
+    geom_label_repel(data = control_res[control_res$threshold==TRUE,c("delta_M","P.Value","DNAm_change","UCSC_REFGENE_NAME")],
+            aes(label = UCSC_REFGENE_NAME), size = 4, force = 10, max.overlaps=6) + theme(legend.position="none")+ ylim(c(0,15)) + xlim(c(-250,250))
+dev.off()
+
+# How many overlap with combined case-control sample?
+length(control_res_hits$TargetID[control_res_hits$TargetID %in% prs_res_hits$TargetID]) #13
+
+# Look at the one that doesn't overlap
+control_res_hits[-which(control_res_hits$TargetID %in% prs_res_hits$TargetID),c("TargetID","UCSC_REFGENE_NAME","UCSC_REFGENE_GROUP","delta_M","adj.P.Val")]
+#     TargetID UCSC_REFGENE_NAME                              UCSC_REFGENE_GROUP   delta_M  adj.P.Val
+#11 cg00112026              MAPT 5'UTR;5'UTR;5'UTR;5'UTR;5'UTR;5'UTR;5'UTR;5'UTR -40.04757 0.01990275
+
+# Compare effect size with combined sample
+# join data together to compare effects and p-values from each analysis
+prs_sub <- prs_res_hits[,c("TargetID","delta_M","adj.P.Val")]
+colnames(prs_sub) <- c("TargetID", "delta_M_combined", "adj.P.Val.combined")
+combine <- left_join(control_res_hits, prs_sub, by="TargetID")
+combine <- combine[complete.cases(combine$delta_M_combined),]
+max(c(combine$delta_M, combine$delta_M_combined)) #218.4101
+min(c(combine$delta_M, combine$delta_M_combined)) #-211.3666
+
+png("~/PD_GRS/EWAS_control_vs_combined_Mvals.png", width=200, height=250)
+ggplot(combine, aes(x=delta_M, y=delta_M_combined)) + geom_point() + geom_smooth(method="lm", col="grey") + theme_bw() + xlab("Controls adjusted delta M") + ylab("Combined case-control adjusted delta M") + xlim(c(-250,250)) + ylim(c(-250,250)) + ggtitle("Cross-sex EWAS M-value \ncomparison \n(controls vs. combined)") + stat_cor(label.y=150)
+dev.off()
+```
+![EWAS in controls](/home1/NEURO/schaffner/PD_GRS/volcano_GRS_controls_Mvals.png)
+
+14 probes are associated with the GRS in controls, 13 of which also appeared in the combined case-control sample.
+
+![](/home1/NEURO/schaffner/PD_GRS/EWAS_cross_sex_Mval_comparison.png)
+
+The 14 probes have highly similar effect sizes in the control-only and case-control combined sample.
+
+
+#### Females GRS EWAS
+```{r volcano female, eval=F}
+female_res <- read.csv("~/PD_GRS/EWAS_GRS_females.csv")
+
+# annotate topTable
+colnames(female_res)[1] <- "TargetID"
+female_res <- left_join(female_res, fdat, by="TargetID")
+
+# logFC: delta M
+# AveExpr: average M
+colnames(female_res)[2:3] <- c("delta_M", "avgM")
+write.csv(female_res, file="~/PD_GRS/EWAS_GRS_females.csv", row.names=F)
+
+# plot with delta M threshold
+summary(female_res$threshold_M <- (female_res$adj.P.Val <= 0.05 & abs(female_res$delta_M)>=1.5)) #no hits
+min(female_res$adj.P.Val) #0.3603336
+female_res$DNAm_change <- "NS"
+write.csv(female_res, file="~/PD_GRS/EWAS_GRS_females.csv", row.names=F)
+
+max(abs(female_res$delta_M)) #238.3878
+max(-log10(female_res$P.Value)) #5.97757
+
+png("~/PD_GRS/volcano_GRS_females_Mvals.png", width=200, height=250)
+ggplot(female_res[,c("delta_M","P.Value","DNAm_change")], aes(x=delta_M, y=-log10(P.Value), colour=DNAm_change)) +
+  geom_point(size=1.75) +
+  labs(legend.position = "none") +
+  xlab("Adjusted Delta M") + ylab("-log10 P-Value") + theme_classic() + scale_color_manual(values=c("gray70")) + geom_hline(yintercept=-log10(1.7e-06)) + geom_vline(xintercept=-1.5) + geom_vline(xintercept=1.5) + theme(legend.position="none")+ ylim(c(0,15)) + xlim(c(-250,250))
+dev.off()
+
+# Compare with previous result
+# Check effect size of previously significant probes with effect size in the new analysis
+SI_female <- SI[SI$`TERRE Sample`=="Female",]
+
+# join data together to compare effects and p-values from each analysis
+SI_sub <- SI_female[,c("Probe","logFC","BH Adjusted P Value")]
+colnames(SI_sub) <- c("TargetID", "delta_M_orig", "adj.P.Val.orig")
+female_res_sub <- female_res[female_res$TargetID %in% SI_sub$TargetID,] #41 probes
+combine <- left_join(female_res_sub, SI_sub, by="TargetID")
+combine <- combine[complete.cases(combine$delta_M_orig),]
+max(c(combine$delta_M, combine$delta_M_orig)) #185.3679
+min(c(combine$delta_M, combine$delta_M_orig)) #-186.6422
+
+# M-values plot
+png("~/PD_GRS/EWAS_female_Mval_comparison.png", width=200, height=225)
+ggplot(combine, aes(x=delta_M, y=delta_M_orig)) + geom_point(col="lightpink4") + geom_smooth(method="lm", col="grey") + theme_bw() + xlab("New adjusted delta M") + ylab("Original adjusted delta M") + xlim(c(-200,200)) + ylim(c(-200,200)) + ggtitle("Female EWAS M-value \ncomparison") + stat_cor(label.y=150)
+dev.off()
+
+# P-values plot
+png("~/PD_GRS/EWAS_female_pval_comparison.png", width=200, height=225)
+ggplot(combine, aes(x=adj.P.Val, y=adj.P.Val.orig)) + geom_point(col="lightpink4") + geom_smooth(method="lm", col="grey") + theme_bw() + xlab("New adjusted p-value") + ylab("Original adjusted p-value") + xlim(c(0,1)) + ylim(c(0,1)) + ggtitle("Female EWAS p-value \ncomparison") + stat_cor(label.y=0.8)
+dev.off()
+```
+![Updated female EWAS model](/home1/NEURO/schaffner/PD_GRS/volcano_GRS_females_Mvals.png)
+
+Nothing reaches statistical significance for females when batch, cell type, and PD status are adjusted for.
+
+![](/home1/NEURO/schaffner/PD_GRS/EWAS_female_Mval_comparison.png)
+
+Adjusted delta M-values for the 41 probes originally discovered in the females EWAS are strongly correlated between the two methods.
+
+
+![](/home1/NEURO/schaffner/PD_GRS/EWAS_female_pval_comparison.png)
+
+Adjusted p-values for the 41 probes originally discovered in the females EWAS are all > 0.3 in the new EWAS.
+
+
+#### Males GRS EWAS
+```{r volcano male, eval=F}
+male_res <- read.csv("~/PD_GRS/EWAS_GRS_males.csv")
+
+# annotate topTable
+colnames(male_res)[1] <- "TargetID"
+male_res <- left_join(male_res, fdat, by="TargetID")
+
+# logFC: delta M
+# AveExpr: average M
+colnames(male_res)[2:3] <- c("delta_M", "avgM")
+
+# plot with delta M threshold
+summary(male_res$threshold_M <- (male_res$adj.P.Val <= 0.05 & abs(male_res$delta_M)>=1.5)) #no hits
+min(male_res$adj.P.Val) #0.1729346
+min(male_res$P.Value) #2.151525e-07
+male_res$DNAm_change <- "NS"
+write.csv(male_res, file="~/PD_GRS/EWAS_GRS_males.csv", row.names=F)
+
+max(abs(male_res$delta_M)) #187.229
+max(-log10(male_res$P.Value)) #6.667254
+
+png("~/PD_GRS/volcano_GRS_males_Mvals.png", width=200, height=250)
+ggplot(male_res[,c("delta_M","P.Value","DNAm_change")], aes(x=delta_M, y=-log10(P.Value), colour=DNAm_change)) +
+  geom_point(size=1.75) +
+  labs(legend.position = "none") +
+  xlab("Adjusted Delta M") + ylab("-log10 P-Value") + theme_classic() + scale_color_manual(values=c("gray70")) + geom_hline(yintercept=-log10(2.2e-07)) + geom_vline(xintercept=-1.5) + geom_vline(xintercept=1.5) + theme(legend.position="none")+ ylim(c(0,15)) + xlim(c(-250,250))
+dev.off()
+
+# Compare with previous result
+# Check effect size of previously significant probes with effect size in the new analysis
+SI_male <- SI[SI$`TERRE Sample`=="Male",]
+
+# join data together to compare effects and p-values from each analysis
+SI_sub <- SI_male[,c("Probe","logFC","BH Adjusted P Value")]
+colnames(SI_sub) <- c("TargetID", "delta_M_orig", "adj.P.Val.orig")
+male_res_sub <- male_res[male_res$TargetID %in% SI_sub$TargetID,] #59 probes
+combine <- left_join(male_res_sub, SI_sub, by="TargetID")
+combine <- combine[complete.cases(combine$delta_M_orig),]
+max(c(combine$delta_M, combine$delta_M_orig)) #187.229
+min(c(combine$delta_M, combine$delta_M_orig)) #-159.8757
+
+# M-values plot
+png("~/PD_GRS/EWAS_male_Mval_comparison.png", width=200, height=225)
+ggplot(combine, aes(x=delta_M, y=delta_M_orig)) + geom_point(col="lightsteelblue4") + geom_smooth(method="lm", col="grey") + theme_bw() + xlab("New adjusted delta M") + ylab("Original adjusted delta M") + xlim(c(-200,200)) + ylim(c(-200,200)) + ggtitle("Male EWAS M-value \ncomparison") + stat_cor(label.y=150)
+dev.off()
+
+# P-values plot
+png("~/PD_GRS/EWAS_male_pval_comparison.png", width=200, height=225)
+ggplot(combine, aes(x=adj.P.Val, y=adj.P.Val.orig)) + geom_point(col="lightsteelblue4") + geom_smooth(method="lm", col="grey") + theme_bw() + xlab("New adjusted p-value") + ylab("Original adjusted p-value") + xlim(c(0,1)) + ylim(c(0,1)) + ggtitle("Male EWAS p-value \ncomparison") + stat_cor(label.y=0.8)
+dev.off()
+```
+![Updated male EWAS model](/home1/NEURO/schaffner/PD_GRS/volcano_GRS_males_Mvals.png)
+
+Nothing reaches statistical significance for males when batch, cell type, and PD status are adjusted for.
+
+![](/home1/NEURO/schaffner/PD_GRS/EWAS_male_Mval_comparison.png)
+
+Adjusted delta M-values for the 59 probes originally discovered in the males EWAS are strongly correlated between the two methods.
+
+
+![](/home1/NEURO/schaffner/PD_GRS/EWAS_male_pval_comparison.png)
+
+Adjusted p-values for the 59 probes originally discovered in the males EWAS are all > 0.2 in the new EWAS.
+
+## Summary and next steps
+
+In the EWAS models adjusted for batch, cell type, and disease status, some of the same hits show up in cross-sex analysis either with combined cases and controls (25 probes) or controls only (13 probes). These include the MAPT and KANSL1 loci which had very strong effect sizes. In sex-stratified analyses, nothing passes adjusted p-value cutoffs. The reduced number of hits likely means some probes initially discovered were associated with disease status, batch, or cell type.
+
+
+Sample breakdown:
+
+218 total
+
+71 PD cases
+
+147 controls
+
+100 females
+
+118 males
+
+
+It is possible the sample size is too small in the sex-stratified and case-only analyses to detect effects. This can be checked with permutations and/or data reduction (e.g. subsetting to variable probes).
 
