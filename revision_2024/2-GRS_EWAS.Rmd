@@ -9,7 +9,7 @@ The manuscript "A Parkinson’s disease genetic risk score associates with blood
 In this script, EWAS is conducted to identify DNAm patterns associated with the GRS in the cross-sex and sex-stratified samples in TERRE. The models are adjusted for batch, cell type, and disease status. Results will be compared with the previous models (adjusted for 10 DNAm PCs).
 
 
-Last updated June 19, 2024 by Samantha Schaffner: Adding sex- and disease-stratified EWAS results
+Last updated July 1, 2024 by Samantha Schaffner: Checking effect sizes of probes from controls EWAS in PD cases
 
 Based on code by Will Casazza
 
@@ -413,15 +413,32 @@ min(c(combine$delta_M, combine$delta_M_combined)) #-211.3666
 png("~/PD_GRS/EWAS_control_vs_combined_Mvals.png", width=200, height=250)
 ggplot(combine, aes(x=delta_M, y=delta_M_combined)) + geom_point() + geom_smooth(method="lm", col="grey") + theme_bw() + xlab("Controls adjusted delta M") + ylab("Combined case-control adjusted delta M") + xlim(c(-250,250)) + ylim(c(-250,250)) + ggtitle("Cross-sex EWAS M-value \ncomparison \n(controls vs. combined)") + stat_cor(label.y=150)
 dev.off()
+
+# Compare effect size with cases-only sample
+# join data together to compare effects and p-values from each analysis
+cases_sub <- case_res[,c("TargetID","delta_M","adj.P.Val")]
+colnames(cases_sub) <- c("TargetID", "delta_M_cases", "adj.P.Val.cases")
+combine <- left_join(control_res_hits, cases_sub, by="TargetID")
+combine <- combine[complete.cases(combine$delta_M_cases),]
+max(c(combine$delta_M, combine$delta_M_cases)) #218.4101
+min(c(combine$delta_M, combine$delta_M_cases)) #-211.3666
+
+png("~/PD_GRS/EWAS_control_vs_case_Mvals.png", width=200, height=250)
+ggplot(combine, aes(x=delta_M, y=delta_M_cases)) + geom_point() + geom_smooth(method="lm", col="grey") + theme_bw() + xlab("Controls adjusted delta M") + ylab("Cases adjusted delta M") + xlim(c(-250,250)) + ylim(c(-250,250)) + ggtitle("Disease-stratified EWAS \nM-value comparison \n(controls vs. cases)") + stat_cor(label.y=150)
+dev.off()
 ```
 ![EWAS in controls](/home1/NEURO/schaffner/PD_GRS/volcano_GRS_controls_Mvals.png)
 
 14 probes are associated with the GRS in controls, 13 of which also appeared in the combined case-control sample.
 
-![](/home1/NEURO/schaffner/PD_GRS/EWAS_cross_sex_Mval_comparison.png)
+![](/home1/NEURO/schaffner/PD_GRS/EWAS_control_vs_combined_Mvals.png)
 
-The 14 probes have highly similar effect sizes in the control-only and case-control combined sample.
+The 14 probes have almost identical effect sizes in the control-only sample and the case-control combined sample adjusted for PD status.
 
+
+![](/home1/NEURO/schaffner/PD_GRS/EWAS_control_vs_case_Mvals.png)
+
+The 14 probes have a smaller effect size in PD cases than in controls.
 
 #### Females GRS EWAS
 ```{r volcano female, eval=F}

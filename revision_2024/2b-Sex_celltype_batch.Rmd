@@ -1,0 +1,179 @@
+---
+title: 'TERRE GRS: Sex, batch, and cell type checks'
+output:
+  html_document:
+    df_print: paged
+---
+
+The manuscript "A Parkinson’s disease genetic risk score associates with blood DNAm on chromosome 17" explores how a genetic risk score (GRS) for Parkinson's disease (PD) associates with blood DNA methylation in the TERRE study of French agricultural workers, and evaluates GRS associations with DNAm in each sex as well as their sensitivity to non-genetic factors. This was originally spearheaded by Will Casazza and was posted as a pre-print on medRxiv in 2023. The current revision (2024, led by Sam Schaffner) aims to address previous reviewer feedback and prepare the manuscript for re-submission.
+
+
+In this script, I will double check sex, cell type, and batch distributions to assist with interpreting the lack of GRS-DNAm associations discovered in the sex-stratified samples.
+
+
+Last updated July 1, 2024 by Samantha Schaffner
+
+## Libraries
+```{r libraries, eval=F}
+library(ggplot2)
+library(ggpubr)
+library(reshape2)
+library(pwrEWAS)
+```
+
+### GRS by sex and batch
+```{r plot, eval=F}
+meta <- read.csv("~/PD_GRS/meta_geno_DNAm_PCs.csv")
+meta <- meta[complete.cases(meta$ancestryPC1),]
+
+# GRS by sex, plate, row, and cell type
+meta$plate <- as.factor(meta$plate)
+meta$SentrixPosition_A <- as.factor(meta$SentrixPosition_A)
+
+png("~/PD_GRS/grs_plate_F.png", width=300, height=300)
+ggplot(meta[meta$sex=="F",], aes(y=SCORE1_AVG, x=plate)) + geom_boxplot() + geom_jitter() + theme_classic() + stat_compare_means(method="anova") + ggtitle("GRS by plate (females)")
+dev.off()
+
+png("~/PD_GRS/grs_plate_M.png", width=300, height=300)
+ggplot(meta[meta$sex=="M",], aes(y=SCORE1_AVG, x=plate)) + geom_boxplot() + geom_jitter() + theme_classic() + stat_compare_means(method="anova") + ggtitle("GRS by plate (males)")
+dev.off()
+
+png("~/PD_GRS/grs_row_F.png", width=300, height=300)
+ggplot(meta[meta$sex=="F",], aes(y=SCORE1_AVG, x=SentrixPosition_A)) + geom_boxplot() + geom_jitter() + theme_classic() + stat_compare_means(method="anova") + ggtitle("GRS by row (females)") + theme(axis.text.x=element_text(angle=90, vjust=1))
+dev.off()
+
+png("~/PD_GRS/grs_row_M.png", width=300, height=300)
+ggplot(meta[meta$sex=="M",], aes(y=SCORE1_AVG, x=SentrixPosition_A)) + geom_boxplot() + geom_jitter() + theme_classic() + stat_compare_means(method="anova") + ggtitle("GRS by row (males)")+ theme(axis.text.x=element_text(angle=90, vjust=1))
+dev.off()
+```
+![](/home1/NEURO/schaffner/PD_GRS/grs_plate_F.png)
+
+![](/home1/NEURO/schaffner/PD_GRS/grs_plate_M.png)
+
+![](/home1/NEURO/schaffner/PD_GRS/grs_row_F.png)
+
+![](/home1/NEURO/schaffner/PD_GRS/grs_row_M.png)
+
+There are no differences in GRS associated with plate or row in either sex.
+
+
+### GRS by cell type PC loadings
+```{r plot celltype, eval=F}
+meta_sub <- meta[,c(11,22,132:142)]
+cell_melt <- melt(meta_sub, id.vars=c("sex","SCORE1_AVG"))
+
+png("~/PD_GRS/grs_celltype_F.png", width=700, height=500)
+ggplot(cell_melt[cell_melt$sex=="F",], aes(y=SCORE1_AVG, x=value)) + geom_jitter() + geom_smooth(method="lm") + theme_classic() + stat_cor(method="pearson") + facet_wrap(~variable) + xlab("Cell type PC loadings") + ggtitle("GRS by cell type PCs (female)")
+dev.off()
+
+png("~/PD_GRS/grs_celltype_M.png", width=700, height=500)
+ggplot(cell_melt[cell_melt$sex=="M",], aes(y=SCORE1_AVG, x=value)) + geom_jitter() + geom_smooth(method="lm") + theme_classic() + stat_cor(method="pearson") + facet_wrap(~variable) + xlab("Cell type PC loadings") + ggtitle("GRS by cell type PCs (male)")
+dev.off()
+```
+![](/home1/NEURO/schaffner/PD_GRS/grs_celltype_F.png)
+
+![](/home1/NEURO/schaffner/PD_GRS/grs_celltype_M.png)
+
+The GRS does not have a statistically significant correlation with any cell type PC loadings in females or males.
+
+### PwrEWAS simulation
+```{r pwrewas, eval=F}
+# All QC'ed single CpGs
+# 800k probes, 27 target DM-CpGs, sample size between 30-210, DB 0.03, FDR 0.05
+pwr_800k_27 <- pwrEWAS(minTotSampleSize=30, maxTotSampleSize=210, SampleSizeSteps=30, NcntPer=0.67,
+    targetDelta = 0.03, J = 8e+05, targetDmCpGs=27,
+    tissueType = "Blood adult",
+    detectionLimit = 0.01, DMmethod = "limma",
+    FDRcritVal = 0.05, core = 1, sims = 50)
+pwr_800k_27$meanPower
+#           0.03
+#30  0.005037217
+#60  0.036804187
+#90  0.084219372
+#120 0.142482733
+#150 0.187013009
+#180 0.202518819
+#210 0.271711451
+
+# Variability-filtered single CpGs
+### Determine the number that pass variability in the cross-sex sample (using betas)
+load("~/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/1-TERRE_RG_filtered.RData")
+dim(betas <- minfi::getBeta(PD_RG_filtered)) #803777    231
+rm(PD_RG_filtered)
+Variation<-function(x) {quantile(x, c(0.9), na.rm=T)[[1]]-quantile(x, c(0.1), na.rm=T)[[1]]}
+ref_range<-sapply(1:nrow(betas), function(x) Variation(betas[x,]))
+dim(betas_var <- betas[which(ref_range>=0.05),]) #440,548 variable CpGs  
+save(betas, file="~/PD_GRS/TERRE_betas.RData")
+save(betas_var, file="~/PD_GRS/TERRE_betas_var.RData")
+rm(betas, betas_var)
+
+########### Run the rest of the simulations via command line (lengthy)
+library(pwrEWAS)
+ExperimentHub::setExperimentHubOption('cache', "/home1/NEURO/schaffner/.local/share/R/ExperimentHub")
+
+# 440k probes, 27 target DM-CpGs, sample size between 30-210, DB 0.03, FDR 0.05
+pwr_440k_27 <- pwrEWAS(minTotSampleSize=30, maxTotSampleSize=210, SampleSizeSteps=30, NcntPer=0.67,
+    targetDelta = 0.03, J = 4.4e+05, targetDmCpGs=27,
+    tissueType = "Blood adult",
+    detectionLimit = 0.01, DMmethod = "limma",
+    FDRcritVal = 0.05, core = 1, sims = 50)
+pwr_440k_27$meanPower
+#           0.03
+#30  0.006209072
+#60  0.039935519
+#90  0.087420849
+#120 0.164263684
+#150 0.188664148
+#180 0.242333275
+#210 0.275584475
+
+# 200k probes, 27 target DM-CpGs, sample size between 30-210, DB 0.03, FDR 0.05
+pwr_200k_27 <- pwrEWAS(minTotSampleSize=30, maxTotSampleSize=210, SampleSizeSteps=30, NcntPer=0.67,
+    targetDelta = 0.03, J = 2e+05, targetDmCpGs=27,
+    tissueType = "Blood adult",
+    detectionLimit = 0.01, DMmethod = "limma",
+    FDRcritVal = 0.05, core = 1, sims = 50)
+pwr_200k_27$meanPower
+#           0.03
+#30  0.004026455
+#60  0.039760132
+#90  0.093434036
+#120 0.162194367
+#150 0.225098364
+#180 0.261725186
+#210 0.300038719
+
+# 100k probes, 27 target DM-CpGs, sample size between 30-210, DB 0.03, FDR 0.05
+pwr_100k_27 <- pwrEWAS(minTotSampleSize=30, maxTotSampleSize=210, SampleSizeSteps=30, NcntPer=0.67,
+    targetDelta = 0.03, J = 1e+05, targetDmCpGs=27,
+    tissueType = "Blood adult",
+    detectionLimit = 0.01, DMmethod = "limma",
+    FDRcritVal = 0.05, core = 1, sims = 50)
+pwr_100k_27$meanPower
+#           0.03
+#30  0.007821493
+#60  0.065709017
+#90  0.115983493
+#120 0.180447513
+#150 0.241600704
+#180 0.268419884
+#210 0.307072677
+
+# 50k probes, 27 target DM-CpGs, sample size between 30-210, DB 0.03, FDR 0.05
+pwr_50k_27 <- pwrEWAS(minTotSampleSize=30, maxTotSampleSize=210, SampleSizeSteps=30, NcntPer=0.67,
+    targetDelta = 0.03, J = 5e+04, targetDmCpGs=27,
+    tissueType = "Blood adult",
+    detectionLimit = 0.01, DMmethod = "limma",
+    FDRcritVal = 0.05, core = 1, sims = 50)
+pwr_50k_27$meanPower
+#          0.03
+#30  0.01061989
+#60  0.05683901
+#90  0.12866158
+#120 0.18121985
+#150 0.25522515
+#180 0.30845867
+#210 0.34535913
+```
+
+A maximum power of 34% is seen in simulations with as few as 50,000 probes tested.
