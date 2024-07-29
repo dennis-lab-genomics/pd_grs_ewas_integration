@@ -1,0 +1,574 @@
+---
+title: "TERRE GRS: Replication of hits"
+output: html_notebook
+---
+
+The manuscript "A Parkinson’s disease genetic risk score associates with blood DNAm on chromosome 17" explores how a genetic risk score (GRS) for Parkinson's disease (PD) associates with blood DNA methylation in the TERRE study of French agricultural workers, and evaluates GRS associations with DNAm in each sex as well as their sensitivity to non-genetic factors. This was originally spearheaded by Will Casazza and was posted as a pre-print on medRxiv in 2023. The current revision (2024, led by Sam Schaffner) aims to address previous reviewer feedback and prepare the manuscript for re-submission.
+
+
+In this script, the effect sizes of hits discovered in the TERRE sample will be examined in the DIGPD sample, as will the PRS distribution in DIGPD. CpGs in the MAPT/KANSL1 region previously reported to be mQTLs for PD and other neurodegenerative disorders will also be examined in TERRE. Finally, TERRE GRS hits will be compared with PD-associated hits in TERRE and SGPD, using data from the CMR paper.
+
+
+Last updated July 28, 2024 by Samantha Schaffner
+
+Based on code by Will Casazza
+
+```{r setup, include=FALSE, eval=F}
+library(lumi)
+library(limma)
+library(minfi)
+library(rcompanion)
+library(readxl)
+library(tidyverse)
+library(ggpubr)
+library(glue)
+library(data.table)
+library(car)
+library(bacon)
+library(ggplot2)
+library(ggrepel)
+library(dplyr)
+library(gridExtra)
+library(GenomicRanges)
+library(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)
+```
+
+
+# Comparison of effect sizes between TERRE and DIGPD
+
+## Cross-sex sample
+
+### Combined cases and controls, adjusted for PD status
+```{r cross sex combined, eval=F}
+terre_meta <- read.csv("~/PD_GRS/meta_for_GRS_EWAS.csv")
+terre_x_sex <- read.csv("~/PD_GRS/EWAS_TERRE/EWAS_GRS_cross_sex_hits.csv")
+
+digpd_x_sex <- read.csv("~/PD_GRS/DIGPD_EWAS_GRS_cross_sex.csv")
+
+# join data together to compare effects and p-values from each analysis
+digpd_sub <- digpd_x_sex[,c("TargetID","delta_M","adj.P.Val", "P.Value")]
+colnames(digpd_sub) <- c("TargetID", "delta_M_DIGPD", "adj.P.Val.DIGPD", "P.Value.DIGPD")
+terre_sub <- terre_x_sex[,c("TargetID","delta_M","adj.P.Val", "P.Value")]
+colnames(terre_sub) <- c("TargetID", "delta_M_TERRE", "adj.P.Val.TERRE", "P.Value.TERRE")
+combine <- left_join(terre_sub, digpd_sub, by="TargetID")
+combine <- combine[complete.cases(combine$delta_M_DIGPD),] #one NA in DIGPD (a TERRE hit not in DIGPD data)
+max(c(combine$delta_M_TERRE, combine$delta_M_DIGPD)) #195.2651
+min(c(combine$delta_M_TERRE, combine$delta_M_DIGPD)) #-177.9853
+
+png("~/PD_GRS/TERRE_cross_sex_in_DIGPD.png", width=200, height=225)
+ggplot(combine, aes(x=delta_M_TERRE, y=delta_M_DIGPD)) + geom_point() + geom_smooth(method="lm", col="grey") + theme_bw() + xlab("TERRE adjusted delta M") + ylab("DIGPD adjusted delta M") + xlim(c(-200,200)) + ylim(c(-200,200)) + ggtitle("TERRE cross-sex hits \nin DIGPD") + stat_cor(label.y=150)
+dev.off()
+
+### Check how many CpGs have delta M > 1.5 and nominal p < 0.05 in DIGPD, in the same direction as TERRE
+combine$direction <- (sign(combine$delta_M_TERRE)==sign(combine$delta_M_DIGPD))
+combine$threshold_M <- (abs(combine$delta_M_DIGPD)>=1.5)
+combine$nom_p <- (combine$P.Value.DIGPD<=0.05)
+
+summary(combine[,c("direction","threshold_M","nom_p")])
+# direction       threshold_M      nom_p        
+# Mode :logical   Mode:logical   Mode :logical  
+# FALSE:1         TRUE:26        FALSE:4        
+# TRUE :25                       TRUE :22  
+
+table(combine$direction, combine$nom_p)
+#        FALSE TRUE
+#  FALSE     1    0
+#  TRUE      3   22
+
+write.csv(combine, file="~/PD_GRS/TERRE_cross_sex_in_DIGPD.csv", row.names=F)
+```
+![Comparison of cross-sex effect sizes between samples](/home1/NEURO/schaffner/PD_GRS/TERRE_cross_sex_in_DIGPD.png)
+
+Effect sizes related to the GRS in cross-sex analyses are highly correlated in TERRE and DIGPD. 22 of 26 CpGs significant in the TERRE cross-sex analysis and also present in DIGPD (85%) met nominal p < 0.05 and delta M > 1.5 in DIGPD, in the same direction as in TERRE.
+
+
+### Controls only
+```{r control, eval=F}
+terre_ctrl <- read.csv("~/PD_GRS/EWAS_GRS_controls_hits.csv")
+digpd_ctrl <- read.csv("~/PD_GRS/DIGPD_EWAS_GRS_controls.csv")
+
+# join data together to compare effects and p-values from each analysis
+digpd_sub <- digpd_ctrl[,c("TargetID","delta_M","adj.P.Val", "P.Value")]
+colnames(digpd_sub) <- c("TargetID", "delta_M_DIGPD", "adj.P.Val.DIGPD", "P.Value.DIGPD")
+terre_sub <- terre_ctrl[,c("TargetID","delta_M","adj.P.Val", "P.Value")]
+colnames(terre_sub) <- c("TargetID", "delta_M_TERRE", "adj.P.Val.TERRE", "P.Value.TERRE")
+combine <- left_join(terre_sub, digpd_sub, by="TargetID")
+max(c(combine$delta_M_TERRE, combine$delta_M_DIGPD)) #218.4101
+min(c(combine$delta_M_TERRE, combine$delta_M_DIGPD)) #-211.3666
+
+png("~/PD_GRS/TERRE_controls_in_DIGPD.png", width=200, height=225)
+ggplot(combine, aes(x=delta_M_TERRE, y=delta_M_DIGPD)) + geom_point() + geom_smooth(method="lm", col="grey") + theme_bw() + xlab("TERRE adjusted delta M") + ylab("DIGPD adjusted delta M") + xlim(c(-220,220)) + ylim(c(-220,220)) + ggtitle("TERRE controls hits \nin DIGPD") + stat_cor(label.y=150)
+dev.off()
+
+### Check how many CpGs have delta M > 1.5 and nominal p < 0.05 in DIGPD, in the same direction as TERRE
+combine$direction <- (sign(combine$delta_M_TERRE)==sign(combine$delta_M_DIGPD))
+combine$threshold_M <- (abs(combine$delta_M_DIGPD)>=1.5)
+combine$nom_p <- (combine$P.Value.DIGPD<=0.05)
+
+summary(combine[,c("direction","threshold_M","nom_p")])
+# direction      threshold_M      nom_p        
+# Mode:logical   Mode:logical   Mode :logical  
+# TRUE:14        TRUE:14        FALSE:4        
+#                               TRUE :10   
+
+write.csv(combine, file="~/PD_GRS/TERRE_controls_in_DIGPD.csv", row.names=F)
+```
+![Comparison of controls effect sizes between samples](/home1/NEURO/schaffner/PD_GRS/TERRE_controls_in_DIGPD.png)
+
+Effect sizes related to the GRS in cross-sex, control-only analyses are highly correlated in TERRE and DIGPD. 10 of 14 CpGs significant in the TERRE analysis (71%) met nominal p < 0.05 and delta M > 1.5 in DIGPD, in the same direction as in TERRE.
+
+
+#### Comparing DIGPD case and control effect sizes for TERRE controls hits
+
+As case-control effect sizes were correlated in both cohorts, with controls reaching statistical significance in TERRE and cases reaching statistical significance in DIGPD, I will check if the CpGs associated with the GRS in TERRE controls are also associated with the GRS in DIGPD PD cases.
+
+```{r cases digpd, eval=F}
+digpd_case <- read.csv("~/PD_GRS/DIGPD_EWAS_GRS_cases.csv")
+
+# join data together to compare effects and p-values from each analysis
+digpd_sub2 <- digpd_case[,c("TargetID","delta_M","adj.P.Val", "P.Value")]
+colnames(digpd_sub2) <- c("TargetID", "delta_M_DIGPD_case", "adj.P.Val.DIGPD.case", "P.Value.DIGPD.case")
+combine <- left_join(combine, digpd_sub2, by="TargetID")
+max(c(combine$delta_M_DIGPD_case, combine$delta_M_DIGPD)) #163.7125
+min(c(combine$delta_M_DIGPD_case, combine$delta_M_DIGPD)) #-182.4391
+
+png("~/PD_GRS/TERRE_control_hits_DIGPD_dis_strat.png", width=200, height=225)
+ggplot(combine, aes(x=delta_M_DIGPD_case, y=delta_M_DIGPD)) + geom_point() + geom_smooth(method="lm", col="grey") + theme_bw() + xlab("DIGPD cases adjusted delta M") + ylab("DIGPD controls adjusted delta M") + xlim(c(-200,200)) + ylim(c(-200,200)) + ggtitle("TERRE controls hits in \nDIGPD cases and controls") + stat_cor(label.y=150)
+dev.off()
+
+### Check how many CpGs have delta M > 1.5 and nominal p < 0.05 in DIGPD cases, in the same direction as TERRE controls
+combine$direction_case <- (sign(combine$delta_M_TERRE)==sign(combine$delta_M_DIGPD_case))
+combine$threshold_M_case <- (abs(combine$delta_M_DIGPD_case)>=1.5)
+combine$nom_p_case <- (combine$P.Value.DIGPD.case<=0.05)
+
+summary(combine[,c("direction_case","threshold_M_case","nom_p_case")])
+# direction_case threshold_M_case nom_p_case     
+# Mode:logical   Mode:logical     Mode :logical  
+# TRUE:14        TRUE:14          FALSE:2        
+#                                 TRUE :12  
+
+write.csv(combine, file="~/PD_GRS/TERRE_controls_in_DIGPD.csv", row.names=F)
+```
+![Comparison of TERRE controls effect sizes in DIGPD cases](/home1/NEURO/schaffner/PD_GRS/TERRE_control_hits_DIGPD_dis_strat.png)
+
+Effect sizes related to the GRS in TERRE cross-sex, control-only analyses are highly correlated in DIGPD cases and controls. 12 of 14 CpGs significant in the TERRE analysis (86%) met nominal p < 0.05 and delta M > 1.5 in DIGPD cases, in the same direction as in TERRE. Therefore, CpGs picked up in TERRE controls replicated well in both cases and controls from DIGPD, even better in DIGPD PD cases.
+
+
+# Distribution of PRS in DIGPD
+
+### R2 and h2 calculations
+```{r r2 h2, eval=F}
+meta <- read.csv("~/PD_GRS/digpd_meta_geno_DNAm_PCs.csv")
+
+fit1 <- glm(PD ~ SCORE1_AVG + reportedSex + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta, family = "binomial")
+summary(fit1) 
+fit1_null <- glm(PD ~ reportedSex + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta, family = "binomial")
+summary(fit1_null) #
+(cross_r2 <- nagelkerke(fit1, null = fit1_null))
+#                             Pseudo.R.squared
+#McFadden                            0.0272967
+#Cox and Snell (ML)                  0.0195622
+#Nagelkerke (Cragg and Uhler)        0.0379796
+
+#heritability calculation
+pd_h2 <- function(R2O, case_prop, prevalence = 0.22) {
+  K <- prevalence
+  P <- case_prop
+  thd <- -1 * qnorm(K, 0, 1)
+  zv <- dnorm(thd) # z (normal density)
+  mv <- zv / K # mean liability for case
+  theta <- mv * (P - K) / (1 - K) * (mv * (P - K) / (1 - K) - thd) # θ in equation
+  cv <- K * (1 - K) / zv^2 * K * (1 - K) / (P * (1 - P)) # C in
+  return(R2O * cv / (1 + R2O * theta * cv))
+}
+
+# liability R2
+lin1 <- lm(PD ~ SCORE1_AVG + reportedSex + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta)
+lin2 <- lm(PD ~ reportedSex + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta)
+R2 <- (deviance(lin2) - deviance(lin1)) / deviance(lin2)
+h2 <- pd_h2(R2, sum(meta$PD) / nrow(meta), 5 / 1000)
+R2 # 0.01765719
+h2 # 0.008477688
+
+fit1_male <- glm(PD ~ SCORE1_AVG + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta[meta$reportedSex == "M", ], family = "binomial")
+summary(fit1_male) #
+fit1_male_null <- glm(PD ~ Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta[meta$reportedSex == "M", ], family = "binomial")
+summary(fit1_male_null) #
+(male_r2 <- nagelkerke(fit1_male, null = fit1_male_null))
+#                             Pseudo.R.squared
+#McFadden                            0.0233878
+#Cox and Snell (ML)                  0.0151895
+#Nagelkerke (Cragg and Uhler)        0.0316270
+
+# liability R2
+lin1 <- lm(PD ~ SCORE1_AVG + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta[meta$reportedSex=="M",])
+lin2 <- lm(PD ~ Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta[meta$reportedSex=="M",])
+male_R2 <- (deviance(lin2) - deviance(lin1)) / deviance(lin2)
+male_h2 <- pd_h2(male_R2, sum(meta$PD) / nrow(meta), 5 / 1000)
+male_R2 # 0.02609324
+male_h2 # 0.01261183
+
+fit1_female <- glm(PD ~ SCORE1_AVG + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta[meta$reportedSex == "F", ], family = "binomial")
+summary(fit1_female) #
+fit1_female_null <- glm(PD ~ Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta[meta$reportedSex == "F", ], family = "binomial")
+summary(fit1_female_null) #
+(female_r2 <- nagelkerke(fit1_female, null = fit1_female_null))
+#                             Pseudo.R.squared
+#McFadden                            0.0609459
+#Cox and Snell (ML)                  0.0368360
+#Nagelkerke (Cragg and Uhler)        0.0801130
+
+# liability R2
+lin1 <- lm(PD ~ SCORE1_AVG + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta[meta$reportedSex=="F",])
+lin2 <- lm(PD ~ Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta[meta$reportedSex=="F",])
+female_R2 <- (deviance(lin2) - deviance(lin1)) / deviance(lin2)
+female_h2 <- pd_h2(female_R2, sum(meta$PD) / nrow(meta), 5 / 1000)
+female_R2 # 0.01299743
+female_h2 # 0.006217607
+```
+
+### Plotting
+```{r plot GRS, eval=F}
+r2_labels <- c(
+  0.0380,
+  round(male_r2$Pseudo.R.squared.for.model.vs.null[3], 4),
+  round(female_r2$Pseudo.R.squared.for.model.vs.null[3], 4)
+)
+names(r2_labels) <- c("Cross-sex", "Male", "Female")
+h2_labels <- c(
+  0.0085,
+  round(pd_h2(male_r2$Pseudo.R.squared.for.model.vs.null[3], sum(meta$PD) / nrow(meta), 5 / 1000), 4),
+  round(pd_h2(female_r2$Pseudo.R.squared.for.model.vs.null[3], sum(meta$PD) / nrow(meta), 5 / 1000), 4)
+)
+names(h2_labels) <- c("Cross-sex", "Male", "Female")
+
+to_plot <- meta %>%
+  mutate(
+    PD = ifelse(PD, "CASE", "CONTROL"),
+    Sex = ifelse(reportedSex == "M", "Male", "Female")
+  ) %>%  mutate(Sex = factor(Sex, levels = c("Cross-sex", "Male", "Female")))
+cross_data <- meta %>% mutate(PD = ifelse(PD, "CASE", "CONTROL"))
+cross_data$Sex <- "Cross-sex"
+to_plot <- rbind(cross_data, to_plot)
+
+to_plot$PD <- factor(to_plot$PD, levels=c("CONTROL","CASE"))
+to_plot$Sex <- factor(to_plot$Sex, levels=c("Cross-sex","Male","Female"))
+
+png("~/PD_GRS/DIGPD_prs_plots_by_PD_sex.png", width=600, height=500)
+ggboxplot(
+  to_plot,
+  x = "PD",
+  y = "SCORE1_AVG",
+  color = "Sex",
+  add = "jitter"
+) +
+  facet_grid(~Sex, labeller = label_bquote(cols = .(as.character(Sex)) ~ ": " ~ .(r2_labels[Sex]) ~ ";" ~ h^2 ~ ": " ~ .(h2_labels[Sex]))) +
+  labs(y = "Polygenic Risk Score", x = "Parkinson's Diagnosis") +
+  scale_color_manual(values = c("gray", "light blue", "pink"))
+dev.off()
+
+png("~/PD_GRS/DIGPD_prs_plots_by_sex.png", width=300, height=500)
+ggboxplot(
+  to_plot,
+  x = "Sex",
+  y = "SCORE1_AVG",
+  color = "Sex",
+  add = "jitter"
+) +
+  stat_compare_means() +
+
+  labs(y = "Polygenic Risk Score") +
+  scale_color_manual(values = c("Male" = "light blue", "Female" = "pink"))
+dev.off()
+```
+![GRS by PD status and sex in DIGPD](/home1/NEURO/schaffner/PD_GRS/DIGPD_prs_plots_by_PD_sex.png)
+
+PD cases have a greater spread in GRS values than controls. Could this be why EWAS stratified by disease for DIGPD only returns hits for the PD group and not controls?
+
+# Plotting top CpGs from TERRE EWAS
+
+According to GRS.
+
+```{r cpg plot, eval=F}
+# get the top 5 CpGs, ranked by adjusted p-value
+terre_x_sex <- terre_x_sex %>% arrange(adj.P.Val)
+cpgs <- terre_x_sex[1:5,c("TargetID","UCSC_REFGENE_NAME","UCSC_REFGENE_GROUP","CHR","MAPINFO","adj.P.Val","delta_M")]
+#    TargetID UCSC_REFGENE_NAME                  UCSC_REFGENE_GROUP CHR  MAPINFO    adj.P.Val    delta_M
+#1 cg18228076              MAPT 5'UTR;5'UTR;5'UTR;5'UTR;5'UTR;5'UTR  17 43983362 8.881315e-07  195.26510
+#2 cg19832721          KIAA1267                             TSS1500  17 44249866 8.881315e-07  -97.69224
+#3 cg12609785                                                        17 43660871 2.725533e-06 -177.98534
+#4 cg09860564            KANSL1                      Body;Body;Body  17 44213797 3.121469e-06   69.93698
+#5 cg05314706          ARHGAP27                       5'UTR;TSS1500  17 43508250 3.121469e-06  -47.35520
+
+load("~/PD_GRS/TERRE_Mvals.RData")
+mvals_sub <- t(mvals[match(cpgs$TargetID, rownames(mvals)),])
+all(rownames(mvals_sub)==terre_meta$patient) #TRUE
+terre_meta <- cbind(terre_meta, mvals_sub)
+terre_meta$PD <- gsub(0, "Control", gsub(1, "Case", terre_meta$PD))
+
+min(mvals_sub) #-5.238008
+max(mvals_sub) #4.04658
+
+p1 <- ggplot(terre_meta, aes(x=SCORE1_AVG, y=cg18228076, col=PD)) + geom_point() + geom_smooth(method="lm", stat="smooth", col="grey30") + theme_bw() + ggtitle("cg18228076 \nMAPT 5' UTR") + ylab("M-value") + scale_colour_manual(values=c("black","grey")) + ylim(c(-6,6)) + xlab("Polygenic Risk Score") + theme(legend.position="none")
+p2 <- ggplot(terre_meta, aes(x=SCORE1_AVG, y=cg19832721, col=PD)) + geom_point() + geom_smooth(method="lm", stat="smooth", col="grey30") + theme_bw() + ggtitle("cg19832721 \nKIAA1267 TSS1500") + ylab("M-value") + scale_colour_manual(values=c("black","grey")) + ylim(c(-6,6)) + xlab("Polygenic Risk Score") + theme(legend.position="none")
+p3 <- ggplot(terre_meta, aes(x=SCORE1_AVG, y=cg12609785, col=PD)) + geom_point() + geom_smooth(method="lm", stat="smooth", col="grey30") + theme_bw() + ggtitle("cg12609785 \nIntergenic") + ylab("M-value") + scale_colour_manual(values=c("black","grey")) + ylim(c(-6,6)) + xlab("Polygenic Risk Score") + theme(legend.position="none")
+p4 <- ggplot(terre_meta, aes(x=SCORE1_AVG, y=cg09860564, col=PD)) + geom_point() + geom_smooth(method="lm", stat="smooth", col="grey30") + theme_bw() + ggtitle("cg09860564 \nKANSL1 Body") + ylab("M-value") + scale_colour_manual(values=c("black","grey")) + ylim(c(-6,6)) + xlab("Polygenic Risk Score") + theme(legend.position="none")
+p5 <- ggplot(terre_meta, aes(x=SCORE1_AVG, y=cg05314706, col=PD)) + geom_point() + geom_smooth(method="lm", stat="smooth", col="grey30") + theme_bw() + ggtitle("cg05314706 \nARHGAP27 5' UTR/TSS1500") + ylab("M-value") + scale_colour_manual(values=c("black","grey")) + ylim(c(-6,6)) + xlab("Polygenic Risk Score") + theme(legend.position="none")
+
+grid.arrange(p1,p2,p3,p4, nrow=2)
+```
+![Top 4 CpGs from TERRE cross-sex EWAS](/home1/NEURO/schaffner/PD_GRS/EWAS_TERRE/terre_top4_CpGs.png)
+
+# Examining CpGs identified in other EWAS in TERRE
+
+Li et al., PLoS Genet 2014: Authors did an EWAS in blood for progressive supranuclear palsy (PSP), and found a cluster of associated CpGs in the 17q21.31 region. They also identified cis-mQTL effects in this region, driven by the H1 haplotype.
+
+
+Ohlei et al., medRxiv 2023: Authors reported mQTLs in blood, buccal, and saliva using datasets of n >1k for each tissue. They conducted MR analyses to identify causal associations between genotype, DNAm, and neurodegenerative disorders. 15 causal CpGs for PD were all in the 17q21 region and were consistent in all 3 tissues.
+
+### Li et al. PSP EWAS
+```{r repl psp, eval=F}
+### Li et al. PSP analysis
+psp <- read.csv("~/PD_GRS/Li_2014_PSP_EWAS.csv")
+psp <- psp %>% arrange(p)
+
+#thresholds: BH-adjusted p < 0.05, DB > 0.1
+psp$threshold <- (abs(psp$logFC)>0.1 & psp$p <= 0.05)
+summary(psp$threshold) #14 true, matching with article
+psp <- psp[psp$threshold==TRUE,]
+
+terre_x_sex_all <- read.csv("~/PD_GRS/EWAS_TERRE/EWAS_GRS_cross_sex.csv")
+
+cpgs <- terre_x_sex_all[terre_x_sex_all$TargetID %in% psp$ID,c("TargetID","UCSC_REFGENE_NAME","UCSC_REFGENE_GROUP","CHR","MAPINFO","adj.P.Val","P.Value", "delta_M")]
+
+#none overlapping with TERRE were examined for mQTLs in the paper - check non-overlapping
+psp[-which(psp$ID %in% terre_x_sex_all$TargetID),]
+#             ID      logFC          p                Gene CHR Coordinate    Type threshold
+#3047 cg03644281 -0.1052885 0.01199518 NFYA;NFYA;LOC221442   6   41068752  Island      TRUE
+#3436 cg03428951 -0.1333696 0.01405849             FAM153C   5  177434336 S_Shore      TRUE
+#3515 cg25110423 -0.1118670 0.01454182 NFYA;NFYA;LOC221442   6   41068646  Island      TRUE
+#4160 cg22968622 -0.1269643 0.01854154                <NA>  17   43663579  Island      TRUE
+#cg22968622 had an mQTL
+
+#also check cg19832721, cg19832721 in TERRE
+cpgs <- terre_x_sex_all[terre_x_sex_all$TargetID %in% c(psp$ID,"cg19832721","cg19832721"),c("TargetID","UCSC_REFGENE_NAME","UCSC_REFGENE_GROUP","CHR","MAPINFO","adj.P.Val","P.Value", "delta_M")]
+cpgs$UCSC_REFGENE_NAME
+cpgs$UCSC_REFGENE_NAME <- c("KIAA1267","", "KRTCAP3", "", "", "ARHGAP6", "NFYA", "NFYA", "VSTM2A", "CACNB2", "")
+
+mvals_sub <- t(mvals[match(cpgs$TargetID, rownames(mvals)),])
+terre_meta <- terre_meta[,1:22]
+all(rownames(mvals_sub)==terre_meta$patient) #TRUE
+terre_meta <- cbind(terre_meta, mvals_sub)
+terre_meta$PD <- gsub(0, "Control", gsub(1, "Case", terre_meta$PD))
+
+min(mvals_sub) #-5.02833
+max(mvals_sub) #6.377419
+
+for (cpg in colnames(terre_meta)[23:33]){
+  png(paste("~/PD_GRS/PSP_CpGs/PSP_", cpg, ".png", sep=""), width=200, height=200)
+  print(ggplot(terre_meta, aes(x=SCORE1_AVG, y=terre_meta[,cpg], col=PD)) + geom_point() + geom_smooth(method="lm", stat="smooth", col="grey30") + theme_bw() + ggtitle(paste(cpg, "\n", cpgs[cpgs$TargetID==cpg,"UCSC_REFGENE_NAME"], sep="")) + ylab("M-value") + scale_colour_manual(values=c("black","grey")) + ylim(c(-7,7)) + xlab("Polygenic Risk Score") + theme(legend.position="none"))
+  dev.off()
+}
+
+psp <- psp[match(cpgs$TargetID, psp$ID),]
+all(psp$ID==cpgs$TargetID)
+cpgs$sign <- (sign(cpgs$delta_M)==sign(psp$logFC))
+cpgs$repl <- (cpgs$P.Value<=0.05 & abs(cpgs$delta_M)>1.5 & cpgs$sign==TRUE)
+summary(cpgs$repl) #1 TRUE
+cpgs[cpgs$repl==TRUE,c("TargetID","UCSC_REFGENE_NAME","CHR","MAPINFO")]
+#    TargetID UCSC_REFGENE_NAME CHR  MAPINFO
+#3 cg12609785                    17 43660871
+
+source("~/PD_GRS/repl_perm.R")
+psp$sign <- FALSE
+psp[psp$ID %in% cpgs[cpgs$sign==TRUE,"TargetID"],"sign"] <- TRUE
+repl_perm(sig.cpgs=terre_x_sex_all, test.cpgs=psp, n_repl=1) #1000 permutations
+#[1] "Permutation P values for enrichment and depletion"
+#[1] "Enrichment: 0.515; Depletion 0.839"
+```
+![Replicated chr17 intergenic CpG from Li et al. PSP EWAS](/home1/NEURO/schaffner/PD_GRS/PSP_CpGs/PSP_cg12609785.png)
+
+cg12609785 (chr17: 43660871) is the only CpG from the PSP study which replicated in TERRE at p < 0.05 and delta M > 1.5.
+
+
+### Ohlei et al. MR analysis
+```{r repl mr, eval=F}
+mr <- read.csv("~/PD_GRS/Ohlei_2023_PD_SMR_blood.csv")
+nrow(mr <- mr[mr$P_HEIDI>0.05,]) #114
+
+cpgs <- terre_x_sex_all[terre_x_sex_all$TargetID %in% mr$Probe,c("TargetID","UCSC_REFGENE_NAME","UCSC_REFGENE_GROUP","CHR","MAPINFO","adj.P.Val","P.Value", "delta_M")]
+
+#check which have p-value < 0.05 and delta M > 1.5 in TERRE
+#effect direction not reported in Ohlei table
+cpgs$repl <- (cpgs$P.Value<=0.05 & abs(cpgs$delta_M)>1.5)
+summary(cpgs$repl) #57 TRUE
+cpgs <- cpgs[cpgs$repl==TRUE,]
+unique(unlist(strsplit(cpgs$UCSC_REFGENE_NAME, split=";")))
+# [1] "KIAA1267"       "KANSL1"         "ARHGAP27"       "MAPT"           "CRHR1-IT1"      "MGC57346-CRHR1"
+# [7] "LOC100128977"   "LOC100130148"   "SNCA-AS1"       "SNCA"           "SH3D20"         "C17orf69"      
+#[13] "MGC57346"       "DGKQ"           "MAPT-AS1"  
+
+repl_perm(sig.cpgs=terre_x_sex_all, test.cpgs=mr, n_repl=57) #1000 permutations
+#[1] "Permutation P values for enrichment and depletion"
+#[1] "Enrichment: 0; Depletion 1"
+
+nrow(cpgs_terre_hits <- cpgs[cpgs$TargetID %in% terre_x_sex$TargetID,]) #17
+#View(cpgs_terre_hits)
+
+cpgs$UCSC_REFGENE_NAME <- sapply(1:nrow(cpgs), function(x){
+  return(unlist(strsplit(cpgs$UCSC_REFGENE_NAME[x], split=";"))[1])
+})
+
+mvals_sub <- t(mvals[match(cpgs$TargetID, rownames(mvals)),])
+terre_meta <- terre_meta[,1:22]
+all(rownames(mvals_sub)==terre_meta$patient) #TRUE
+terre_meta <- cbind(terre_meta, mvals_sub)
+terre_meta$PD <- gsub(0, "Control", gsub(1, "Case", terre_meta$PD))
+
+min(mvals_sub) #-7.062016
+max(mvals_sub) #4.652508
+
+for (cpg in colnames(terre_meta)[23:79]){
+  png(paste("~/PD_GRS/MR_CpGs/MR_", cpg, ".png", sep=""), width=200, height=200)
+  print(ggplot(terre_meta, aes(x=SCORE1_AVG, y=terre_meta[,cpg], col=PD)) + geom_point() + geom_smooth(method="lm", stat="smooth", col="grey30") + theme_bw() + ggtitle(paste(cpg, "\n", cpgs[cpgs$TargetID==cpg,"UCSC_REFGENE_NAME"], sep="")) + ylab("M-value") + scale_colour_manual(values=c("black","grey")) + ylim(c(-7,7)) + xlab("Polygenic Risk Score") + theme(legend.position="none"))
+  dev.off()
+}
+
+summary(as.factor(cpgs$UCSC_REFGENE_NAME))
+#      ARHGAP27       C17orf69      CRHR1-IT1           DGKQ         KANSL1       KIAA1267           MAPT       MAPT-AS1 
+#             5              1              1              1             11              2             20              1 
+#MGC57346-CRHR1         SH3D20           SNCA       SNCA-AS1           NA's 
+#             3              1              1              2              8 
+```
+![Replicated KIAA1267 CpG from Ohlei et al.](/home1/NEURO/schaffner/PD_GRS/MR_CpGs/MR_cg19832721.png)
+
+
+![Replicated SNCA CpG from Ohlei et al.](/home1/NEURO/schaffner/PD_GRS/MR_CpGs/MR_cg06632027.png)
+
+![Replicated MAPT CpG from Ohlei et al.](/home1/NEURO/schaffner/PD_GRS/MR_CpGs/MR_cg15072451.png)
+
+# Examining CpGs identified in PD EWAS
+
+### TERRE CMRs
+```{r terre CMR, eval=F}
+### Are any of the CpGs in CMRs period (independent of PD association)?
+
+### Reference CMRs
+refcmr <- read.csv("~/PD_CMRs_GxE/2-EWAS_CMRs/TERRE/refCMRs_in_TERRE_df.csv")
+terre_x_sex$refcmr <- NA
+for (i in 1:nrow(terre_x_sex)){
+  if(length(grep(terre_x_sex$TargetID[i], refcmr$cmr))>0){ 
+    terre_refcmr <- refcmr[grep(terre_x_sex$TargetID[i], refcmr$cmr),]
+    terre_x_sex$refcmr[i] <- terre_refcmr$cmrGR }
+}
+terre_x_sex[complete.cases(terre_x_sex$refcmr),c("TargetID","CHR","MAPINFO","UCSC_REFGENE_NAME","refcmr")]
+#     TargetID CHR  MAPINFO UCSC_REFGENE_NAME                  refcmr
+#17 cg23519755  17 44124560            KANSL1 chr17:44123621-44124561
+
+#This CMR was not associated with PD in 2024 npj PD paper in either sex.
+
+### TERRE CMRs
+terrecmr <- read.csv("~/PD_CMRs_GxE/2-EWAS_CMRs/TERRE/custom_CMRs/TERRE_CMRs_spearman0.3_1k_anno.csv")
+terre_x_sex$terrecmr <- NA
+for (i in 1:nrow(terre_x_sex)){
+  for (j in 1:nrow(terrecmr)){
+    if(terre_x_sex$MAPINFO[i]>=terrecmr$cmr_start[j] & terre_x_sex$MAPINFO[i]<=terrecmr$cmr_end[j]){
+      terre_x_sex$terrecmr[i] <- terrecmr[j,"cmr_id"]
+    }}}
+nrow(terre_x_sex[complete.cases(terre_x_sex$terrecmr),]) #17 are in a CMR
+length(unique(terre_x_sex[complete.cases(terre_x_sex$terrecmr),"terrecmr"])) #16 unique CMRs
+terre_x_sex <- terre_x_sex %>% arrange(terrecmr)
+terre_x_sex[complete.cases(terre_x_sex$terrecmr),c("TargetID","CHR","MAPINFO","UCSC_REFGENE_NAME","terrecmr")]
+#     TargetID CHR   MAPINFO UCSC_REFGENE_NAME                  terrecmr
+#1  cg09793084  17  43802971    MGC57346-CRHR1  chr15: 43802735-43803065
+#2  cg27060340  17  43502999          ARHGAP27  chr17: 43502999-43503394
+#3  cg05314706  17  43508250          ARHGAP27  chr17: 43508250-43508894
+#4  cg20163478  17  43508418          ARHGAP27  chr17: 43508250-43508894
+#5  cg01341218  17  43662625                    chr17: 43662623-43662625
+#6  cg18878992  17  43974344              MAPT  chr17: 43973522-43974344
+#7  cg17911788  17  44343683                    chr17: 44343683-44344142
+#8  cg23519755  17  44124560            KANSL1  chr19: 44124409-44124666
+#9  cg12609785  17  43660871                     chr1: 43660603-43661257
+#10 cg26278151  22  31316184                    chr20: 31316153-31316280
+#11 cg00916973  17  43580461                    chr21: 43579962-43580648
+#12 cg02478991  17  44180961            KANSL1  chr21: 44180555-44181630
+#13 cg24319718   2 206546665              NRP2 chr2: 206546660-206547237
+#14 cg13552710   2  30144547               ALK   chr2: 30144547-30144579
+#15 cg16228356  17  43848958                     chr2: 43848605-43849371
+#16 cg07368061  17  44090862              MAPT   chr6: 44090748-44090983
+#17 cg09860564  17  44213797            KANSL1   chr6: 44213713-44213806
+
+terre_x_sex_cmrs <- terre_x_sex[,c("TargetID","CHR","MAPINFO","UCSC_REFGENE_NAME","terrecmr","refcmr","delta_M","adj.P.Val")]
+
+write.csv(terre_x_sex_cmrs, file="~/PD_GRS/EWAS_TERRE/EWAS_cross_sex_hits_TERRE_CMRs.csv", row.names=FALSE)
+
+### PD EWAS results for custom CMRs (F only, nothing significant for M)
+ewas_f <- read.csv("~/PD_CMRs_GxE/2-EWAS_CMRs/TERRE/custom_CMRs/rlm_F_adjDB_072024.csv")
+ewas_f <- ewas_f[ewas_f$threshold_adjDB==TRUE,] #77 CMRs
+ewas_f_cmrs <- terrecmr[terrecmr$probe %in% ewas_f$TargetID,]
+
+nrow(terre_x_sex_cmrs[terre_x_sex_cmrs$terrecmr %in% ewas_f_cmrs$cmr_id,])
+#[1] 0
+```
+17 CpGs associated with the GRS are located in custom CMRs called in TERRE, and 1 is in a blood reference CMR. None of the CMRs are differentially methylated by PD status.
+
+### SGPD 
+
+```{r SGPD, eval=F}
+# Get effect sizes by running EWAS in SPGD
+sgpd_meta <- read.csv("~/PD_CMRs_GxE/4-replication/Vallerga_2020/preprocessing/SGPD_meta_celltypePCs_age.csv")
+load("~/PD_CMRs_GxE/4-replication/Vallerga_2020/preprocessing/SGPD_betas_combat.RData")
+sgpd_mvals <- lumi::beta2m(betas_combat)
+rm(betas_combat)
+
+# PD EWAS
+# DNAm ~ PD + sex + age + 3 cell type PCs (already combat-corrected)
+all(sgpd_meta$Sample_Name==colnames(sgpd_mvals)) #TRUE
+colnames(spgd_meta)
+summary(sgpd_meta[,c("disease.state.ch1","age","reportedSex")])
+sgpd_meta <- sgpd_meta[complete.cases(sgpd_meta$age),] #1390
+summary(as.factor(sgpd_meta$disease.state.ch1))
+#            Control Parkinson's disease 
+#                858                 893 
+sgpd_mvals <- sgpd_mvals[,match(sgpd_meta$Sample_Name, colnames(sgpd_mvals))]
+
+design_pd <- model.matrix(~ 1 + disease.state.ch1 + age + reportedSex + CTP_PC1 + CTP_PC2 + CTP_PC3, data = sgpd_meta)
+pd_fit <- lmFit(sgpd_mvals, design_pd)
+pd_fit <- eBayes(pd_fit)
+pd_res <- limma::topTable(pd_fit, coef = 2, number = Inf, genelist=rownames(sgpd_mvals))
+write.csv(pd_res, file="~/PD_GRS/SGPD_EWAS_PD.csv", row.names=F)
+
+# join data together to compare effects and p-values from each analysis
+colnames(pd_res)[1:2] <- c("TargetID", "delta_M")
+sgpd_sub <- pd_res[,c("TargetID","delta_M","adj.P.Val", "P.Value")]
+colnames(sgpd_sub) <- c("TargetID", "delta_M_sgpd", "adj.P.Val.sgpd", "P.Value.sgpd")
+terre_sub <- terre_x_sex[,c("TargetID","delta_M","adj.P.Val", "P.Value")]
+colnames(terre_sub) <- c("TargetID", "delta_M_TERRE", "adj.P.Val.TERRE", "P.Value.TERRE")
+combine <- left_join(terre_sub, sgpd_sub, by="TargetID")
+combine <- combine[complete.cases(combine$delta_M_sgpd),] #17 NAs in sgpd (TERRE hits not in sgpd 450K data)
+max(c(combine$delta_M_TERRE, combine$delta_M_sgpd)) #38.28015
+min(c(combine$delta_M_TERRE, combine$delta_M_sgpd)) #-177.9853
+
+png("~/PD_GRS/TERRE_cross_sex_in_SGPD.png", width=200, height=225)
+ggplot(combine, aes(x=delta_M_TERRE, y=delta_M_sgpd)) + geom_point() + geom_smooth(method="lm", col="grey") + theme_bw() + xlab("TERRE adjusted delta M") + ylab("SGPD adjusted delta M") + xlim(c(-200,200)) + ylim(c(-200,200)) + ggtitle("TERRE cross-sex hits \nin SGPD") + stat_cor(label.y=150)
+dev.off()
+
+### Check how many CpGs have delta M > 1.5 and nominal p < 0.05 in sgpd, in the same direction as TERRE
+combine$direction <- (sign(combine$delta_M_TERRE)==sign(combine$delta_M_sgpd))
+combine$threshold_M <- (abs(combine$delta_M_sgpd)>=1.5)
+combine$nom_p <- (combine$P.Value.sgpd<=0.05)
+
+summary(combine[,c("direction","threshold_M","nom_p")])
+# direction      threshold_M       nom_p        
+# Mode:logical   Mode :logical   Mode :logical  
+# TRUE:10        FALSE:10        FALSE:5        
+#                                TRUE :5      
+
+table(combine$direction, combine$nom_p)
+#        FALSE TRUE
+#  FALSE     1    0
+#  TRUE      3   22
+
+write.csv(combine, file="~/PD_GRS/TERRE_cross_sex_in_SGPD.csv", row.names=F)
+```
+![TERRE GRS-associated CpGs in SGPD](/home1/NEURO/schaffner/PD_GRS/TERRE_cross_sex_in_SGPD.png)
