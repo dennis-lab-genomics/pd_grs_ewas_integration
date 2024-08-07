@@ -129,6 +129,85 @@ upset(all_data, sets=c("GRS","GRS_smoking","GRS_head_trauma","GRS_alcohol","GRS_
 
 18 probes are consistent across all sensitivity analyses. One additional probe was discovered in the smoking-adjusted analysis, and two additional probes in the alcohol-adjusted analysis. The pesticide-adjusted analysis had four fewer probes than the rest.
 
+## PD medications
+
+We have data for levodopa and dopamine agonist (yes/no) as well as levodopa equivalent daily dose. This time, run sensitivity analysis within PD cases with adjustment for these variables.
+
+```{r med ewas, eval=F}
+# check meta data 
+str(meta_sub)
+meta_sub$agonist <- as.factor(meta_sub$agonist)
+meta_PD <- meta_sub[meta_sub$PD==1,]
+table(meta_PD$levodopa, meta_PD$agonist)
+#     0  1
+#  0  2 16
+#  1 16 37
+
+mvals_PD <- mvals[,match(meta_PD$patient, colnames(mvals))]
+
+# adjustment for levodopa
+design_levo <- model.matrix(~ 1 + SCORE1_AVG + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + levodopa, data = meta_PD)
+levo_fit <- lmFit(mvals_PD, design_levo)
+levo_fit <- eBayes(levo_fit)
+levo_res <- limma::topTable(levo_fit, coef = 2, number = Inf, genelist=rownames(mvals_PD))
+write.csv(levo_res, file="~/PD_GRS/non_genetic_sensitivity/EWAS_GRS_levo.csv", row.names=F)
+
+# adjustment for levodopa equivalent daily dose
+led <- read.csv("~/PD_CMRs_GxE/3-posthoc/levodopa/levodopa_corrected.csv")
+all(meta_PD$patient %in% led$NUM) #FALSE
+nrow(meta_PD[meta_PD$patient %in% led$NUM,]) #42 PD cases with LED information
+meta_led <- meta_PD[meta_PD$patient %in% led$NUM,]
+colnames(led)[1] <- "patient"
+meta_led <- left_join(meta_led, led, by="patient")
+str(meta_led$led_levodopa) #numeric - OK
+mvals_led <- mvals_PD[,match(meta_led$patient, colnames(mvals_PD))]
+
+design_led <- model.matrix(~ 1 + SCORE1_AVG + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + led_levodopa, data = meta_led)
+led_fit <- lmFit(mvals_led, design_led)
+led_fit <- eBayes(led_fit)
+led_res <- limma::topTable(led_fit, coef = 2, number = Inf, genelist=rownames(mvals_led))
+write.csv(led_res, file="~/PD_GRS/non_genetic_sensitivity/EWAS_GRS_led.csv", row.names=F)
+
+# adjustment for dopamine agonist
+design_agonist <- model.matrix(~ 1 + SCORE1_AVG + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + agonist, data = meta_PD)
+agonist_fit <- lmFit(mvals_PD, design_agonist)
+agonist_fit <- eBayes(agonist_fit)
+agonist_res <- limma::topTable(agonist_fit, coef = 2, number = Inf, genelist=rownames(mvals_PD))
+write.csv(agonist_res, file="~/PD_GRS/non_genetic_sensitivity/EWAS_GRS_agonist.csv", row.names=F)
+```
+
+### Compare results with initial GRS EWAS in PD cases
+
+There were no hits in the case-only EWAS (CpGs did not reach statistical signficance). Still, check the top CpGs here.
+```{r compare meds, eval=F}
+grs_cases <- read.csv("~/PD_GRS/EWAS_TERRE/EWAS_GRS_cases.csv")
+min(grs_cases$adj.P.Val)
+#[1] 0.9999635
+min(grs_cases$P.Value)
+#[1] 9.693712e-06
+nrow(grs_nom <- grs_cases[grs_cases$P.Value<=1e-4 & abs(grs_cases$delta_M)>=1.5,]) #27
+
+nrow(levo_hits <- levo_res[abs(levo_res$logFC)>=1.5 & levo_res$P.Value<=1e-4,]) #21
+min(levo_hits$adj.P.Val) #[1] 0.9895193
+nrow(led_hits <- led_res[abs(led_res$logFC)>=1.5 & led_res$P.Value<=1e-4,]) #40
+min(led_hits$adj.P.Val) #[1] 0.8035613
+nrow(agonist_hits <- agonist_res[abs(agonist_res$logFC)>=1.5 & agonist_res$P.Value<=1e-4,]) #21
+min(agonist_hits$adj.P.Val) #[1] 0.9999963
+
+#summarize overlaps
+all_probes <- unique(c(grs_nom$TargetID, levo_hits$ID, led_hits$ID, agonist_hits$ID)) #81 unique probes
+all_data <- data.frame(TargetID=all_probes, GRS=(all_probes %in% grs_nom$TargetID), GRS_levo=(all_probes %in% levo_hits$ID), GRS_led=(all_probes %in% led_hits$ID), GRS_agonist=(all_probes %in% agonist_hits$ID))
+sensitivity <- left_join(grs_nom[,c("TargetID","UCSC_REFGENE_NAME","UCSC_REFGENE_GROUP","delta_M","adj.P.Val")], all_data[,c(1,3:5)], by="TargetID")
+write.csv(sensitivity, file="~/PD_GRS/non_genetic_sensitivity/sensitivity_overlaps_meds.csv", row.names=FALSE)
+
+#upset plot
+all_data[,2:5] <- apply(all_data[,2:5], 2, function(x) as.numeric(x))
+upset(all_data, sets=c("GRS","GRS_levo","GRS_led","GRS_agonist"),order.by="degree")
+```
+![Overlap between probes nominally significant in medication sensitivity analyses and original EWAS in PD cases](/home1/NEURO/schaffner/PD_GRS/non_genetic_sensitivity/upset_meds.png)
+
+9 probes were nominally significant in the case-only analysis and analyses adjusted for levodopa or dopamine agonist (categorical). Surprisingly, the LED-adjusted analysis revealed 39 probes not discovered in the initial GRS EWAS in PD cases nor in the other medication-based sensitivity analyses. However, these were still not significant after multiple test correction.
+
 ## Individual pesticide exposures
 
 EWAS will be conducted 10 times for each exposure (once per imputation), then results will be pooled with the "mice" package. Reference: "prs_pest_mice.Rmd" (Will's original script).
