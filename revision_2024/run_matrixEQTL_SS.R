@@ -10,12 +10,15 @@ library(R.utils)
 # Terre 126,287,251
 # DIGPD 71,513,917
 
+# Aug 2, 2024: ran R script manually instead of calling from shell script (seems to work)
+# 119,820,460 cis-mQTL in TERRE (p < 0.25)
+
 use_model <- modelLINEAR
 argv <- commandArgs(
   asValues = TRUE,
   defaults = list(
     data_dir = "/home1/NEURO/schaffner/PD_GRS/mQTL/",
-    SNP_fname = "all_imputed_snps_matrixeQTL.txt",
+    SNP_fname = "all_imputed_matrixeQTL.txt",
     methylation_fname = "methylation.txt",
     cov_file = "covariates_CTP_PD.txt",
     cis_outfile = "cis_mQTL_out.txt",
@@ -29,7 +32,7 @@ data_dir <- argv$data_dir
 SNP_fname <- paste0(data_dir, argv$SNP_fname)
 methylation_fname <- paste0(data_dir, argv$methylation_fname)
 cis_outfile <- paste0(data_dir, argv$cis_outfile)
-pv_out_threshold <- 0.25 # @TODO check this
+pv_out_threshold <- 0.25 # @TODO check this. P-value output threshold
 error_cov <- numeric()
 cis_dist <- 75000
 print("LOADING METHYLATION")
@@ -76,7 +79,7 @@ me <- Matrix_eQTL_main(
   min.pv.by.genesnp = FALSE,
   noFDRsaveMemory = FALSE
 )
-write.table(data.frame(tests = me$ntests), paste0(cis_outfile, ".ntest"), row.names = F, col.names = F, quote = F)
+write.table(data.frame(tests = me$cis$ntests), paste0(cis_outfile, ".ntest"), row.names = F, col.names = F, quote = F)
 cat("Analysis done in: ", me$time.in.sec, " seconds", "\n")
 cat("Detected local eQTLs:", "\n")
-nrow(me$cis)
+nrow(me$cis$eqtls) #119820460

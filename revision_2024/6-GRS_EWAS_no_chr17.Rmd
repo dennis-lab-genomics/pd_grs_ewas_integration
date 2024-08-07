@@ -1,0 +1,142 @@
+---
+title: "TERRE GRS: Epigenome-wide asssociation sensitivity analysis"
+output: html_notebook
+---
+
+The manuscript "A Parkinson’s disease genetic risk score associates with blood DNAm on chromosome 17" explores how a genetic risk score (GRS) for Parkinson's disease (PD) associates with blood DNA methylation in the TERRE study of French agricultural workers, and evaluates GRS associations with DNAm in each sex as well as their sensitivity to non-genetic factors. This was originally spearheaded by Will Casazza and was posted as a pre-print on medRxiv in 2023. The current revision (2024, led by Sam Schaffner) aims to address previous reviewer feedback and prepare the manuscript for re-submission.
+
+
+In this script, a sensitivity EWAS is conducted to identify DNAm patterns associated with the GRS in the cross-sex samples in TERRE with the chromosome 17 SNPs removed. The models are adjusted for batch, cell type, and disease status.
+
+
+Last updated Aug 7, 2024 by Samantha Schaffner
+
+
+Based on code by Will Casazza
+
+```{r setup, include=FALSE, eval=F}
+library(lumi)
+library(limma)
+library(minfi)
+library(rcompanion)
+library(readxl)
+library(tidyverse)
+library(ggpubr)
+library(glue)
+library(data.table)
+library(car)
+library(bacon)
+library(ggplot2)
+library(ggrepel)
+library(dplyr)
+library(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)
+source("~/kobor_shared_coding_resource/qqplot_NG.R")
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### Loading in and preparing data
+```{r load dat, eval=FALSE}
+meta <- read.csv("~/PD_GRS/meta_geno_DNAm_PCs.csv")
+# join with no chr17 PRS
+cross_no_17 <- fread("prsice_data/TERRE_PRSice_nalls_no_chr17.all_score")
+all(meta$FID %in% cross_no_17$FID) #TRUE
+meta2 <- left_join(meta, cross_no_17[,c("FID","Pt_5e-08")], by="FID")
+colnames(meta2)[166] <- "PRS_no_chr17"
+write.csv(meta2, file="~/PD_GRS/meta_geno_DNAm_PCs.csv", row.names=F)
+
+# DNAm data (2022, most recent QC'ed, same as npj PD 2024 article)
+load("~/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/1-TERRE_RG_filtered.RData")
+mvals <- getM(PD_RG_filtered)
+rm(PD_RG_filtered)
+```
+
+# Association analysis
+
+```{r ewas models, eval=F}
+## Preparing data
+# match meta data and M-values
+meta2 <- meta2[complete.cases(meta2$CTP_PC1),]
+mvals <- mvals[,match(meta2$patient, colnames(mvals))]
+all(colnames(mvals)==meta2$patient) #TRUE
+
+# subset meta data to relevant columns and re-format
+meta_sub <- meta2[,c("patient","PRS_no_chr17","PD","age","sex","geno_V3","geno_V4","geno_V5","CTP_PC1","CTP_PC2","CTP_PC3","CTP_PC4","CTP_PC5","CTP_PC6","smoking","pesticides","head_trauma","alcohol1","levodopa","agonist","plate","SentrixPosition_A")]
+str(meta_sub)
+meta_sub$PD <- as.factor(meta_sub$PD)
+meta_sub$sex <- as.factor(meta_sub$sex)
+meta_sub$smoking <- as.factor(meta_sub$smoking)
+meta_sub$pesticides <- as.factor(meta_sub$pesticides)
+meta_sub$head_trauma <- as.factor(meta_sub$head_trauma)
+meta_sub$alcohol1 <- as.factor(meta_sub$alcohol1)
+meta_sub$levodopa <- as.factor(meta_sub$levodopa)
+meta_sub$plate <- as.factor(meta_sub$plate)
+meta_sub$SentrixPosition_A <- as.factor(meta_sub$SentrixPosition_A)
+
+# set up meta data
+na_row <- !apply(meta_sub[, c("PRS_no_chr17", "age", "sex", "geno_V3", "geno_V4", "geno_V5", "CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5", "CTP_PC6", "plate", "SentrixPosition_A", "PD")], 1, function(x) any(is.na(x)))
+summary(na_row) #no NAs for these covariates
+
+# limma design matrix and linear model fit
+design_prs <- model.matrix(~ 1 + PRS_no_chr17 + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD, data = meta_sub)
+prs_fit <- lmFit(mvals, design_prs)
+prs_fit <- eBayes(prs_fit)
+prs_res <- limma::topTable(prs_fit, coef = 2, number = Inf, genelist=rownames(mvals))
+write.csv(prs_res, file="~/PD_GRS/EWAS_GRS_cross_sex_no_chr17.csv", row.names=F)
+```
+
+### Plotting results
+
+For now, I am plotting adjusted delta M-values (model coefficients) to compare with the previous result, and will use the same thresholds reported by Will (delta M > 1.5, padj < 0.05). After, I'll calculate the delta betas for the same model.
+
+#### Cross-sex GRS EWAS
+```{r volcano cross sex, eval=F}
+# annotate topTable
+load("~/kobor_shared_coding_resource/EPIC_fdat.RData")
+fdat <- fData_EPIC[match(rownames(mvals), fData_EPIC$TargetID),]
+all(fdat$TargetID==rownames(mvals))
+colnames(prs_res)[1] <- "TargetID"
+prs_res <- left_join(prs_res, fdat, by="TargetID")
+
+# logFC: delta M
+# AveExpr: average M
+colnames(prs_res)[2:3] <- c("delta_M", "avgM")
+
+# plot with delta M threshold
+summary(prs_res$threshold_M <- (prs_res$adj.P.Val <= 0.05 & abs(prs_res$delta_M)>=1.5)) #none
+write.csv(prs_res, file="~/PD_GRS/EWAS_GRS_cross_sex_no_chr17.csv", row.names=F)
+
+min(prs_res$adj.P.Val) #0.1004441
+max(abs(prs_res$delta_M)) #74.78546
+max(-log10(prs_res$P.Value)) #6.79073
+prs_res$DNAm_change <- "NS"
+
+png("~/PD_GRS/volcano_GRS_cross_sex_Mvals_no_chr17.png", width=200, height=250)
+ggplot(prs_res[,c("delta_M","P.Value","DNAm_change")], aes(x=delta_M, y=-log10(P.Value), colour=DNAm_change)) +
+  geom_point(size=1.75) +
+  labs(legend.position = "none") +
+  xlab("Adjusted Delta M") + ylab("-log10 P-Value") + theme_classic() + scale_color_manual(values=c("gray70"))  + geom_vline(xintercept=-1.5) + geom_vline(xintercept=1.5) + theme(legend.position="none")+ ylim(c(0,7)) + xlim(c(-100,100))
+dev.off()
+
+# Compare with previous result
+# join data together to compare effects and p-values from each analysis
+grs_prev <- read.csv("~/PD_GRS/EWAS_TERRE/EWAS_GRS_cross_sex_hits.csv")
+grs_prev_sub <- grs_prev[,c("TargetID", "delta_M","adj.P.Val")]
+colnames(grs_prev_sub) <- c("TargetID", "delta_M_orig", "adj.P.Val.orig")
+combine <- left_join(grs_prev_sub,prs_res, by="TargetID")
+combine <- combine[complete.cases(combine$delta_M_orig),]
+max(c(combine$delta_M, combine$delta_M_orig)) #195.2651
+min(c(combine$delta_M, combine$delta_M_orig)) #-177.9853
+
+png("~/PD_GRS/EWAS_cross_sex_Mval_comparison_no_chr17.png", width=200, height=225)
+ggplot(combine, aes(x=delta_M, y=delta_M_orig)) + geom_point() + geom_smooth(method="lm", col="grey") + theme_bw() + xlab("Adjusted delta M without chr17") + ylab("Adjusted delta M with chr17") + xlim(c(-200,200)) + ylim(c(-200,200)) + ggtitle("Cross-sex EWAS M-value \ncomparison") + stat_cor(label.y=150)
+dev.off()
+```
+![EWAS model without chr17 SNPs](/home1/NEURO/schaffner/PD_GRS/volcano_GRS_cross_sex_Mvals_no_chr17.png)
+
+There are no statistically significant associations when chromosome 17 SNPs are removed from the GRS, suggesting these SNPs drove remaining associations of GRS with DNAm after adjustment for cell type, batch, and PD status.
+
+![](/home1/NEURO/schaffner/PD_GRS/EWAS_cross_sex_Mval_comparison_no_chr17.png)
+
+Adjusted delta M-values for the 27 probes significiant in the EWAS with chr17 SNPs trend in the same direction but are very low in magnitude.
+

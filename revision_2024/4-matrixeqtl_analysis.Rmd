@@ -1,0 +1,196 @@
+---
+title: "TERRE MatrixEQTL cis-mQTL Analysis"
+output: html_notebook
+---
+
+The manuscript "A Parkinson’s disease genetic risk score associates with blood DNAm on chromosome 17" explores how a genetic risk score (GRS) for Parkinson's disease (PD) associates with blood DNA methylation in the TERRE study of French agricultural workers, and evaluates GRS associations with DNAm in each sex as well as their sensitivity to non-genetic factors. This was originally spearheaded by Will Casazza and was posted as a pre-print on medRxiv in 2023. The current revision (2024, led by Sam Schaffner) aims to address previous reviewer feedback and prepare the manuscript for re-submission.
+
+
+This code first prepares genetic, methylation, and meta data for input into MatrixEQTL to calculate mQTLs in TERRE, then examines (1) which PD-associated SNPs were cis-mQTLs in TERRE, and (2) which GRS-associated CpGs from TERRE had an associated cis-mQTL.
+
+Last updated Aug 2, 2024 by Samantha Schaffner
+
+Based on code by Will Casazza
+
+```{r setup, include=FALSE, eval=F}
+library(tidyverse)
+library(data.table)
+library(minfi)
+```
+
+# Read in TERRE data
+DNA methylation (updated to 2022-processed), genotype, and meta data (with 2022 cell type PCs).
+```{r terre meta data, eval=F}
+terre_ancestry <- fread("~/SHARE_DECIPHER/pd_grs_ewas_integration/raw_data.geno.maf.mind.sex_check.het_filter.ibd_filter.eigenvec")
+
+terre_meta <- fread("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv")
+#terre_ctp <- fread("/home1/NEURO/SHARE_DECIPHER/processed_DNAm_data/2021/TERRE_processed_2021/meta_TERRE_funnorm_robCTP.txt")
+terre_ctp <- read.csv("~/PD_GRS/meta_for_GRS_EWAS.csv") # with cell type PCs from 2022 DNAm data
+
+terre_meta$IID <- gsub(".*_(PAE.*)", "\\1", terre_meta$IID)
+terre_meta <- terre_meta %>%
+  right_join(terre_ancestry, by = c("IID" = "V2")) %>%
+  left_join(terre_ctp[, c("patient", "CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5", "CTP_PC6")], by = "patient")
+colnames(terre_meta) #contains cell type and genotype PCs, FID, IID, and other meta variables
+#245 observations
+
+# Loading in DNAm data
+# Update from previous script that used 2021-processed data
+load("~/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/1-TERRE_RG_filtered.RData")
+betas <- getBeta(PD_RG_filtered)
+rm(PD_RG_filtered)
+
+genotype <- fread("~/SHARE_DECIPHER/pd_grs_ewas_integration/TERRE_QC/raw_data.imputed.r2_30.maf_mismatch.traw")
+```
+
+## Match Samples
+```{r match samples, eval=F}
+colnames(genotype) <- gsub(".*_(PAE.*)", "\\1", colnames(genotype))
+colnames(genotype)
+setcolorder(genotype, neworder = c(colnames(genotype)[1:6], terre_meta$IID))
+dim(betas <- betas[, colnames(betas) %in% terre_meta$patient]) #803777    219
+
+# new - match terre meta to betas (219 betas, 245 terre meta)
+dim(terre_meta <- terre_meta[match(colnames(betas),terre_meta$patient),]) #219  96
+
+# rename betas sample names with IID
+colnames(betas) <- terre_meta$IID[match(colnames(betas), terre_meta$patient)]
+all(colnames(betas)==terre_meta$IID) #TRUE
+
+# match genotype and betas data
+geno_df <- data.frame(genotype)
+ncol(geno_df <- cbind(geno_df[,1:6], geno_df[,match(colnames(betas),colnames(geno_df))])) #225
+all(colnames(betas) == colnames(geno_df)[-c(1:6)]) #TRUE
+```
+
+## Compute DNAm PCs
+```{r dnam pcs, eval=F}
+methy_PC <- prcomp(t(betas), center = T, rank. = 20)
+```
+
+## Write Covariates
+
+Covariates used for mQTL analysis typically include genotype PCs, sex, methylation PCs, and sometimes methylation batch and cell type variables. Example references:
+
+![GODMC](https://github.com/MRCIEU/godmc/wiki/Phenotype-and-covariate-data): Sex, age, DNAm chip (and other batch variables), height, BMI, cell counts, genotype PCs (created by pipeline), methylation PCs (created by pipeline)
+
+![Oliva et al., Nat Genet 2023](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10249665/): Sex, 5 genotype PCs, 2 genotype batch variables
+
+![Li et al., Clin Epigenetics 2022](https://clinicalepigeneticsjournal.biomedcentral.com/articles/10.1186/s13148-022-01385-6): Sex, 5 genotype PCs, DNAm batch variables
+
+![Ohlei et al., medRxiv 2023](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC10775408/): Sex, 10 genotype PCs, 5 DNAm PCs, sample processing date
+
+
+The code previously written by Will here included 3 genotype PCs, age, sex, head trauma, cell type PCs, and PD status. There was also an analysis with 10 DNAm PCs.
+
+Here I will include the same covariates minus head trauma and DNAm PCs and plus DNAm plate and row variables. This will match the variables adjusted for in the updated EWAS. Not sure why head trauma was previously included here - check with Will.
+
+
+```{r write covars, eval=F}
+# data need to be in numeric format
+
+terre_covar <- terre_meta[,c("V3", "V4", "V5", "PD", "age", "men", "CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "CTP_PC5","CTP_PC6","SentrixPosition_A","plate")]
+str(terre_covar)
+terre_covar$SentrixPosition_A <- as.integer(as.factor(terre_covar$SentrixPosition_A))
+summary(as.factor(terre_covar$SentrixPosition_A))
+# 1  2  3  4  5  6  7  8 
+#33 31 30 22 22 34 27 20 
+
+write_delim(t(cbind(terre_covar)) %>% as.data.frame() %>% rownames_to_column("id"), "~/PD_GRS/mQTL/covariates_CTP_PD.txt")
+
+write_delim(t(cbind(terre_covar[terre_covar$men==1,-("men")])) %>% as.data.frame() %>% rownames_to_column("id"), "~/PD_GRS/mQTL/male_covariates_CTP_PD.txt")
+
+write_delim(t(cbind(terre_covar[terre_covar$men==0,-("men")])) %>% as.data.frame() %>% rownames_to_column("id"), "~/PD_GRS/mQTL/female_covariates_CTP_PD.txt")
+```
+
+## Write genotype and DNAm data
+```{r write geno dnam, eval=F}
+#methy_annot <- fread("~/MethylationEPIC_v-1-0_B4.csv", skip = 7)
+load("~/kobor_shared_coding_resource/EPIC_fdat.RData")
+
+# SNP POS
+geno_df$CHR <- paste0("chr", geno_df$CHR)
+write_delim(geno_df[, c("SNP", "CHR", "POS")], "~/PD_GRS/mQTL/snp_pos.txt")
+
+# SNPs
+geno_vars <- colnames(geno_df)[-c(1, 3:6)] #220 (219)
+geno_vars_m <- geno_vars[-(1 + which(terre_meta$men == 0))] #120 (119)
+geno_vars_f <- geno_vars[-(1 + which(terre_meta$men == 1))] #101 (100)
+fwrite(geno_df[, geno_vars], "~/PD_GRS/mQTL/all_imputed_matrixeQTL.txt", sep = " ", quote = F)
+fwrite(geno_df[, geno_vars_f], "~/PD_GRS/mQTL/female_all_imputed_matrixeQTL.txt", sep = " ", quote = F)
+fwrite(geno_df[, geno_vars_m], "~/PD_GRS/mQTL/male_all_imputed_matrixeQTL.txt", sep = " ", quote = F)
+
+# Methy POS
+pos_dat <- data.frame(geneid=fData_EPIC$TargetID, chr=paste0("chr", fData_EPIC$CHR), s1=fData_EPIC$MAPINFO, s2=fData_EPIC$MAPINFO)
+dim(pos_dat <- pos_dat[match(rownames(betas), pos_dat$geneid),]) #803777      5
+fwrite(pos_dat, "~/PD_GRS/mQTL/probe_pos.txt", sep = " ", quote = F)
+
+# methy
+#betas_write <- betas %>% as.data.frame() %>% rownames_to_column("cpg")
+
+fwrite(betas %>% as.data.frame() %>% rownames_to_column("cpg"), "~/PD_GRS/mQTL/methylation.txt", sep = " ", quote = F)
+fwrite(betas[, terre_meta$men == 1] %>% as.data.frame() %>% rownames_to_column("cpg"), "~/PD_GRS/mQTL/male_methylation.txt", sep = " ", quote = F)
+fwrite(betas[, terre_meta$men == 0] %>% as.data.frame() %>% rownames_to_column("cpg"), "~/PD_GRS/mQTL/female_methylation.txt", sep = " ", quote = F)
+
+# SNP POS
+write_delim(geno_df[geno_df$CHR == "chr21", c("SNP", "CHR", "POS")], "~/PD_GRS/mQTL/snp_pos_chr21.txt")
+
+# SNPs
+geno_vars <- colnames(geno_df)[-c(1, 3:6)]
+write_delim(geno_df[geno_df$chr=="CHR21", geno_vars], "~/PD_GRS/mQTL/all_imputed_matrixeQTL_chr21.txt")
+
+# Methy POS
+write_delim(pos_dat[pos_dat$chr == "chr21",], "~/PD_GRS/mQTL/probe_pos_chr21.txt")
+length(chr21_cpg <- pos_dat[pos_dat$chr == "chr21","Name"]) #9630
+
+# methy
+write_delim(betas %>% as.data.frame() %>% rownames_to_column("cpg") %>% filter(cpg %in% chr21_cpg), "~/PD_GRS/mQTL/methylation_chr21.txt")
+```
+
+All inputs for MatrixEQTL are now generated. Refer to scripts "run_matrixEQTL.R" and "run_mQTL_terre.sh" to generate results prior to the next section.
+
+# cis-mQTL in TERRE
+
+## CpGs from GRS EWAS with an mQTL
+```{r pc check, eval=F}
+mqtl <- fread("~/PD_GRS/mQTL/cis_mQTL_out.txt.gz", tmpdir="~/tmp")
+colnames(mqtl)[c(2,6)] <- c("TargetID","FDR.mQTL")
+grs_res <- read.csv("~/PD_GRS/EWAS_TERRE/EWAS_GRS_cross_sex_hits.csv")
+grs_mqtl <- left_join(grs_res, mqtl[,c(1,2,6)], by="TargetID")
+nrow(grs_mqtl <- grs_mqtl[grs_mqtl$FDR.mQTL<=0.05,]) #13,342
+cpg_mqtl <- summary(as.factor(grs_mqtl$TargetID))
+#cg00891649 cg00916973 cg01341218 cg02478991 cg04226788 cg05314706 cg06721910 cg07368061 cg09793084 cg09860564 
+#       758        198        292        700        740        295        778        705        656        787 
+#cg12609785 cg15072451 cg15633388 cg16228356 cg17117718 cg17309384 cg17911788 cg18228076 cg18815117 cg18878992 
+#       297        768        732        650        298         19        628        786        472        769 
+#cg19832721 cg20163478 cg23519755 cg24319718 cg27060340 
+#       721        299        708          1        285 
+
+cpg_plot <- data.frame(Probe=names(cpg_mqtl), Num_mQTL=cpg_mqtl)
+cpg_plot <- cpg_plot %>% arrange(desc(Num_mQTL))
+cpg_plot$Probe <- factor(cpg_plot$Probe,levels=cpg_plot$Probe)
+ggplot(cpg_plot, aes(x=Probe,y=Num_mQTL)) + geom_bar(stat="identity") + ylab("Number of associated mQTLs") + theme_classic() + theme(axis.text.x=element_text(angle=90), axis.title.x=element_blank()) + ggtitle("TERRE GRS-associated CpGs with mQTLs")
+
+#what are the locations of the mQTL?
+snp_pos <- fread("~/PD_GRS/mQTL/snp_pos.txt", tmpdir="~/tmp")
+colnames(snp_pos)[2:3] <- c("SNP.CHR","SNP.POS")
+grs_mqtl <- left_join(grs_mqtl, snp_pos, by="SNP")
+summary(as.factor(grs_mqtl$SNP.CHR))
+#chr10 chr17  chr2 
+#   19 13322     1 
+
+#how far are the mQTL on average from the CpG?
+grs_mqtl$CHR <- paste("chr", grs_mqtl$CHR, sep="")
+all(grs_mqtl$SNP.CHR==grs_mqtl$CHR) #TRUE
+grs_mqtl$dist_mQTL <- grs_mqtl$SNP.POS - grs_mqtl$MAPINFO
+summary(grs_mqtl$dist_mQTL/1000) #distance in kb
+#    Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+#-74.9950 -36.2105  -0.5325  -0.1056  36.0875  74.9930 
+
+summary(abs(grs_mqtl$dist_mQTL/1000))
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#   0.00   16.42   36.12   36.16   55.02   75.00 
+   
+write.csv(grs_mqtl, file="~/PD_GRS/mQTL/GRS_EWAS_hits_mQTL.csv", row.names=F)
+```
+![Number of associated mQTLs for TERRE GRS CpGs](/home1/NEURO/schaffner/PD_GRS/mQTL/grs_cpgs_mqtls.png)
