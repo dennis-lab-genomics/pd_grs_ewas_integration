@@ -9,7 +9,7 @@ The manuscript "A Parkinson’s disease genetic risk score associates with blood
 In this script, the effect sizes of hits discovered in the TERRE sample will be examined in the DIGPD sample, as will the PRS distribution in DIGPD. CpGs in the MAPT/KANSL1 region previously reported to be mQTLs for PD and other neurodegenerative disorders will also be examined in TERRE. Finally, TERRE GRS hits will be compared with PD-associated hits in TERRE and SGPD, using data from the CMR paper.
 
 
-Last updated July 28, 2024 by Samantha Schaffner
+Last updated Aug 24, 2024 by Samantha Schaffner: Comparing delta M and delta beta
 
 Based on code by Will Casazza
 
@@ -43,20 +43,20 @@ library(IlluminaHumanMethylationEPICanno.ilm10b4.hg19)
 terre_meta <- read.csv("~/PD_GRS/meta_for_GRS_EWAS.csv")
 terre_x_sex <- read.csv("~/PD_GRS/EWAS_TERRE/EWAS_GRS_cross_sex_hits.csv")
 
-digpd_x_sex <- read.csv("~/PD_GRS/DIGPD_EWAS_GRS_cross_sex.csv")
+digpd_x_sex <- read.csv("~/PD_GRS/EWAS_DIGPD/DIGPD_EWAS_GRS_cross_sex.csv")
 
-# join data together to compare effects and p-values from each analysis
+# join data together to compare effects and p-values from each analysis: M
 digpd_sub <- digpd_x_sex[,c("TargetID","delta_M","adj.P.Val", "P.Value")]
 colnames(digpd_sub) <- c("TargetID", "delta_M_DIGPD", "adj.P.Val.DIGPD", "P.Value.DIGPD")
 terre_sub <- terre_x_sex[,c("TargetID","delta_M","adj.P.Val", "P.Value")]
 colnames(terre_sub) <- c("TargetID", "delta_M_TERRE", "adj.P.Val.TERRE", "P.Value.TERRE")
 combine <- left_join(terre_sub, digpd_sub, by="TargetID")
 combine <- combine[complete.cases(combine$delta_M_DIGPD),] #one NA in DIGPD (a TERRE hit not in DIGPD data)
-max(c(combine$delta_M_TERRE, combine$delta_M_DIGPD)) #195.2651
-min(c(combine$delta_M_TERRE, combine$delta_M_DIGPD)) #-177.9853
+max(c(combine$delta_M_TERRE, combine$delta_M_DIGPD)) #193.8127
+min(c(combine$delta_M_TERRE, combine$delta_M_DIGPD)) #-176.0213
 
-png("~/PD_GRS/TERRE_cross_sex_in_DIGPD.png", width=200, height=225)
-ggplot(combine, aes(x=delta_M_TERRE, y=delta_M_DIGPD)) + geom_point() + geom_smooth(method="lm", col="grey") + theme_bw() + xlab("TERRE adjusted delta M") + ylab("DIGPD adjusted delta M") + xlim(c(-200,200)) + ylim(c(-200,200)) + ggtitle("TERRE cross-sex hits \nin DIGPD") + stat_cor(label.y=150)
+png("~/PD_GRS/EWAS_DIGPD/TERRE_cross_sex_in_DIGPD.png", width=200, height=225)
+ggplot(combine, aes(x=delta_M_TERRE, y=delta_M_DIGPD)) + geom_point() + geom_smooth(method="lm", col="grey") + theme_bw() + xlab("TERRE adjusted delta M") + ylab("DIG-PD adjusted delta M") + xlim(c(-200,200)) + ylim(c(-200,200)) + ggtitle("TERRE cross-sex hits \nin DIG-PD") + stat_cor(label.y=150)
 dev.off()
 
 ### Check how many CpGs have delta M > 1.5 and nominal p < 0.05 in DIGPD, in the same direction as TERRE
@@ -67,15 +67,53 @@ combine$nom_p <- (combine$P.Value.DIGPD<=0.05)
 summary(combine[,c("direction","threshold_M","nom_p")])
 # direction       threshold_M      nom_p        
 # Mode :logical   Mode:logical   Mode :logical  
-# FALSE:1         TRUE:26        FALSE:4        
-# TRUE :25                       TRUE :22  
+# FALSE:1         TRUE:23        FALSE:2        
+# TRUE :22                       TRUE :21  
 
 table(combine$direction, combine$nom_p)
 #        FALSE TRUE
 #  FALSE     1    0
-#  TRUE      3   22
+#  TRUE      1   21
 
-write.csv(combine, file="~/PD_GRS/TERRE_cross_sex_in_DIGPD.csv", row.names=F)
+write.csv(combine, file="~/PD_GRS/TERRE_cross_sex_in_DIGPD_M.csv", row.names=F)
+
+# join data together to compare effects and p-values from each analysis: B
+digpd_sub <- digpd_x_sex[,c("TargetID","adjDB","adj.P.Val", "P.Value")]
+colnames(digpd_sub) <- c("TargetID", "delta_B_DIGPD", "adj.P.Val.DIGPD", "P.Value.DIGPD")
+terre_sub <- terre_x_sex[,c("TargetID","adjDB","adj.P.Val", "P.Value")]
+colnames(terre_sub) <- c("TargetID", "delta_B_TERRE", "adj.P.Val.TERRE", "P.Value.TERRE")
+combine <- left_join(terre_sub, digpd_sub, by="TargetID")
+combine <- combine[complete.cases(combine$delta_B_DIGPD),] #one NA in DIGPD (a TERRE hit not in DIGPD data)
+max(abs(c(combine$delta_B_TERRE, combine$delta_B_DIGPD))) #0.8531281
+min(abs(c(combine$delta_B_TERRE, combine$delta_B_DIGPD))) #0.01700614
+
+png("~/PD_GRS/EWAS_DIGPD/TERRE_cross_sex_in_DIGPD_B.png", width=200, height=225)
+ggplot(combine, aes(x=delta_B_TERRE, y=delta_B_DIGPD)) + geom_point() + geom_smooth(method="lm", col="grey") + theme_bw() + xlab("TERRE adjusted delta beta") + ylab("DIG-PD adjusted delta beta") + xlim(c(-1,1)) + ylim(c(-1,1)) + ggtitle("TERRE cross-sex hits \nin DIG-PD") + stat_cor(label.y=0.8)
+dev.off()
+
+### Check how many CpGs have delta M > 1.5 and nominal p < 0.05 in DIGPD, in the same direction as TERRE
+combine$direction <- (sign(combine$delta_B_TERRE)==sign(combine$delta_B_DIGPD))
+combine$threshold_B <- (abs(combine$delta_B_DIGPD)>=0.03)
+combine$nom_p <- (combine$P.Value.DIGPD<=0.05)
+combine$adj_p <- (combine$adj.P.Val.DIGPD<=0.05)
+
+summary(combine[,c("direction","threshold_B","nom_p")])
+# direction       threshold_B       nom_p        
+# Mode :logical   Mode :logical   Mode :logical  
+# FALSE:12        FALSE:2         FALSE:2        
+# TRUE :11        TRUE :21        TRUE :21 
+
+table(combine$direction, combine$nom_p)
+#        FALSE TRUE
+#  FALSE     2   10
+#  TRUE      0   11
+
+table(combine$direction, combine$adj_p)
+#        FALSE TRUE
+#  FALSE     7    5
+#  TRUE      6    5
+
+write.csv(combine, file="~/PD_GRS/TERRE_cross_sex_in_DIGPD_B.csv", row.names=F)
 ```
 ![Comparison of cross-sex effect sizes between samples](/home1/NEURO/schaffner/PD_GRS/TERRE_cross_sex_in_DIGPD.png)
 

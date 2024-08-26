@@ -9,7 +9,7 @@ The manuscript "A Parkinson’s disease genetic risk score associates with blood
 In this script, EWAS is conducted to identify DNAm patterns associated with the GRS in the cross-sex and sex-stratified samples in DIGPD. The models are adjusted for batch, cell type, and disease status. Results will be compared with the previous models (adjusted for 10 DNAm PCs).
 
 
-Last updated July 3, 2024 by Samantha Schaffner
+Last updated Aug 24, 2024 by Samantha Schaffner: Converting delta M to delta beta
 
 Based on code by Will Casazza
 
@@ -164,53 +164,108 @@ na_row <- !apply(meta_sub[, c("SCORE1_AVG", "Age", "reportedSex", "GPC1", "GPC2"
 summary(na_row) #no NA's for these covariates
 str(meta_sub[,c("SCORE1_AVG", "Age", "reportedSex", "GPC1", "GPC2", "GPC3", "CTP_PC1", "CTP_PC2", "CTP_PC3", "CTP_PC4", "plate", "SentrixPosition_A", "PD")]) #checking format again - good
 
+####### Cross-sex PRS EWAS
 # limma design matrix and linear model fit
 design_prs <- model.matrix(~ 1 + SCORE1_AVG + Age + reportedSex + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A + PD, data = meta_sub)
 prs_fit <- lmFit(mvals, design_prs)
 prs_fit <- eBayes(prs_fit)
+# transform adjusted M-values to adjusted beta-values (code from Kruppa et al. 2021)
+prs_fit_coef <- prs_fit$coefficients
+m0_eff <- prs_fit_coef[, "(Intercept)"] #M-value model intercept
+m1_eff <- m0_eff + prs_fit_coef[, "SCORE1_AVG"] #M-value model intercept plus GRS coefficient (delta M)
 
-# Cases only
+prs_res <- limma::topTable(prs_fit, coef = 2, number = Inf, genelist=rownames(mvals))
+prs_res$adjDB <- m2beta(m1_eff) - m2beta(m0_eff) #transform each adjusted M-value to a beta-value, and subtract intercept beta value from intercept + coefficient beta value to obtain the adjusted delta beta
+nrow(prs_res[abs(prs_res$adjDB)>=0.03 & prs_res$adj.P.Val<=0.05,]) #11
+
+#### check PRS model coefficients vs "logFC" column: is topTable outputting delta M?
+coef <- prs_fit$coefficients
+all(rownames(coef)%in%prs_res$ID) #TRUE
+coef <- coef[match(prs_res$ID, rownames(coef)),]
+all(rownames(coef)==prs_res$ID) #TRUE
+all(coef[,2]==prs_res$logFC) #TRUE
+#### logFC column is the model coefficient
+
+####### Cases only
 design_prs_case <- model.matrix(~ 1 + SCORE1_AVG + Age + reportedSex + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta_sub[meta_sub$PD=="1",])
 prs_fit_case <- lmFit(mvals[,match(unlist(meta_sub[meta_sub$PD=="1","Sample_Name"]), colnames(mvals))], design_prs_case)
 prs_fit_case <- eBayes(prs_fit_case)
+# transform adjusted M-values to adjusted beta-values (code from Kruppa et al. 2021)
+prs_fit_coef <- prs_fit_case$coefficients
+m0_eff <- prs_fit_coef[, "(Intercept)"] #M-value model intercept
+m1_eff <- m0_eff + prs_fit_coef[, "SCORE1_AVG"] #M-value model intercept plus GRS coefficient (delta M)
+
+case_res <- limma::topTable(prs_fit_case, coef = 2, number = Inf, genelist=rownames(mvals))
+case_res$adjDB <- m2beta(m1_eff) - m2beta(m0_eff) #transform each adjusted M-value to a beta-value, and subtract intercept beta value from intercept + coefficient beta value to obtain the adjusted delta beta
+nrow(case_res[abs(case_res$adjDB)>=0.03 & case_res$adj.P.Val<=0.05,]) #5
 
 # Controls only
 design_prs_control <- model.matrix(~ 1 + SCORE1_AVG + Age + reportedSex + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta_sub[meta_sub$PD=="0",])
 prs_fit_control <- lmFit(mvals[,match(unlist(meta_sub[meta_sub$PD=="0","Sample_Name"]), colnames(mvals))], design_prs_control)
 prs_fit_control <- eBayes(prs_fit_control)
+# transform adjusted M-values to adjusted beta-values (code from Kruppa et al. 2021)
+prs_fit_coef <- prs_fit_control$coefficients
+m0_eff <- prs_fit_coef[, "(Intercept)"] #M-value model intercept
+m1_eff <- m0_eff + prs_fit_coef[, "SCORE1_AVG"] #M-value model intercept plus GRS coefficient (delta M)
+
+control_res <- limma::topTable(prs_fit_control, coef = 2, number = Inf, genelist=rownames(mvals))
+control_res$adjDB <- m2beta(m1_eff) - m2beta(m0_eff) #transform each adjusted M-value to a beta-value, and subtract intercept beta value from intercept + coefficient beta value to obtain the adjusted delta beta
+nrow(control_res[abs(control_res$adjDB)>=0.03 & control_res$adj.P.Val<=0.05,]) #0
 
 # Males
 design_prs_male <- model.matrix(~ 1 + SCORE1_AVG + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A + PD, data = meta_sub[meta_sub$reportedSex=="M",])
 prs_fit_male <- lmFit(mvals[,match(unlist(meta_sub[meta_sub$reportedSex=="M","Sample_Name"]), colnames(mvals))], design_prs_male)
+# Coefficients not estimable: plate6 plate9 
+# Partial NA coefficients for 803777 probe(s)
 prs_fit_male <- eBayes(prs_fit_male)
+# Estimation of var.prior failed - set to default value
+# transform adjusted M-values to adjusted beta-values (code from Kruppa et al. 2021)
+prs_fit_coef <- prs_fit_male$coefficients
+m0_eff <- prs_fit_coef[, "(Intercept)"] #M-value model intercept
+m1_eff <- m0_eff + prs_fit_coef[, "SCORE1_AVG"] #M-value model intercept plus GRS coefficient (delta M)
 
+male_res <- limma::topTable(prs_fit_male, coef = 2, number = Inf, genelist=rownames(mvals))
+male_res$adjDB <- m2beta(m1_eff) - m2beta(m0_eff) #transform each adjusted M-value to a beta-value, and subtract intercept beta value from intercept + coefficient beta value to obtain the adjusted delta beta
+nrow(male_res[abs(male_res$adjDB)>=0.03 & male_res$adj.P.Val<=0.05,]) #0
 
 # Females
 design_prs_female <- model.matrix(~ 1 + SCORE1_AVG + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A + PD, data = meta_sub[meta_sub$reportedSex=="F",])
-prs_fit_female <- lmFit(mvals[,match(unlist(meta_sub[meta_sub$reportedSex=="F","Sample_Name"]), colnames(mvals))], design_prs_female) #Coefficients not estimable: plate6 plate7 
+prs_fit_female <- lmFit(mvals[,match(unlist(meta_sub[meta_sub$reportedSex=="F","Sample_Name"]), colnames(mvals))], design_prs_female)
 prs_fit_female <- eBayes(prs_fit_female)
+# transform adjusted M-values to adjusted beta-values (code from Kruppa et al. 2021)
+prs_fit_coef <- prs_fit_female$coefficients
+m0_eff <- prs_fit_coef[, "(Intercept)"] #M-value model intercept
+m1_eff <- m0_eff + prs_fit_coef[, "SCORE1_AVG"] #M-value model intercept plus GRS coefficient (delta M)
 
-design_pd <- model.matrix(~ 1 + PD + SCORE1_AVG + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A + reportedSex, data = meta_sub)
+female_res <- limma::topTable(prs_fit_female, coef = 2, number = Inf, genelist=rownames(mvals))
+female_res$adjDB <- m2beta(m1_eff) - m2beta(m0_eff) #transform each adjusted M-value to a beta-value, and subtract intercept beta value from intercept + coefficient beta value to obtain the adjusted delta beta
+nrow(female_res[abs(female_res$adjDB)>=0.03 & female_res$adj.P.Val<=0.05,]) #0
+
+# PD status EWAS check
+design_pd <- model.matrix(~ 1 + PD + Age + reportedSex + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta_sub)
 pd_fit <- lmFit(mvals, design_pd)
 pd_fit <- eBayes(pd_fit)
+# transform adjusted M-values to adjusted beta-values (code from Kruppa et al. 2021)
+pd_fit_coef <- pd_fit$coefficients
+m0_eff <- pd_fit_coef[, "(Intercept)"] #M-value model intercept
+m1_eff <- m0_eff + pd_fit_coef[, "PD1"] #M-value model intercept plus GRS coefficient (delta M)
+
 pd_res <- limma::topTable(pd_fit, coef = 2, number = Inf, genelist=rownames(mvals))
-prs_res <- limma::topTable(prs_fit, coef = 2, number = Inf, genelist=rownames(mvals))
-control_res <- limma::topTable(prs_fit_control, coef = 2, number = Inf, genelist=rownames(mvals))
-case_res <- limma::topTable(prs_fit_case, coef = 2, number = Inf, genelist=rownames(mvals))
-male_res <- limma::topTable(prs_fit_male, coef = 2, number = Inf, genelist=rownames(mvals))
-female_res <- limma::topTable(prs_fit_female, coef = 2, number = Inf, genelist=rownames(mvals))
+pd_res$adjDB <- m2beta(m1_eff) - m2beta(m0_eff) #transform each adjusted M-value to a beta-value, and subtract intercept beta value from intercept + coefficient beta value to obtain the adjusted delta beta
+nrow(pd_res[abs(pd_res$adjDB)>=0.03 & pd_res$adj.P.Val<=0.05,]) #0
+
 
 # save everything
 # put limma results in separate csv's and together as one RData object for ease later
 save(mvals, file="~/PD_GRS/DIGPD_Mvals.RData")
 write.csv(meta_sub, file="~/PD_GRS/meta_for_GRS_EWAS_DIGPD.csv", row.names=F)
-save(pd_res, prs_res, control_res, case_res, male_res, female_res, file="~/PD_GRS/DIGPD_EWAS_limma_all.RData")
-write.csv(pd_res, file="~/PD_GRS/DIGPD_EWAS_PD.csv", row.names=F)
-write.csv(prs_res, file="~/PD_GRS/DIGPD_EWAS_GRS_cross_sex.csv", row.names=F)
-write.csv(case_res, file="~/PD_GRS/DIGPD_EWAS_GRS_cases.csv", row.names=F)
-write.csv(control_res, file="~/PD_GRS/DIGPD_EWAS_GRS_controls.csv", row.names=F)
-write.csv(male_res, file="~/PD_GRS/DIGPD_EWAS_GRS_males.csv", row.names=F)
-write.csv(female_res, file="~/PD_GRS/DIGPD_EWAS_GRS_females.csv", row.names=F)
+save(pd_res, prs_res, control_res, case_res, male_res, female_res, file="~/PD_GRS/EWAS_DIGPD/DIGPD_EWAS_limma_all.RData")
+write.csv(pd_res, file="~/PD_GRS/EWAS_DIGPD/DIGPD_EWAS_PD.csv", row.names=F)
+write.csv(prs_res, file="~/PD_GRS/EWAS_DIGPD/DIGPD_EWAS_GRS_cross_sex.csv", row.names=F)
+write.csv(case_res, file="~/PD_GRS/EWAS_DIGPD/DIGPD_EWAS_GRS_cases.csv", row.names=F)
+write.csv(control_res, file="~/PD_GRS/EWAS_DIGPD/DIGPD_EWAS_GRS_controls.csv", row.names=F)
+write.csv(male_res, file="~/PD_GRS/EWAS_DIGPD/DIGPD_EWAS_GRS_males.csv", row.names=F)
+write.csv(female_res, file="~/PD_GRS/EWAS_DIGPD/DIGPD_EWAS_GRS_females.csv", row.names=F)
 ```
 
 ### Plotting results
@@ -229,12 +284,12 @@ prs_res <- left_join(prs_res, fdat, by="TargetID")
 # logFC: delta M
 # AveExpr: average M
 colnames(prs_res)[2:3] <- c("delta_M", "avgM")
-write.csv(prs_res, file="~/PD_GRS/DIGPD_EWAS_GRS_cross_sex.csv", row.names=F)
 
 # plot with delta M threshold
 summary(prs_res$threshold_M <- (prs_res$adj.P.Val <= 0.05 & abs(prs_res$delta_M)>=1.5)) #13
-prs_hits <- prs_res[prs_res$threshold_M==TRUE,]
-write.csv(prs_hits, file="~/PD_GRS/DIGPD_EWAS_GRS_cross_sex_hits.csv", row.names=F)
+summary(prs_res$threshold_B <- (prs_res$adj.P.Val <= 0.05 & abs(prs_res$adjDB)>=0.03)) #11
+prs_hits <- prs_res[prs_res$threshold_B==TRUE,]
+write.csv(prs_hits, file="~/PD_GRS/EWAS_DIGPD/DIGPD_EWAS_GRS_cross_sex_hits.csv", row.names=F)
 
 max(prs_res[prs_res$threshold_M==TRUE,"P.Value"]) #2.57356e-07
 prs_res$DNAm_change <- "NS"
@@ -249,16 +304,15 @@ View(prs_hits[,c("TargetID","UCSC_REFGENE_NAME")])
 prs_hits$UCSC_REFGENE_NAME
 # replace repeated gene names
 prs_hits$UCSC_REFGENE_NAME <- as.character(prs_hits$UCSC_REFGENE_NAME)
-prs_hits$UCSC_REFGENE_NAME <- c("","KANSL1","","ARHGAP27","KANSL1","KANSL1","","MAPT","KANSL1","MAPT","KIAA1267",
-                                "MAPT","")
+prs_hits$UCSC_REFGENE_NAME <- c("","KANSL1","","ARHGAP27","KANSL1","KANSL1","","KANSL1","MAPT","KIAA1267","MAPT")
 prs_res_hits <- prs_res[match(prs_hits$TargetID, prs_res$TargetID),]
 all(prs_res_hits$TargetID==prs_hits$TargetID)
 prs_res_hits$UCSC_REFGENE_NAME <- prs_hits$UCSC_REFGENE_NAME
 prs_res_other <- prs_res[-(which(prs_res$TargetID %in% prs_hits$TargetID)),]
 prs_res_other$UCSC_REFGENE_NAME <- as.character(prs_res_other$UCSC_REFGENE_NAME)
 prs_res <- rbind(prs_res_hits, prs_res_other)
-write.csv(prs_res, file="~/PD_GRS/DIGPD_EWAS_GRS_cross_sex.csv", row.names=F)
-write.csv(prs_res_hits, file="~/PD_GRS/DIGPD_EWAS_GRS_cross_sex_hits.csv", row.names=F)
+write.csv(prs_res, file="~/PD_GRS/EWAS_DIGPD/DIGPD_EWAS_GRS_cross_sex.csv", row.names=F)
+write.csv(prs_res_hits, file="~/PD_GRS/EWAS_DIPD/DIGPD_EWAS_GRS_cross_sex_hits.csv", row.names=F)
 
 max(abs(prs_res$delta_M)) #241.1412
 max(-log10(prs_res$P.Value)) #9.582231
@@ -273,15 +327,15 @@ ggplot(prs_res[,c("delta_M","P.Value","DNAm_change","UCSC_REFGENE_NAME")], aes(x
 dev.off()
 
 # Compare with TERRE - how many overlap?
-terre_prs_hits <- read.csv("~/PD_GRS/EWAS_GRS_cross_sex_hits.csv")
-length(prs_res_hits$TargetID[prs_res_hits$TargetID %in% terre_prs_hits$TargetID]) #11
+terre_prs_hits <- read.csv("~/PD_GRS/EWAS_TERRE/EWAS_GRS_cross_sex_hits.csv")
+length(prs_hits$TargetID[prs_hits$TargetID %in% terre_prs_hits$TargetID]) #9
 colnames(terre_prs_hits)[2:ncol(terre_prs_hits)] <- paste("terre", colnames(terre_prs_hits)[2:ncol(terre_prs_hits)], sep="_")
-overlap <- left_join(terre_prs_hits[,c("TargetID","terre_delta_M","terre_adj.P.Val")], prs_res_hits[,c("TargetID","delta_M","adj.P.Val", "UCSC_REFGENE_NAME")], by="TargetID")
-write.csv(overlap, file="~/PD_GRS/EWAS_cross_sex_hits_TERRE_DIGPD.csv", row.names=F)
+overlap <- left_join(terre_prs_hits[,c("TargetID","terre_delta_M","terre_adj.P.Val")], prs_hits[,c("TargetID","delta_M","adj.P.Val", "UCSC_REFGENE_NAME")], by="TargetID")
+write.csv(overlap, file="~/PD_GRS/EWAS_DIGPD/EWAS_cross_sex_hits_TERRE_DIGPD.csv", row.names=F)
 ```
 ![Updated EWAS model - DIGPD](/home1/NEURO/schaffner/PD_GRS/volcano_DIGPD_GRS_cross_sex_Mvals.png)
 
-13 probes are significant in the DIGPD cross-sex sample, 11 of which overlapped with TERRE. In other words, 11 of 27 probes from TERRE (41%) replicated in DIGPD.
+11 probes are significant in the DIGPD cross-sex sample, 9 of which overlapped with TERRE. In other words, 9 of 23 probes from TERRE (39%) replicated in DIGPD.
 
 #### Cross-sex PD status EWAS
 ```{r volcano pd, eval=F}

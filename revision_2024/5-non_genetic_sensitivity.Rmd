@@ -8,7 +8,7 @@ The manuscript "A Parkinson’s disease genetic risk score associates with blood
 Here, EWAS for the GRS will be repeated with adjustment for the following non-genetic factors: **smoking status, alcohol use, age, sex, self-reported previous head injury, and individual occupational pesticide and heavy metal exposures** surveyed in TERRE. Will initially examined all 69 available exposures. I'll subset to the ones with at least 10 "exposed" individuals to generate a more reliable estimate of exposure effect (as done for npj PD paper).
 
 
-Last updated Aug 7, 2024 by Samantha Schaffner
+Last updated Aug 23, 2024 by Samantha Schaffner
 
 
 Based on code by Will Casazza
@@ -28,6 +28,7 @@ library(ggrepel)
 library(dplyr)
 library(UpSetR)
 library(mice)
+library(parallel)
 source("~/kobor_shared_coding_resource/qqplot_NG.R")
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -76,21 +77,36 @@ summary(meta_sub) #20 missing pesticides, otherwise complete
 design_smoke <- model.matrix(~ 1 + SCORE1_AVG + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD + smoking, data = meta_sub)
 smoke_fit <- lmFit(mvals, design_smoke)
 smoke_fit <- eBayes(smoke_fit)
+smoke_fit_coef <- smoke_fit$coefficients
+m0_eff <- smoke_fit_coef[, "(Intercept)"] #M-value model intercept
+m1_eff <- m0_eff + smoke_fit_coef[, "SCORE1_AVG"] #M-value model intercept plus GRS coefficient (delta M)
 smoke_res <- limma::topTable(smoke_fit, coef = 2, number = Inf, genelist=rownames(mvals))
+smoke_res$adjDB <- m2beta(m1_eff) - m2beta(m0_eff)
+nrow(smoke_res[abs(smoke_res$adjDB)>=0.03 & smoke_res$adj.P.Val<=0.05,]) #22
 write.csv(smoke_res, file="~/PD_GRS/non_genetic_sensitivity/EWAS_GRS_smoke.csv", row.names=F)
 
 # adjustment for head trauma
 design_ht <- model.matrix(~ 1 + SCORE1_AVG + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD + head_trauma, data = meta_sub)
 ht_fit <- lmFit(mvals, design_ht)
 ht_fit <- eBayes(ht_fit)
+ht_fit_coef <- ht_fit$coefficients
+m0_eff <- ht_fit_coef[, "(Intercept)"] #M-value model intercept
+m1_eff <- m0_eff + ht_fit_coef[, "SCORE1_AVG"] #M-value model intercept plus GRS coefficient (delta M)
 ht_res <- limma::topTable(ht_fit, coef = 2, number = Inf, genelist=rownames(mvals))
+ht_res$adjDB <- m2beta(m1_eff) - m2beta(m0_eff)
+nrow(ht_res[abs(ht_res$adjDB)>=0.03 & ht_res$adj.P.Val<=0.05,]) #23
 write.csv(ht_res, file="~/PD_GRS/non_genetic_sensitivity/EWAS_GRS_ht.csv", row.names=F)
 
 # adjustment for alcohol
 design_alc <- model.matrix(~ 1 + SCORE1_AVG + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD + alcohol1, data = meta_sub)
 alc_fit <- lmFit(mvals, design_alc)
 alc_fit <- eBayes(alc_fit)
+alc_fit_coef <- alc_fit$coefficients
+m0_eff <- alc_fit_coef[, "(Intercept)"] #M-value model intercept
+m1_eff <- m0_eff + alc_fit_coef[, "SCORE1_AVG"] #M-value model intercept plus GRS coefficient (delta M)
 alc_res <- limma::topTable(alc_fit, coef = 2, number = Inf, genelist=rownames(mvals))
+alc_res$adjDB <- m2beta(m1_eff) - m2beta(m0_eff)
+nrow(alc_res[abs(alc_res$adjDB)>=0.03 & alc_res$adj.P.Val<=0.05,]) #24
 write.csv(alc_res, file="~/PD_GRS/non_genetic_sensitivity/EWAS_GRS_alc.csv", row.names=F)
 
 # adjustment for overall pesticide exposure
@@ -102,7 +118,12 @@ mvals_pest <- mvals[,match(meta_pest$patient, colnames(mvals))]
 design_pest <- model.matrix(~ 1 + SCORE1_AVG + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD + pesticides, data = meta_pest)
 pest_fit <- lmFit(mvals_pest, design_pest)
 pest_fit <- eBayes(pest_fit)
+pest_fit_coef <- pest_fit$coefficients
+m0_eff <- pest_fit_coef[, "(Intercept)"] #M-value model intercept
+m1_eff <- m0_eff + pest_fit_coef[, "SCORE1_AVG"] #M-value model intercept plus GRS coefficient (delta M)
 pest_res <- limma::topTable(pest_fit, coef = 2, number = Inf, genelist=rownames(mvals))
+pest_res$adjDB <- m2beta(m1_eff) - m2beta(m0_eff)
+nrow(pest_res[abs(pest_res$adjDB)>=0.03 & pest_res$adj.P.Val<=0.05,]) #16
 write.csv(pest_res, file="~/PD_GRS/non_genetic_sensitivity/EWAS_GRS_pest.csv", row.names=F)
 ```
 
@@ -110,24 +131,24 @@ write.csv(pest_res, file="~/PD_GRS/non_genetic_sensitivity/EWAS_GRS_pest.csv", r
 ```{r compare, eval=F}
 grs_res <- read.csv("~/PD_GRS/EWAS_TERRE/EWAS_GRS_cross_sex_hits.csv")
 
-nrow(smoke_hits <- smoke_res[abs(smoke_res$logFC)>=1.5 & smoke_res$adj.P.Val<=0.05,]) #24
-nrow(ht_hits <- ht_res[abs(ht_res$logFC)>=1.5 & ht_res$adj.P.Val<=0.05,]) #24
-nrow(alc_hits <- alc_res[abs(alc_res$logFC)>=1.5 & alc_res$adj.P.Val<=0.05,]) #26
-nrow(pest_hits <- pest_res[abs(pest_res$logFC)>=1.5 & pest_res$adj.P.Val<=0.05,]) #18
+nrow(smoke_hits <- smoke_res[abs(smoke_res$adjDB)>=0.03 & smoke_res$adj.P.Val<=0.05,]) #22
+nrow(ht_hits <- ht_res[abs(ht_res$adjDB)>=0.03 & ht_res$adj.P.Val<=0.05,]) #23
+nrow(alc_hits <- alc_res[abs(alc_res$adjDB)>=0.03 & alc_res$adj.P.Val<=0.05,]) #24
+nrow(pest_hits <- pest_res[abs(pest_res$adjDB)>=0.03 & pest_res$adj.P.Val<=0.05,]) #16
 
 #summarize overlaps
-all_probes <- unique(c(grs_res$TargetID, smoke_hits$ID, ht_hits$ID, alc_hits$ID, pest_hits$ID)) #30 unique probes
+length(all_probes <- unique(c(grs_res$TargetID, smoke_hits$ID, ht_hits$ID, alc_hits$ID, pest_hits$ID))) #28 unique probes
 all_data <- data.frame(TargetID=all_probes, GRS=(all_probes %in% grs_res$TargetID), GRS_smoking=(all_probes %in% smoke_hits$ID), GRS_head_trauma=(all_probes %in% ht_hits$ID), GRS_alcohol=(all_probes %in% alc_hits$ID), GRS_pesticides=(all_probes %in% pest_hits$ID))
-sensitivity <- left_join(grs_res[,c("TargetID","UCSC_REFGENE_NAME","UCSC_REFGENE_GROUP","delta_M","adj.P.Val")], all_data[,c(1,3:6)], by="TargetID")
+sensitivity <- left_join(grs_res[,c("TargetID","UCSC_REFGENE_NAME","UCSC_REFGENE_GROUP","adjDB","adj.P.Val")], all_data[,c(1,3:6)], by="TargetID")
 write.csv(sensitivity, file="~/PD_GRS/non_genetic_sensitivity/sensitivity_overlaps.csv", row.names=FALSE)
 
 #upset plot
 all_data[,2:6] <- apply(all_data[,2:6], 2, function(x) as.numeric(x))
 upset(all_data, sets=c("GRS","GRS_smoking","GRS_head_trauma","GRS_alcohol","GRS_pesticides"),order.by="degree")
 ```
-![Overlap between probes significant in sensitivity analyses and original EWAS](/home1/NEURO/schaffner/PD_GRS/non_genetic_sensitivity/upset.png)
+![Overlap between probes significant in sensitivity analyses and original EWAS](/home1/NEURO/schaffner/PD_GRS/non_genetic_sensitivity/upset_beta.png)
 
-18 probes are consistent across all sensitivity analyses. One additional probe was discovered in the smoking-adjusted analysis, and two additional probes in the alcohol-adjusted analysis. The pesticide-adjusted analysis had four fewer probes than the rest.
+13 probes are consistent across all sensitivity analyses. Two additional probes were discovered in the smoking-adjusted analysis, three additional probes in the alcohol-adjusted analysis, and one in the pesticide-adjusted analysis.
 
 ## PD medications
 
@@ -255,105 +276,40 @@ pre_mids <-rbind(cbind(data.frame(X_imputation_=0),pest_missing)[,colnames(pest_
 pre_mids <- pre_mids[pre_mids$num %in% colnames(mvals_pest),]
 pest_mids <- as.mids(pre_mids, .imp="X_imputation_",.id="num")
 terre_pest_meta <- meta_sub[match(rownames(pest_mids$data),meta_sub$patient),]
-mvals_pest <- mvals_pest[grs_res$TargetID,rownames(pest_mids$data)]
+mvals_pest <- mvals_pest[,rownames(pest_mids$data)]
 exposures <- colnames(pest_mids$data)
-​
-for(exposure in exposures[1]){
-  print(paste("EWAS with adjustment for", exposure, sep=" "))
-  design_call <- substitute(
-    with(pest_mids,
-         model.matrix.lm(
-           ~ SCORE1_AVG + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD + E,
-           data = terre_pest_meta,
-           na.action='na.pass')
-    ),
-    list(E=as.name(exposure)))
-  design <- eval(design_call,list(E=as.name(exposure)))
-  design <- design$analyses
-  res <- parallel::mclapply(
-    design,
-    function(x){
-      na_row <- is.na(rowSums(x))
-      eBayes(lmFit(mvals_pest[,!na_row],x[!na_row,]))
-    },
-    mc.cores = 10)
-  coefs <- lapply(res,coef)
-  vars <- lapply(res,function(x)(x$stdev.unscaled * sqrt(x$s2.post))^2)
-  coefs_per_cpg <- lapply(
-    1:nrow(mvals_pest),
-    function(i){
-      unlist(lapply(coefs,function(mat) mat[i,9]))
-    }
-  )
-  vars_per_cpg <- lapply(
-    1:nrow(mvals_pest),
-    function(i){
-      unlist(lapply(vars,function(mat) mat[i,9]))
-    }
-  )
-  pooled_res <- parallel::mclapply(
-    1:nrow(mvals_pest),
-    function(i){
-      pooled <- pool.scalar(coefs_per_cpg[[i]],vars_per_cpg[[i]],ncol(mvals_pest),k =9)
-      out <- data.frame(pooled[-c(2,3)])
-      out$P <- 2*pt(abs(out$t),out$df,lower.tail=F)
-      return(out)
-    },
-    mc.cores=20
-  )
-  names(pooled_res) <- rownames(mvals_pest)
-  sum_stats <- rbindlist(pooled_res,idcol="probe")
-  fwrite(sum_stats,paste0(exposure,"_pest_imp_sensitivity.txt"),sep="\t",row.names = F,quote=F)
-}
-```
-The pool.scalar function in mice returns a data frame with the following columns: "m", number of imputations; "qbar", pooled estimate; "ubar", mean of pooled within-imputation variances; "b", between-imputation variance; "t", total variance of pooled estimate; "r", relative increase in variance due to nonresponse; "df", degrees of freedom for t reference distribution; "fmi"; fraction of missing information due to nonresponse.
 
-"qbar" ranges from -0.6 and 0.8 (not exactly on same scale as M-value coefficients) - look into its interpretation further...
+for(exposure in exposures){
+  print(paste("EWAS with adjustment for", exposure, sep=" "))
+  ewas <- mclapply(1:nrow(mvals_pest), function(x){
+    fit.cpg <- substitute(pest_mids %>% with(lm(mvals_pest[x,] ~ SCORE1_AVG + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD + E, data=terre_pest_meta)),
+                          list(E=as.name(exposure)))
+    fit.cpg <- eval(fit.cpg, list(E=as.name(exposure)))
+    est.cpg <- pool(fit.cpg)
+    return(summary(est.cpg)[2,])
+    }, mc.cores=10)
+  res <- cbind(do.call(rbind, ewas), probe=rownames(mvals_pest))
+  fwrite(res,paste0(exposure,"_pest_imp_sensitivity.txt"),sep="\t",row.names = F,quote=F)}
+```
 
 ### Compare results with initial GRS EWAS
+Checking how many probes still come up as associated with the GRS when each pesticide is adjusted for.
 ```{r compare 2, eval=F}
 grs_res <- read.csv("~/PD_GRS/EWAS_TERRE/EWAS_GRS_cross_sex_hits.csv")
+exp_df <- lapply(1:30, function(x){
+  exposures[x] <- rep(FALSE,27)
+})
+exp_df <- do.call(cbind, exp_df)
+colnames(exp_df) <- exposures
 
-ins <- read.delim("~/PD_GRS/ins_pest_imp_sensitivity.txt")
-summary(ins$P)
-#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-# 0.9876  0.9968  0.9991  0.9968  0.9995  0.9998 
+grs_pest <- cbind(grs_res[,c("TargetID","delta_M","adj.P.Val","CHR","MAPINFO","UCSC_REFGENE_NAME","UCSC_REFGENE_GROUP")],exp_df)
 
-#first, summarize number of hits with adjustment for each pesticide as a sanity check
-h_amide <- read.delim("~/PD_GRS/non_genetic_sensitivity/h_amides_pest_imp_sensitivity.txt.gz")
-h_amide$adj.P.Val <- p.adjust(h_amide$P, method="BH")
-h_amide_hits <- nrow(h_amide[h_amide$adj.P.Val<=0.05,])
-rm(h_amide)
-
-h_glyphos <- read.delim("~/PD_GRS/non_genetic_sensitivity/h_glyphos_pest_imp_sensitivity.txt.gz")
-h_glyphos$adj.P.Val <- p.adjust(h_glyphos$P, method="BH")
-h_glyphos_hits <- nrow(h_glyphos[h_glyphos$adj.P.Val<=0.05,])
-rm(h_glyphos)
-
-h_phenol <- read.delim("~/PD_GRS/non_genetic_sensitivity/h_phenol_pest_imp_sensitivity.txt.gz")
-h_phenol$adj.P.Val <- p.adjust(h_phenol$P, method="BH")
-h_phenol_hits <- nrow(h_phenol[h_phenol$adj.P.Val<=0.05,])
-rm(h_phenol)
-
-h_phenolbis <- read.delim("~/PD_GRS/non_genetic_sensitivity/h_phenolbis_pest_imp_sensitivity.txt.gz")
-h_phenolbis$adj.P.Val <- p.adjust(h_phenolbis$P, method="BH")
-h_phenolbis_hits <- nrow(h_phenolbis[h_phenolbis$adj.P.Val<=0.05,])
-rm(h_phenolbis)
-
-h_phyto <- read.delim("~/PD_GRS/non_genetic_sensitivity/h_phyto_pest_imp_sensitivity.txt.gz")
-h_phyto$adj.P.Val <- p.adjust(h_phyto$P, method="BH")
-h_phyto_hits <- nrow(h_phyto[h_phyto$adj.P.Val<=0.05,])
-rm(h_phyto)
-
-h_pico <- read.delim("~/PD_GRS/non_genetic_sensitivity/h_pico_pest_imp_sensitivity.txt.gz")
-h_pico$adj.P.Val <- p.adjust(h_pico$P, method="BH")
-h_pico_hits <- nrow(h_pico[h_pico$adj.P.Val<=0.05,])
-rm(h_pico)
-
-h_quat <- read.delim("~/PD_GRS/non_genetic_sensitivity/h_quat_pest_imp_sensitivity.txt.gz")
-h_quat$adj.P.Val <- p.adjust(h_quat$P, method="BH")
-h_quat_hits <- nrow(h_quat[h_quat$adj.P.Val<=0.05,])
-rm(h_quat)
-
-### all have no hits...
+for(exposure in "ins"){
+  res <- fread(paste("~/", exposure, "_pest_imp_sensitivity.txt",sep=""))
+  res$adj.P.Val <- p.adjust(res$p.value, method="BH")
+  res$sig <- (res$adj.P.Val<=0.05 & abs(res$estimate)>=1.5)
+  for(x in 1:nrow(res)){
+    if(res$sig[x]==TRUE){ grs_pest[grs_pest$TargetID==res$probe[x],exposure] <- TRUE }
+  }
+}
 ```
