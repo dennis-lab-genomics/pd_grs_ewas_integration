@@ -8,7 +8,7 @@ The manuscript "A Parkinson’s disease genetic risk score associates with blood
 
 This code first prepares genetic, methylation, and meta data for input into MatrixEQTL to calculate mQTLs in TERRE, then examines (1) which PD-associated SNPs were cis-mQTLs in TERRE, and (2) which GRS-associated CpGs from TERRE had an associated cis-mQTL.
 
-Last updated Dec 30, 2024 by Samantha Schaffner
+Last updated Jan 20, 2025 by Samantha Schaffner: Identifying SNPs in LD to GRS SNPs that are mQTL for top CpGs
 
 Based on code by Will Casazza
 
@@ -41,6 +41,8 @@ betas <- getBeta(PD_RG_filtered)
 rm(PD_RG_filtered)
 
 genotype <- fread("~/SHARE_DECIPHER/pd_grs_ewas_integration/TERRE_QC/raw_data.imputed.r2_30.maf_mismatch.traw")
+dim(genotype)
+#[1] 8354188     251
 ```
 
 ## Match Samples
@@ -154,6 +156,12 @@ All inputs for MatrixEQTL are now generated. Refer to scripts "run_matrixEQTL.R"
 ## CpGs from GRS EWAS with an mQTL
 ```{r pc check, eval=F}
 mqtl <- fread("~/PD_GRS/mQTL/cis_mQTL_out.txt.gz", tmpdir="~/tmp") #mQTL detected at p < 0.25
+length(unique(mqtl$SNP))
+#[1] 7,786,044
+length(unique(mqtl$gene))
+#800,029
+# most of the SNPs and CpGs are reported to have an mQTL relationship at p < 0.25 within 75kb
+
 colnames(mqtl)[c(2,6)] <- c("TargetID","FDR.mQTL")
 mqtl$Bonferroni.mQTL <- p.adjust(mqtl$`p-value`, method="bonferroni", n=361185165)
 #361,185,165 tests (from ntest file output by matrixeQTL)
@@ -198,6 +206,9 @@ summary(abs(grs_mqtl$dist_mQTL/1000))
    
 #how many of the GRS SNPs are mQTL?
 risk_scores <- read.delim("~/SHARE_DECIPHER/pd_grs_ewas_integration/prs_analyses/pd_prs_file.txt", header=FALSE, sep=" ") #107 SNPs (why not 90?)
+#write snps to a txt file for LD calculation
+write.table(risk_scores$V1, file="~/PD_GRS/mQTL/prs_snps.txt", row.names=FALSE, quote=FALSE, col.names=FALSE)
+
 nrow(risk_scores[risk_scores$V1 %in% grs_mqtl$SNP,]) #4 SNPs are mQTL for the top CpGs
 grs_mqtl$mQTL_PD_SNP <- (grs_mqtl$SNP %in% risk_scores$V1)
 summary(grs_mqtl$mQTL_PD_SNP) #13 of the mQTL are SNPs
@@ -211,6 +222,37 @@ length(unique(grs_mqtl$SNP)) #3890
 
 write.csv(grs_mqtl, file="~/PD_GRS/mQTL/GRS_EWAS_hits_mQTL.csv", row.names=F)
 write.csv(grs_mqtl[grs_mqtl$mQTL_PD_SNP==TRUE,c("SNP","FDR.mQTL","Bonferroni.mQTL","TargetID","delta_M","adj.P.Val")], file="~/PD_GRS/mQTL/GRS_mQTL_TERRE.csv", row.names=F)
+
+## Jan 20, 2025
+#how many of the SNPs in LD to the GRS SNPs are mQTL?
+grs_ld <- read.table("~/PD_GRS/mQTL/grs_snps_ld.vcor")
+#add column names: "A" for the first SNP, B for the second SNP (in each pair).
+colnames(grs_ld) <- c("CHR_A", "BP_A", "SNP_A", "CHR_B", "BP_B", "SNP_B", "R2")
+#sanity check SNPs
+length(unique(grs_ld$SNP_A)) #100
+all(grs_ld$SNP_A %in% risk_scores$V1) #TRUE
+length(unique(grs_ld$SNP_B)) #25,669
+summary(grs_ld$R2)
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# 0.2000  0.2681  0.4426  0.4934  0.6679  1.0000 
+
+grs_mqtl <- read.csv("~/PD_GRS/mQTL/GRS_EWAS_hits_mQTL.csv")
+nrow(grs_ld[grs_ld$SNP_B %in% grs_mqtl$SNP,]) #19,429 SNPs in LD (>0.2) to GRS are mQTL for the top CpGs
+nrow(grs_ld[grs_ld$SNP_B %in% grs_mqtl$SNP & grs_ld$R2>0.5,]) #9,883 SNPs in LD (>0.5) to GRS are mQTL for the top CpGs
+nrow(grs_ld[grs_ld$SNP_B %in% grs_mqtl$SNP & grs_ld$R2>0.8,]) #3,230 SNPs in LD (>0.8) to GRS are mQTL for the top CpGs
+
+grs_mqtl$mQTL_GRS_LD <- (grs_mqtl$SNP %in% grs_ld$SNP_B)
+summary(grs_mqtl$mQTL_GRS_LD)
+#   Mode   FALSE    TRUE 
+#logical     714   12628 
+length(unique(grs_mqtl[grs_mqtl$mQTL_GRS_LD==TRUE,"SNP"]))
+#3,584 mQTL are SNPs in LD to the GRS that associate with DNAm
+
+length(unique(grs_mqtl$TargetID)) #25
+length(unique(grs_mqtl$SNP)) #3890
+
+write.csv(grs_mqtl, file="~/PD_GRS/mQTL/GRS_EWAS_hits_mQTL_LD.csv", row.names=F)
+write.csv(grs_mqtl[grs_mqtl$mQTL_GRS_LD==TRUE,c("SNP","FDR.mQTL","Bonferroni.mQTL","TargetID","delta_M","adj.P.Val")], file="~/PD_GRS/mQTL/GRS_LD_mQTL_TERRE.csv", row.names=F)
 ```
 ![Number of associated mQTLs for TERRE GRS CpGs](/home1/NEURO/schaffner/PD_GRS/mQTL/grs_cpgs_mqtls.png)
 
