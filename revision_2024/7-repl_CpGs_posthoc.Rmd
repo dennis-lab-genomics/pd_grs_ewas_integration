@@ -1,0 +1,213 @@
+---
+title: "EWAS post-hoc SNP check"
+output: html_notebook
+---
+
+The manuscript "A Parkinson’s disease genetic risk score associates with blood DNAm on chromosome 17" explores how a genetic risk score (GRS) for Parkinson's disease (PD) associates with blood DNA methylation in the TERRE study of French agricultural workers, and evaluates GRS associations with DNAm in each sex as well as their sensitivity to non-genetic factors. This was originally spearheaded by Will Casazza and was posted as a pre-print on medRxiv in 2023. The current revision (2024, led by Sam Schaffner) aims to address previous reviewer feedback and prepare the manuscript for re-submission.
+
+This script will test the associations of the GRS SNPs from Nalls et al. with the 11 individual CpGs discovered in TERRE EWAS and replicated in DIGPD EWAS.
+
+Last updated Jan 27, 2025 by Samantha Schaffner
+
+### Libraries
+```{r lib, eval=F}
+library(data.table)
+library(dplyr)
+library(limma)
+library(lumi)
+```
+
+### Read in data
+```{r dat, eval=F}
+# GRS SNPs
+risk_scores <- read.delim("~/SHARE_DECIPHER/pd_grs_ewas_integration/prs_analyses/pd_prs_file.txt", header=FALSE, sep=" ") 
+# contains 107 SNPs from Nalls et al., prior to "excluding variants that 1) had a random-effects P value across all datasets > 4.67E-04 and 2) a conditional analysis P > 4.67E-04 using participant level 23andMe genotype data" (Nalls et al., 2019)
+# 17 of these SNPs could be false positives or SNPs in LD with phenotype. Note to check this post-hoc.
+# noting extra SNP list from Nalls et al. Table S2
+excl_snps <- c("rs35643925","rs4954162","rs356228","rs356203","rs6875262","rs9267659","rs181609621","rs117073808","rs141128804",
+"rs138017112","rs144755950","rs17686238","rs9912362","rs7221167","rs7225002","rs199453","rs2295545")
+write.table(data.frame(SNP=excl_snps), file="~/PD_GRS/posthoc/excl_SNPs_Nalls.txt",sep="\t",row.names=F)
+
+# need genotype data at each SNP here
+genotype <- fread("~/SHARE_DECIPHER/pd_grs_ewas_integration/TERRE_QC/raw_data.imputed.r2_30.maf_mismatch.traw")
+dim(genotype <- genotype[genotype$SNP %in% risk_scores$V1,]) #100 251
+# 100 of the 107 SNPs are present in TERRE genotype data after imputation and QC
+
+# replicated CpGs
+repl_cpgs <- read.csv("~/PD_GRS/TERRE_cross_sex_in_DIGPD_B.csv")
+repl_cpgs <- repl_cpgs[repl_cpgs$direction==TRUE,]
+```
+
+## EWAS with individual SNPs and CpGs
+Testing each of the 107 SNPs for mQTL evidence with the GRS-associated CpGs, to see which SNPs are driving associations of the GRS with DNAm.
+
+### In TERRE
+```{r SNP EWAS, eval=F}
+## Reading in meta data and beta values
+meta <- read.csv("~/PD_GRS/meta_geno_DNAm_PCs.csv") # meta data frame used for EWAS
+terre_meta <- fread("/home1/NEURO/SHARE_DECIPHER/terre_meta_master.csv") # meta data frame including IID
+# subset meta data to the 218 individuals with matched DNAm and genotype data
+dim(terre_meta_sub <- terre_meta[match(meta$patient, terre_meta$patient),]) # 218  69
+meta <- left_join(meta, terre_meta_sub[,c("patient","IID")], by="patient")
+
+# subset TERRE genotype data to those with matched DNAm data
+all(meta$IID.y %in% colnames(genotype)[7:ncol(genotype)]) #TRUE
+genotype <- as.data.frame(genotype) #so subsetting operation works
+dim(genotype2 <- genotype[,c(colnames(genotype)[1:6], meta$IID.y)]) #100 225
+all(colnames(genotype2)[7:ncol(genotype2)]==meta$IID.y) #TRUE
+geno <- as.data.frame(t(as.matrix(genotype2[,7:ncol(genotype2)])))
+colnames(geno) <- genotype2$SNP
+meta_geno <- cbind(meta, geno)
+write.csv(meta_geno, file="~/PD_GRS/meta_geno_GRS_SNPs.csv", row.names=F)
+
+# DNAm data (2022, most recent QC'ed, same as npj PD 2024 article)
+load("~/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/1-TERRE_RG_filtered.RData")
+mvals <- getM(PD_RG_filtered)
+
+## Preparing data
+
+# subset M-values to replicated CpGs
+dim(mvals <- mvals[rownames(mvals) %in% repl_cpgs$TargetID,]) #[1]  11 218
+
+# subset meta data to relevant columns and re-format
+meta_geno$PD <- as.factor(meta_geno$PD)
+meta_geno$sex <- as.factor(meta_geno$sex)
+meta_geno$smoking <- as.factor(meta_geno$smoking)
+meta_geno$pesticides <- as.factor(meta_geno$pesticides)
+meta_geno$head_trauma <- as.factor(meta_geno$head_trauma)
+meta_geno$alcohol1 <- as.factor(meta_geno$alcohol1)
+meta_geno$levodopa <- as.factor(meta_geno$levodopa)
+meta_geno$plate <- as.factor(meta_geno$plate)
+meta_geno$SentrixPosition_A <- as.factor(meta_geno$SentrixPosition_A)
+
+# match meta data and M-values
+meta_geno <- meta_geno[complete.cases(meta_geno$CTP_PC1),]
+mvals <- mvals[,match(meta_geno$patient, colnames(mvals))]
+all(colnames(mvals)==meta_geno$patient) #TRUE
+
+####### Cross-sex PRS EWAS
+# limma design matrix and linear model fit
+mqtl_terre <- lapply(1:100, function(x){
+  snp <- colnames(meta_geno)[167+x]
+  print(paste(x, snp, sep=": "))
+  design_prs <- model.matrix(~ 1 + meta_geno[,167+x] + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD, data = meta_geno)
+  prs_fit <- lmFit(mvals, design_prs)
+  prs_fit <- eBayes(prs_fit)
+  # transform adjusted M-values to adjusted beta-values (code from Kruppa et al. 2021)
+  prs_fit_coef <- prs_fit$coefficients
+  colnames(prs_fit_coef)[2] <- snp
+  m0_eff <- prs_fit_coef[, "(Intercept)"] #M-value model intercept
+  m1_eff <- m0_eff + prs_fit_coef[, snp] #M-value model intercept plus GRS coefficient (delta M)
+
+  prs_res <- limma::topTable(prs_fit, coef = 2, number = Inf, genelist=rownames(mvals))
+  prs_res$adjDB <- m2beta(m1_eff) - m2beta(m0_eff) #transform each adjusted M-value to a beta-value, and subtract intercept beta value from intercept + coefficient beta value to obtain the adjusted delta beta
+  prs_res$snp <- snp
+  return(prs_res)})
+mqtl_terre <- do.call(rbind, mqtl_terre)
+mqtl_terre$snp_excl <- (mqtl_terre$snp %in% excl_snps)
+length(unique(mqtl_terre$snp)) #100
+length(unique(mqtl_terre[mqtl_terre$snp_excl==TRUE,"snp"])) #14 of 17 excluded SNPs passed QC
+length(unique(mqtl_terre[mqtl_terre$snp_excl==FALSE,"snp"])) #86 of 90 Nalls SNPs passed QC
+write.csv(mqtl_terre, file="~/PD_GRS/posthoc/mqtl_terre_11x100.csv", row.names=FALSE)
+  
+nrow(mqtl_sig <- mqtl_terre[abs(mqtl_terre$adjDB)>=0.03 & mqtl_terre$adj.P.Val<=0.05,]) #63
+length(unique(mqtl_sig$snp)) #8
+terre_ind_snps <- unique(mqtl_sig$snp)
+#"rs138017112" "rs17686238"  "rs62053943"  "rs9912362"   "rs7221167"   "rs7225002"   "rs199453"    "rs11658976" 
+terre_ind_snps_sub <- unique(mqtl_sig[mqtl_sig$snp_excl==FALSE,"snp"]) #"rs62053943" "rs11658976"
+```
+
+#### Check mQTL status in other datasets
+```{r ext dat check, eval=F}
+# Min et al. 2021 (GoDMC)
+godmc <- fread("~/PD_GRS/coloc/godmc_assoc_meta_all_30Dec24.csv.gz")
+```
+
+### In DIGPD
+```{r DIGPD SNP EWAS, eval=F}
+## Reading in meta data and beta values
+meta <- read.csv("~/PD_GRS/digpd_meta_geno_DNAm_PCs.csv") # meta data frame used for EWAS
+
+# need genotype data at each SNP here
+genotype <- fread("~/SHARE_DECIPHER/Genetic_data/DIGPD_Processed/raw_data.imputed.r2_90.maf_mismatch.traw")
+dim(genotype <- genotype[genotype$SNP %in% risk_scores$V1,]) #94 261
+# 94 of the 107 SNPs are present in DIGPD genotype data after imputation and QC
+
+# subset DIGPD genotype data to those with matched DNAm data
+colnames(genotype) <-  gsub("_AOR_.*", "", colnames(genotype))
+length(meta$IID[meta$IID %in% colnames(genotype)]) #222
+genotype <- as.data.frame(genotype)
+dim(genotype2 <- genotype[,c(colnames(genotype)[1:6], meta$IID)]) # 94 228
+all(colnames(genotype2)[7:ncol(genotype2)]==meta$IID) #TRUE
+geno <- as.data.frame(t(as.matrix(genotype2[,7:ncol(genotype2)])))
+colnames(geno) <- genotype2$SNP
+meta_geno <- cbind(meta, geno)
+write.csv(meta_geno, file="~/PD_GRS/meta_geno_GRS_SNPs_digpd.csv", row.names=F)
+
+summary(geno) #as cases and controls were genotyped on diff platforms, some SNPs have no genotype for cases or for controls...
+#subset to complete genotypes for all subjects
+ncol(geno2 <- geno[,apply(geno,2, function(col) all(complete.cases(col)))]) #68 SNPs complete for all subjects
+summary(geno2)
+meta_geno2 <- cbind(meta, geno2)
+write.csv(meta_geno2, file="~/PD_GRS/meta_geno_GRS_SNPs_digpd_complete.csv", row.names=F)
+
+# DNAm data (2022, most recent QC'ed, same as npj PD 2024 article)
+rm(PD_RG_filtered) #removing TERRE object
+load("~/SHARE_DECIPHER/processed_DNAm_data/2022/DIGPD_processed_2022/1-DIGPD_RG_filtered.RData")
+mvals <- getM(DIGPD_RG_filtered)
+
+## Preparing data
+
+# subset M-values to replicated CpGs and 222 individuals with visit 1 DNAm data
+dim(mvals <- mvals[rownames(mvals) %in% repl_cpgs$TargetID,]) #[1]  11 425
+dim(mvals <- mvals[,match(meta_geno2$Sample_Name, colnames(mvals))]) #[1]  11 222
+
+# subset meta data to relevant columns and re-format
+meta_geno2$PD <- as.factor(meta_geno2$PD)
+meta_geno2$reportedSex <- as.factor(meta_geno2$reportedSex)
+meta_geno2$smoking <- as.factor(meta_geno2$smoking)
+meta_geno2$pesticides <- as.factor(meta_geno2$pesticides)
+meta_geno2$head_trauma <- as.factor(meta_geno2$head_trauma)
+meta_geno2$alcohol <- as.factor(meta_geno2$alcohol)
+meta_geno2$levodopa <- as.factor(meta_geno2$levodopa)
+meta_geno2$plate <- as.factor(meta_geno2$plate)
+meta_geno2$SentrixPosition_A <- as.factor(meta_geno2$SentrixPosition_A)
+
+# match meta_geno2 data and M-values
+meta_geno2 <- meta_geno2[complete.cases(meta_geno2$CTP_PC1),]
+all(colnames(mvals)==meta_geno2$Sample_Name) #TRUE
+
+####### Cross-sex PRS EWAS
+# limma design matrix and linear model fit
+mqtl_digpd <- lapply(1:68, function(x){
+  snp <- colnames(meta_geno2)[71+x]
+  print(paste(x, snp, sep=": "))
+  design_prs <- model.matrix(~ 1 + meta_geno2[,71+x] + Age + reportedSex + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A + PD, data = meta_geno2)
+  prs_fit <- lmFit(mvals, design_prs)
+  prs_fit <- eBayes(prs_fit)
+  # transform adjusted M-values to adjusted beta-values (code from Kruppa et al. 2021)
+  prs_fit_coef <- prs_fit$coefficients
+  colnames(prs_fit_coef)[2] <- snp
+  m0_eff <- prs_fit_coef[, "(Intercept)"] #M-value model intercept
+  m1_eff <- m0_eff + prs_fit_coef[, snp] #M-value model intercept plus GRS coefficient (delta M)
+
+  prs_res <- limma::topTable(prs_fit, coef = 2, number = Inf, genelist=rownames(mvals))
+  prs_res$adjDB <- m2beta(m1_eff) - m2beta(m0_eff) #transform each adjusted M-value to a beta-value, and subtract intercept beta value from intercept + coefficient beta value to obtain the adjusted delta beta
+  prs_res$snp <- snp
+  return(prs_res)})
+mqtl_digpd <- do.call(rbind, mqtl_digpd)
+mqtl_digpd$snp_excl <- (mqtl_digpd$snp %in% excl_snps)
+length(unique(mqtl_digpd$snp)) #68
+length(unique(mqtl_digpd[mqtl_digpd$snp_excl==TRUE,"snp"])) #7 of 17 excluded SNPs passed QC
+length(unique(mqtl_digpd[mqtl_digpd$snp_excl==FALSE,"snp"])) #61 of 90 Nalls SNPs passed QC
+write.csv(mqtl_digpd, file="~/PD_GRS/posthoc/mqtl_digpd_11x68.csv", row.names=FALSE)
+  
+nrow(mqtl_sig <- mqtl_digpd[abs(mqtl_digpd$adjDB)>=0.03 & mqtl_digpd$adj.P.Val<=0.05,]) #16
+length(unique(mqtl_sig$snp)) #3
+digpd_ind_snps <- unique(mqtl_sig$snp) #"rs9912362" "rs7225002" "rs199453" 
+digpd_ind_snps_sub <- unique(mqtl_sig[mqtl_sig$snp_excl==FALSE,"snp"]) #none
+```
+
+
+
+
