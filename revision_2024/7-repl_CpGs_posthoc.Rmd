@@ -3,11 +3,11 @@ title: "EWAS post-hoc SNP check"
 output: html_notebook
 ---
 
-The manuscript "A Parkinson’s disease genetic risk score associates with blood DNAm on chromosome 17" explores how a genetic risk score (GRS) for Parkinson's disease (PD) associates with blood DNA methylation in the TERRE study of French agricultural workers, and evaluates GRS associations with DNAm in each sex as well as their sensitivity to non-genetic factors. This was originally spearheaded by Will Casazza and was posted as a pre-print on medRxiv in 2023. The current revision (2024, led by Sam Schaffner) aims to address previous reviewer feedback and prepare the manuscript for re-submission.
+The manuscript "A Parkinson’s disease genetic risk score associates with blood DNAm on chromosome 17" explores how a genetic risk score (GRS) for Parkinson's disease (PD) associates with blood DNA methylation in the TERRE study of French agricultural workers, and evaluates GRS associations with DNAm in each sex as well as their sensitivity to non-genetic factors. This was originally spearheaded by Will Casazza and was posted as a pre-print on medRxiv in 2023. The current revision aims to address previous reviewer feedback and prepare the manuscript for re-submission.
 
 This script will test the associations of the GRS SNPs from Nalls et al. with the 11 individual CpGs discovered in TERRE EWAS and replicated in DIGPD EWAS.
 
-Last updated Jan 27, 2025 by Samantha Schaffner
+Last updated Feb 9, 2025 by Samantha Schaffner
 
 ### Libraries
 ```{r lib, eval=F}
@@ -117,11 +117,69 @@ terre_ind_snps <- unique(mqtl_sig$snp)
 terre_ind_snps_sub <- unique(mqtl_sig[mqtl_sig$snp_excl==FALSE,"snp"]) #"rs62053943" "rs11658976"
 ```
 
-#### Check mQTL status in other datasets
-```{r ext dat check, eval=F}
+
+#### Check TERRE mQTL status in other datasets
+
+1. GoDMC database (Min et al., Nat Genet 2021): cis- and trans-mQTL detected in peripheral blood (450k array, n = ~30k, European-ancestry)
+
+From GODMC README: "In our analysis we considered a cis pvalue smaller than 1e-8 and a trans pvalue smaller than 1e-14 as significant."
+
+2. MuTHER (Hawe et al., Nat Genet 2022): cis- and trans-mQTL detected in peripheral blood (450k array, n = ~3k each European and South Asian ancestry)
+
+```{r ext dat check terre, eval=F}
 # Min et al. 2021 (GoDMC)
 godmc <- fread("~/PD_GRS/coloc/godmc_assoc_meta_all_30Dec24.csv.gz")
+#cistrans: cis=TRUE, Cis: Distance between SNP-CpG <1 MB
+godmc <- godmc[(godmc$cistrans==TRUE & godmc$pval<1e-8)|(godmc$cistrans==FALSE & godmc$pval<1e-14),]
+
+mqtl_sig$CpG_Min <- (mqtl_sig$ID %in% godmc$cpg)
+summary(mqtl_sig$CpG_Min)
+#   Mode   FALSE    TRUE 
+#logical      56       7 
+
+rm(godmc) #clearing large file to save space, load later as needed
+
+hawe <- read.delim("~/PD_GRS/posthoc/hawe-cosmo-cpgs.txt", header=FALSE)
+mqtl_sig$CpG_Hawe <- (mqtl_sig$ID %in% hawe$V1)
+summary(mqtl_sig$CpG_Hawe)
+#   Mode   FALSE    TRUE 
+#logical      52      11 
+
+table(mqtl_sig$CpG_Min, mqtl_sig$CpG_Hawe)
+#        FALSE TRUE
+#  FALSE    52    4
+#  TRUE      0    7
+
+write.csv(mqtl_sig, file="~/PD_GRS/posthoc/mqtl_terre_sig_anno.csv", row.names=FALSE)
 ```
+
+
+#### Colocalization between TERRE mQTL CpGs and Nalls SNPs
+See ~/PD_GRS/coloc/run_colocalization_SS.R
+```{r coloc terre, eval=F}
+coloc <- fread("~/PD_GRS/coloc/cross_mqtl_cross_sumstats_pd_snp_colocalization_ph4.txt.gz")
+head(coloc)
+#   nsnps    PP.H0.abf    PP.H1.abf    PP.H2.abf   PP.H3.abf    PP.H4.abf      probe locus locus_snp
+#1:   228 4.718758e-29 9.904247e-01 2.415786e-31 0.005066008 4.509299e-03 cg00340179     1  rs356203
+#2:   392 2.450009e-04 9.872223e-01 7.942090e-07 0.003190896 9.341020e-03 cg00379420     1  rs356203
+#3:   196 1.879186e-43 5.492019e-35 3.421668e-09 0.999999989 7.337095e-09 cg00538060     1  rs356203
+#4:   136 1.555653e-02 9.699517e-01 3.917218e-05 0.002430368 1.202221e-02 cg00907891     1  rs356203
+#5:   527 9.896689e-46 1.469541e-22 6.734545e-24 1.000000000 8.221536e-13 cg01966878     1  rs356203
+#6:   198 5.955894e-09 5.449637e-07 1.053193e-02 0.963644303 2.582322e-02 cg02262221     1  rs356203
+
+#PP.H4.abf is the posterior probability of H4 being true (one common causal variant)
+#WC considered pp > 90% to be strong evidence
+nrow(coloc_sub <- coloc[coloc$PP.H4.abf>0.9 & coloc$locus_snp %in% mqtl_sig$snp,])  #14
+length(unique(coloc_sub$locus)) #1 locus has evidence for a SNP being a shared causal variant for PD risk (in Nalls dataset) and TERRE mQTL
+length(unique(coloc_sub$probe)) #this SNP is an mQTL for 14 CpGs
+
+length(unique(mqtl_sig$ID)) #11
+nrow(coloc_sub <- coloc_sub[coloc_sub$probe %in% mqtl_sig$ID,]) #the GRS SNP is an mQTL for 3 of the CpGs that came up in the cross-sex GRS EWAS
+
+write.csv(coloc_sub, file="~/PD_GRS/coloc/terre_posthoc_coloc.csv", row.names=FALSE)
+```
+
+rs7225002 has evidence for being a shared causal variant for affecting PD risk in the Nalls dataset and affecting DNAm in TERRE at 3 CpGs: cg01341218, cg12609785, and cg15633388.
 
 ### In DIGPD
 ```{r DIGPD SNP EWAS, eval=F}
@@ -209,5 +267,65 @@ digpd_ind_snps_sub <- unique(mqtl_sig[mqtl_sig$snp_excl==FALSE,"snp"]) #none
 ```
 
 
+#### Check DIGPD mQTL status in other datasets
 
+1. GoDMC database (Min et al., Nat Genet 2021): cis- and trans-mQTL detected in peripheral blood (450k array, n = ~30k, European-ancestry)
+
+From GODMC README: "In our analysis we considered a cis pvalue smaller than 1e-8 and a trans pvalue smaller than 1e-14 as significant."
+
+2. MuTHER (Hawe et al., Nat Genet 2022): cis- and trans-mQTL detected in peripheral blood (450k array, n = ~3k each European and South Asian ancestry)
+
+```{r ext dat check digpd, eval=F}
+# Min et al. 2021 (GoDMC)
+godmc <- fread("~/PD_GRS/coloc/godmc_assoc_meta_all_30Dec24.csv.gz")
+#cistrans: cis=TRUE, Cis: Distance between SNP-CpG <1 MB
+godmc <- godmc[(godmc$cistrans==TRUE & godmc$pval<1e-8)|(godmc$cistrans==FALSE & godmc$pval<1e-14),]
+
+mqtl_sig$CpG_Min <- (mqtl_sig$ID %in% godmc$cpg)
+summary(mqtl_sig$CpG_Min)
+#   Mode   FALSE    TRUE 
+#logical      14       2 
+
+rm(godmc) #clearing large file to save space, load later as needed
+
+mqtl_sig$CpG_Hawe <- (mqtl_sig$ID %in% hawe$V1)
+summary(mqtl_sig$CpG_Hawe)
+#   Mode   FALSE    TRUE 
+#logical      13       3 
+
+table(mqtl_sig$CpG_Min, mqtl_sig$CpG_Hawe)
+#        FALSE TRUE
+#  FALSE    13    1
+#  TRUE      0    2
+
+write.csv(mqtl_sig, file="~/PD_GRS/posthoc/mqtl_digpd_sig_anno.csv", row.names=FALSE)
+```
+
+
+#### Colocalization between DIG-PD mQTL CpGs and Nalls SNPs
+See ~/PD_GRS/coloc/run_colocalization_DIGPD_SS_9Feb2025.R
+```{r coloc digpd, eval=F}
+coloc <- fread("~/PD_GRS/coloc/cross_mqtl_cross_sumstats_digpd_digpd_sig_pd_snp_colocalization_ph4.txt.gz")
+head(coloc)
+#   nsnps    PP.H0.abf    PP.H1.abf    PP.H2.abf    PP.H3.abf PP.H4.abf      probe locus  locus_snp
+#1:     1 1.364976e-19 1.750143e-17 7.799166e-06 0.000000e+00 0.9999922 cg01341218     7 rs58879558
+#2:     1 1.238733e-09 3.880626e-05 3.191972e-08 0.000000e+00 0.9999612 cg02478991     7 rs58879558
+#3:     2 1.806078e-23 1.747428e-17 1.033791e-09 2.198163e-07 0.9999998 cg04226788     7 rs58879558
+#4:     1 5.710106e-11 3.880626e-05 1.471382e-09 0.000000e+00 0.9999612 cg05314706     7 rs58879558
+#5:     2 8.715584e-19 1.752031e-17 4.988760e-05 2.907241e-06 0.9999472 cg09793084     7 rs58879558
+#6:     2 2.278026e-28 2.194478e-17 1.038072e-14 5.684342e-17 1.0000000 cg09860564     7 rs58879558
+
+#PP.H4.abf is the posterior probability of H4 being true (one common causal variant)
+#WC considered pp > 90% to be strong evidence
+nrow(coloc_sub <- coloc[coloc$PP.H4.abf>0.9 & coloc$locus_snp %in% mqtl_sig$snp,])  #11
+length(unique(coloc_sub$locus)) #1 locus has evidence for a SNP being a shared causal variant for PD risk (in Nalls dataset) and TERRE mQTL
+length(unique(coloc_sub$probe)) #this SNP is an mQTL for 11 CpGs
+
+length(unique(mqtl_sig$ID)) #11
+nrow(coloc_sub <- coloc_sub[coloc_sub$probe %in% mqtl_sig$ID,]) #the GRS SNP is an mQTL for 11 of the CpGs that came up in the cross-sex GRS EWAS
+
+write.csv(coloc_sub, file="~/PD_GRS/coloc/digpd_posthoc_coloc.csv", row.names=FALSE)
+```
+
+rs7225002 has evidence for being a shared causal variant for affecting PD risk in the Nalls dataset and affecting DNAm in DIG-PD at 11 CpGs, including cg01341218, cg12609785, and cg15633388 (the same 3 from TERRE), plus 8 more.
 
