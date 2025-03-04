@@ -9,7 +9,7 @@ The manuscript "A Parkinson’s disease genetic risk score associates with blood
 In this script, the effect sizes of hits discovered in the TERRE sample will be examined in the DIGPD sample, as will the PRS distribution in DIGPD. CpGs in the MAPT/KANSL1 region previously reported to be mQTLs for PD and other neurodegenerative disorders will also be examined in TERRE. Finally, TERRE GRS hits will be compared with PD-associated hits in TERRE and SGPD, using data from the CMR paper.
 
 
-Last updated Aug 24, 2024 by Samantha Schaffner: Comparing delta M and delta beta
+Last updated Mar 2, 2025 by Samantha Schaffner: Checking CMR overlap was properly computed
 
 Based on code by Will Casazza
 
@@ -122,8 +122,8 @@ Effect sizes related to the GRS in cross-sex analyses are highly correlated in T
 
 ### Controls only
 ```{r control, eval=F}
-terre_ctrl <- read.csv("~/PD_GRS/EWAS_GRS_controls_hits.csv")
-digpd_ctrl <- read.csv("~/PD_GRS/DIGPD_EWAS_GRS_controls.csv")
+terre_ctrl <- read.csv("~/PD_GRS/EWAS_TERRE/EWAS_GRS_controls_hits.csv")
+digpd_ctrl <- read.csv("~/PD_GRS/EWAS_DIGPD/DIGPD_EWAS_GRS_controls.csv")
 
 # join data together to compare effects and p-values from each analysis
 digpd_sub <- digpd_ctrl[,c("TargetID","delta_M","adj.P.Val", "P.Value")]
@@ -503,38 +503,35 @@ terre_x_sex[complete.cases(terre_x_sex$refcmr),c("TargetID","CHR","MAPINFO","UCS
 #     TargetID CHR  MAPINFO UCSC_REFGENE_NAME                  refcmr
 #17 cg23519755  17 44124560            KANSL1 chr17:44123621-44124561
 
+refcmr[refcmr$cmrGR=="chr17:44123621-44124561",]
+#                        cmr                   cmrGR cmr_indx Gene_id geneSymbol geneGR
+#34960 cg02179849,cg23519755 chr17:44123621-44124561     5555    <NA>       <NA>   <NA>
+
 #This CMR was not associated with PD in 2024 npj PD paper in either sex.
 
 ### TERRE CMRs
 terrecmr <- read.csv("~/PD_CMRs_GxE/2-EWAS_CMRs/TERRE/custom_CMRs/TERRE_CMRs_spearman0.3_1k_anno.csv")
 terre_x_sex$terrecmr <- NA
+# 2Mar2025: added chr in here to fix CMR indexing code (SS)
+terre_x_sex$CHR <- paste("chr", terre_x_sex$CHR, sep="")
 for (i in 1:nrow(terre_x_sex)){
   for (j in 1:nrow(terrecmr)){
-    if(terre_x_sex$MAPINFO[i]>=terrecmr$cmr_start[j] & terre_x_sex$MAPINFO[i]<=terrecmr$cmr_end[j]){
+    if(terre_x_sex$CHR[i]==terrecmr$chr[j] & terre_x_sex$MAPINFO[i]>=terrecmr$cmr_start[j] & terre_x_sex$MAPINFO[i]<=terrecmr$cmr_end[j]){
       terre_x_sex$terrecmr[i] <- terrecmr[j,"cmr_id"]
     }}}
-nrow(terre_x_sex[complete.cases(terre_x_sex$terrecmr),]) #17 are in a CMR
-length(unique(terre_x_sex[complete.cases(terre_x_sex$terrecmr),"terrecmr"])) #16 unique CMRs
+nrow(terre_x_sex[complete.cases(terre_x_sex$terrecmr),]) #8 are in a CMR
+length(unique(terre_x_sex[complete.cases(terre_x_sex$terrecmr),"terrecmr"])) #7 unique CMRs
 terre_x_sex <- terre_x_sex %>% arrange(terrecmr)
 terre_x_sex[complete.cases(terre_x_sex$terrecmr),c("TargetID","CHR","MAPINFO","UCSC_REFGENE_NAME","terrecmr")]
-#     TargetID CHR   MAPINFO UCSC_REFGENE_NAME                  terrecmr
-#1  cg09793084  17  43802971    MGC57346-CRHR1  chr15: 43802735-43803065
-#2  cg27060340  17  43502999          ARHGAP27  chr17: 43502999-43503394
-#3  cg05314706  17  43508250          ARHGAP27  chr17: 43508250-43508894
-#4  cg20163478  17  43508418          ARHGAP27  chr17: 43508250-43508894
-#5  cg01341218  17  43662625                    chr17: 43662623-43662625
-#6  cg18878992  17  43974344              MAPT  chr17: 43973522-43974344
-#7  cg17911788  17  44343683                    chr17: 44343683-44344142
-#8  cg23519755  17  44124560            KANSL1  chr19: 44124409-44124666
-#9  cg12609785  17  43660871                     chr1: 43660603-43661257
-#10 cg26278151  22  31316184                    chr20: 31316153-31316280
-#11 cg00916973  17  43580461                    chr21: 43579962-43580648
-#12 cg02478991  17  44180961            KANSL1  chr21: 44180555-44181630
-#13 cg24319718   2 206546665              NRP2 chr2: 206546660-206547237
-#14 cg13552710   2  30144547               ALK   chr2: 30144547-30144579
-#15 cg16228356  17  43848958                     chr2: 43848605-43849371
-#16 cg07368061  17  44090862              MAPT   chr6: 44090748-44090983
-#17 cg09860564  17  44213797            KANSL1   chr6: 44213713-44213806
+#    TargetID   CHR  MAPINFO UCSC_REFGENE_NAME                 terrecmr
+#1 cg27060340 chr17 43502999          ARHGAP27 chr17: 43502999-43503394
+#2 cg05314706 chr17 43508250          ARHGAP27 chr17: 43508250-43508894
+#3 cg20163478 chr17 43508418          ARHGAP27 chr17: 43508250-43508894
+#4 cg01341218 chr17 43662625                   chr17: 43662623-43662625
+#5 cg18878992 chr17 43974344              MAPT chr17: 43973522-43974344
+#6 cg23519755 chr17 44124560            KANSL1 chr17: 44123621-44124560
+#7 cg09860564 chr17 44213797            KANSL1 chr17: 44213797-44214771
+#8 cg17911788 chr17 44343683                   chr17: 44343683-44344142
 
 terre_x_sex_cmrs <- terre_x_sex[,c("TargetID","CHR","MAPINFO","UCSC_REFGENE_NAME","terrecmr","refcmr","delta_M","adj.P.Val")]
 
@@ -548,7 +545,7 @@ ewas_f_cmrs <- terrecmr[terrecmr$probe %in% ewas_f$TargetID,]
 nrow(terre_x_sex_cmrs[terre_x_sex_cmrs$terrecmr %in% ewas_f_cmrs$cmr_id,])
 #[1] 0
 ```
-17 CpGs associated with the GRS are located in custom CMRs called in TERRE, and 1 is in a blood reference CMR. None of the CMRs are differentially methylated by PD status.
+8 CpGs associated with the GRS are located in custom CMRs called in TERRE, and 1 is in a blood reference CMR. None of the CMRs are differentially methylated by PD status.
 
 ### SGPD 
 
