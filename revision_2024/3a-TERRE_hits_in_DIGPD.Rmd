@@ -9,7 +9,7 @@ The manuscript "A Parkinson’s disease genetic risk score associates with blood
 In this script, the effect sizes of hits discovered in the TERRE sample will be examined in the DIGPD sample, as will the PRS distribution in DIGPD. CpGs in the MAPT/KANSL1 region previously reported to be mQTLs for PD and other neurodegenerative disorders will also be examined in TERRE. Finally, TERRE GRS hits will be compared with PD-associated hits in TERRE and SGPD, using data from the CMR paper.
 
 
-Last updated Mar 2, 2025 by Samantha Schaffner: Checking CMR overlap was properly computed
+Last updated May 17, 2025 by Samantha Schaffner: Adjusting GRS liability and heritability calculations for DIG-PD (using the scaled GRS, removing DNAm-related covariates from the model, changing liability scale calculation to represent Lee et al., Am J Hum Genet 2011.)
 
 Based on code by Will Casazza
 
@@ -192,92 +192,110 @@ write.csv(combine, file="~/PD_GRS/TERRE_controls_in_DIGPD.csv", row.names=F)
 Effect sizes related to the GRS in TERRE cross-sex, control-only analyses are highly correlated in DIGPD cases and controls. 12 of 14 CpGs significant in the TERRE analysis (86%) met nominal p < 0.05 and delta M > 1.5 in DIGPD cases, in the same direction as in TERRE. Therefore, CpGs picked up in TERRE controls replicated well in both cases and controls from DIGPD, even better in DIGPD PD cases.
 
 
-# Distribution of PRS in DIGPD
+# Distribution of GRS in DIGPD
+
+Updated May 17, 2025
+
+### Scale GRS
+The GRS should have a mean of 0 and SD of 1 after scaling.
+```{r scale, eval=F}
+meta <- read.csv("~/PD_GRS/digpd_meta_geno_DNAm_PCs.csv")
+
+# check scaling of PGS: should have mean of 0, SD of 1
+mean(meta$SCORE1_AVG) #-0.001045719
+sd(meta$SCORE1_AVG) #0.003731846
+
+meta$GRS_scaled <- scale(meta$SCORE1_AVG)
+mean(meta$GRS_scaled) #1.188703e-17
+sd(meta$GRS_scaled) #1
+par(mfrow=c(2,1))
+plot(density(meta$SCORE1_AVG), main="GRS prior to scaling", xlim=c(-3,3))
+plot(density(meta$GRS_scaled), main="GRS after scaling", xlim=c(-3,3))
+
+write.csv(meta, file="~/PD_GRS/digpd_meta_geno_DNAm_PCs.csv", row.names=F) 
+```
+![GRS distribution before and after scaling](/home1/NEURO/schaffner/PD_GRS/grs_digpd_scaled.png)
+
+![GRS distribution before and after scaling, on the same x-axis](/home1/NEURO/schaffner/PD_GRS/grs_digpd_scaled_xlim.png)
 
 ### R2 and h2 calculations
 ```{r r2 h2, eval=F}
-meta <- read.csv("~/PD_GRS/digpd_meta_geno_DNAm_PCs.csv")
-
-fit1 <- glm(PD ~ SCORE1_AVG + reportedSex + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta, family = "binomial")
-summary(fit1) 
-fit1_null <- glm(PD ~ reportedSex + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta, family = "binomial")
-summary(fit1_null) #
+fit1 <- glm(PD ~ GRS_scaled + reportedSex + Age + GPC1 + GPC2 + GPC3, data = meta, family = "binomial")
+summary(fit1) #GRS p = 0.0013
+fit1_null <- glm(PD ~ reportedSex + Age + GPC1 + GPC2 + GPC3, data = meta, family = "binomial")
+summary(fit1_null) #nothing sig
 (cross_r2 <- nagelkerke(fit1, null = fit1_null))
 #                             Pseudo.R.squared
-#McFadden                            0.0272967
-#Cox and Snell (ML)                  0.0195622
-#Nagelkerke (Cragg and Uhler)        0.0379796
+#McFadden                            0.0365519
+#Cox and Snell (ML)                  0.0492481
+#Nagelkerke (Cragg and Uhler)        0.0657661
 
 #heritability calculation
-pd_h2 <- function(R2O, case_prop, prevalence = 0.22) {
+lee_h2 <- function(R2O, case_prop, prevalence) {
   K <- prevalence
   P <- case_prop
-  thd <- -1 * qnorm(K, 0, 1)
-  zv <- dnorm(thd) # z (normal density)
-  mv <- zv / K # mean liability for case
-  theta <- mv * (P - K) / (1 - K) * (mv * (P - K) / (1 - K) - thd) # θ in equation
-  cv <- K * (1 - K) / zv^2 * K * (1 - K) / (P * (1 - P)) # C in
-  return(R2O * cv / (1 + R2O * theta * cv))
+  thd <- qnorm(1 - K) # Threshold
+  z <- dnorm(thd) # Height of the normal density at the threshold
+  h2_liab <- R2O * (K * (1 - K) / z^2) * (K * (1 - K) / (P * (1 - P)))
+  return(h2_liab)
 }
 
-# liability R2
-lin1 <- lm(PD ~ SCORE1_AVG + reportedSex + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta)
-lin2 <- lm(PD ~ reportedSex + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta)
-R2 <- (deviance(lin2) - deviance(lin1)) / deviance(lin2)
-h2 <- pd_h2(R2, sum(meta$PD) / nrow(meta), 5 / 1000)
-R2 # 0.01765719
-h2 # 0.008477688
+R2 <- cross_r2$Pseudo.R.squared.for.model.vs.null[3]
+summary(as.factor(meta$PD))
+#  0   1 
+#112 110
+h2 <- lee_h2(R2, 110/222, 5/1000)
+R2 #0.0657661
+h2 #0.03114314
 
-fit1_male <- glm(PD ~ SCORE1_AVG + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta[meta$reportedSex == "M", ], family = "binomial")
-summary(fit1_male) #
-fit1_male_null <- glm(PD ~ Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta[meta$reportedSex == "M", ], family = "binomial")
+fit1_male <- glm(PD ~ GRS_scaled + Age + GPC1 + GPC2 + GPC3, data = meta[meta$reportedSex == "M", ], family = "binomial")
+summary(fit1_male) #GRS p=0.03
+fit1_male_null <- glm(PD ~ Age + GPC1 + GPC2 + GPC3, data = meta[meta$reportedSex == "M", ], family = "binomial")
 summary(fit1_male_null) #
 (male_r2 <- nagelkerke(fit1_male, null = fit1_male_null))
 #                             Pseudo.R.squared
-#McFadden                            0.0233878
-#Cox and Snell (ML)                  0.0151895
-#Nagelkerke (Cragg and Uhler)        0.0316270
+#McFadden                            0.0287700
+#Cox and Snell (ML)                  0.0383562
+#Nagelkerke (Cragg and Uhler)        0.0516098
 
-# liability R2
-lin1 <- lm(PD ~ SCORE1_AVG + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta[meta$reportedSex=="M",])
-lin2 <- lm(PD ~ Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta[meta$reportedSex=="M",])
-male_R2 <- (deviance(lin2) - deviance(lin1)) / deviance(lin2)
-male_h2 <- pd_h2(male_R2, sum(meta$PD) / nrow(meta), 5 / 1000)
-male_R2 # 0.02609324
-male_h2 # 0.01261183
+R2 <- male_r2$Pseudo.R.squared.for.model.vs.null[3]
+summary(as.factor(meta[meta$reportedSex=="M","PD"]))
+# 0  1 
+#66 63 
+h2 <- lee_h2(R2, 63/129, 5/1000)
+R2 #0.0516098
+h2 #0.02445075
 
-fit1_female <- glm(PD ~ SCORE1_AVG + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta[meta$reportedSex == "F", ], family = "binomial")
-summary(fit1_female) #
-fit1_female_null <- glm(PD ~ Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta[meta$reportedSex == "F", ], family = "binomial")
-summary(fit1_female_null) #
+fit1_female <- glm(PD ~ GRS_scaled + Age + GPC1 + GPC2 + GPC3, data = meta[meta$reportedSex == "F", ], family = "binomial")
+summary(fit1_female) #GRS p=0.02
+fit1_female_null <- glm(PD ~ Age + GPC1 + GPC2 + GPC3, data = meta[meta$reportedSex == "F", ], family = "binomial")
+summary(fit1_female_null) #nothing sig
 (female_r2 <- nagelkerke(fit1_female, null = fit1_female_null))
 #                             Pseudo.R.squared
-#McFadden                            0.0609459
-#Cox and Snell (ML)                  0.0368360
-#Nagelkerke (Cragg and Uhler)        0.0801130
+#McFadden                            0.0495289
+#Cox and Snell (ML)                  0.0644248
+#Nagelkerke (Cragg and Uhler)        0.0871381
 
 # liability R2
-lin1 <- lm(PD ~ SCORE1_AVG + Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta[meta$reportedSex=="F",])
-lin2 <- lm(PD ~ Age + GPC1 + GPC2 + GPC3 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + plate + SentrixPosition_A, data = meta[meta$reportedSex=="F",])
-female_R2 <- (deviance(lin2) - deviance(lin1)) / deviance(lin2)
-female_h2 <- pd_h2(female_R2, sum(meta$PD) / nrow(meta), 5 / 1000)
-female_R2 # 0.01299743
-female_h2 # 0.006217607
+R2 <- female_r2$Pseudo.R.squared.for.model.vs.null[3]
+summary(as.factor(meta[meta$reportedSex=="F","PD"]))
+# 0  1 
+#46 47
+h2 <- lee_h2(R2, 47/93, 5/1000)
+R2 #0.0871381
+h2 #0.04126514
+
 ```
 
 ### Plotting
 ```{r plot GRS, eval=F}
 r2_labels <- c(
-  0.0380,
+  round(cross_r2$Pseudo.R.squared.for.model.vs.null[3], 4),
   round(male_r2$Pseudo.R.squared.for.model.vs.null[3], 4),
   round(female_r2$Pseudo.R.squared.for.model.vs.null[3], 4)
 )
 names(r2_labels) <- c("Cross-sex", "Male", "Female")
-h2_labels <- c(
-  0.0085,
-  round(pd_h2(male_r2$Pseudo.R.squared.for.model.vs.null[3], sum(meta$PD) / nrow(meta), 5 / 1000), 4),
-  round(pd_h2(female_r2$Pseudo.R.squared.for.model.vs.null[3], sum(meta$PD) / nrow(meta), 5 / 1000), 4)
-)
+h2_labels <- c(0.0311, 0.0245,0.0413)
 names(h2_labels) <- c("Cross-sex", "Male", "Female")
 
 to_plot <- meta %>%
@@ -292,34 +310,34 @@ to_plot <- rbind(cross_data, to_plot)
 to_plot$PD <- factor(to_plot$PD, levels=c("CONTROL","CASE"))
 to_plot$Sex <- factor(to_plot$Sex, levels=c("Cross-sex","Male","Female"))
 
-png("~/PD_GRS/DIGPD_prs_plots_by_PD_sex.png", width=600, height=500)
+png("~/PD_GRS/DIGPD_prs_plots_by_PD_sex_17May2025.png", width=600, height=500)
 ggboxplot(
   to_plot,
   x = "PD",
-  y = "SCORE1_AVG",
+  y = "GRS_scaled",
   color = "Sex",
   add = "jitter"
 ) +
   facet_grid(~Sex, labeller = label_bquote(cols = .(as.character(Sex)) ~ ": " ~ .(r2_labels[Sex]) ~ ";" ~ h^2 ~ ": " ~ .(h2_labels[Sex]))) +
-  labs(y = "Polygenic Risk Score", x = "Parkinson's Diagnosis") +
+  labs(y = "Genetic Risk Score (Scaled)", x = "Parkinson's Diagnosis") +
   scale_color_manual(values = c("gray", "light blue", "pink"))
 dev.off()
 
-png("~/PD_GRS/DIGPD_prs_plots_by_sex.png", width=300, height=500)
+png("~/PD_GRS/DIGPD_prs_plots_by_sex_17May2025.png", width=300, height=500)
 ggboxplot(
   to_plot,
   x = "Sex",
-  y = "SCORE1_AVG",
+  y = "GRS_scaled",
   color = "Sex",
   add = "jitter"
 ) +
   stat_compare_means() +
 
-  labs(y = "Polygenic Risk Score") +
+  labs(y = "Genetic Risk Score (Scaled)") +
   scale_color_manual(values = c("Male" = "light blue", "Female" = "pink"))
 dev.off()
 ```
-![GRS by PD status and sex in DIGPD](/home1/NEURO/schaffner/PD_GRS/DIGPD_prs_plots_by_PD_sex.png)
+![GRS by PD status and sex in DIGPD](/home1/NEURO/schaffner/PD_GRS/DIGPD_prs_plots_by_PD_sex_17May2025.png)
 
 PD cases have a greater spread in GRS values than controls. Could this be why EWAS stratified by disease for DIGPD only returns hits for the PD group and not controls?
 
