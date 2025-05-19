@@ -8,7 +8,7 @@ The manuscript "A Parkinson’s disease genetic risk score associates with blood
 Here, EWAS for the GRS will be repeated with adjustment for the following non-genetic factors: **smoking status, alcohol use, age, sex, self-reported previous head injury, and individual occupational pesticide and heavy metal exposures** surveyed in TERRE. Will initially examined all 69 available exposures. I'll subset to the ones with at least 10 "exposed" individuals to generate a more reliable estimate of exposure effect (as done for npj PD paper).
 
 
-Last updated Aug 23, 2024 by Samantha Schaffner
+Last updated May 18, 2025 by Samantha Schaffner: Testing SNP x E interactions
 
 
 Based on code by Will Casazza
@@ -279,6 +279,7 @@ terre_pest_meta <- meta_sub[match(rownames(pest_mids$data),meta_sub$patient),]
 mvals_pest <- mvals_pest[,rownames(pest_mids$data)]
 exposures <- colnames(pest_mids$data)
 
+# took 6 days to run 10 EWAS x 30 pesticides and pool results = 300 EWAS!
 for(exposure in exposures){
   print(paste("EWAS with adjustment for", exposure, sep=" "))
   ewas <- mclapply(1:nrow(mvals_pest), function(x){
@@ -297,19 +298,758 @@ Checking how many probes still come up as associated with the GRS when each pest
 ```{r compare 2, eval=F}
 grs_res <- read.csv("~/PD_GRS/EWAS_TERRE/EWAS_GRS_cross_sex_hits.csv")
 exp_df <- lapply(1:30, function(x){
-  exposures[x] <- rep(FALSE,27)
+  exposures[x] <- rep(FALSE,23)
 })
 exp_df <- do.call(cbind, exp_df)
 colnames(exp_df) <- exposures
 
 grs_pest <- cbind(grs_res[,c("TargetID","delta_M","adj.P.Val","CHR","MAPINFO","UCSC_REFGENE_NAME","UCSC_REFGENE_GROUP")],exp_df)
 
-for(exposure in "ins"){
-  res <- fread(paste("~/", exposure, "_pest_imp_sensitivity.txt",sep=""))
+for(exposure in exposures){
+  print(paste("Summarizing results for", exposure, sep=" "))
+  res <- fread(paste("~/PD_GRS/non_genetic_sensitivity/exposure_EWAS/", exposure, "_pest_imp_sensitivity.txt",sep=""))
   res$adj.P.Val <- p.adjust(res$p.value, method="BH")
   res$sig <- (res$adj.P.Val<=0.05 & abs(res$estimate)>=1.5)
   for(x in 1:nrow(res)){
     if(res$sig[x]==TRUE){ grs_pest[grs_pest$TargetID==res$probe[x],exposure] <- TRUE }
   }
 }
+
+write.csv(grs_pest, file="~/PD_GRS/non_genetic_sensitivity/sensitivity_overlaps_pest.csv", row.names=F)
+
+#summarize overlaps
+all_data <- data.frame(GRS=TRUE,ins=grs_pest$ins, fung=grs_pest$fong, herb=grs_pest$herb, s=grs_pest$s, cu=grs_pest$cu, i_ochl=grs_pest$i_ochl, i_oph=grs_pest$i_oph, i_carb=grs_pest$i_carb, i_pyr=grs_pest$i_pyr, f_carb=grs_pest$f_carb, h_phenol=grs_pest$h_phenol, h_phyto=grs_pest$h_phyto, h_pico=grs_pest$h_pico, h_triazine=grs_pest$h_triazine, h_amides=grs_pest$h_amides, h_uree=grs_pest$h_uree, h_quat=grs_pest$h_quat, h_glyphos=grs_pest$h_glyphos, i_ddt=grs_pest$i_ddt, i_lindane=grs_pest$i_lindane, f_dithiocarb=grs_pest$f_dithiocarb, f_carb0=grs_pest$f_carb0, h_phenolbis=grs_pest$h_phenolbis, h_ureebis=grs_pest$h_ureebis, tot_carb=grs_pest$tot_carb, tot_uree=grs_pest$tot_uree, tot_amide=grs_pest$tot_amide, tot_triazine=grs_pest$tot_triazine, tot_phenol=grs_pest$tot_phenol, gardening=grs_pest$gardening)
+
+#upset plot
+all_data[] <- apply(all_data[], 2, function(x) as.numeric(x))
+upset(all_data, sets=names(all_data),order.by="degree", mb.ratio=c(0.3,0.7))
+```
+![Overlap between probes significant in individual pesticide sensitivity analyses and original EWAS](/home1/NEURO/schaffner/PD_GRS/non_genetic_sensitivity/upset_pest.png)
+
+5 probes were insensitive to adjusting for any pesticide exposure, 9 probes were sensitive to all exposures tested, and 9 probes were sensitive to a combination of exposures. Most probes were sensitive to adjustment for amides, dithiocarbamates, and insecticides.
+
+## Evaluate probes across all non-genetic factors tested
+```{r non genetic, eval=F}
+sensitivity <- read.csv("~/PD_GRS/non_genetic_sensitivity/sensitivity_overlaps.csv")
+colnames(sensitivity)
+sens_all <- left_join(sensitivity, grs_pest, by=c("TargetID","UCSC_REFGENE_NAME","UCSC_REFGENE_GROUP","adj.P.Val"))
+write.csv(sens_all, file="~/PD_GRS/non_genetic_sensitivity/sensitivity_all_non_genetic.csv", row.names=F)
+```
+
+# Test SNP x E interaction for GRS SNPs that are mQTL
+Added May 18, 2025. This pulls the 8 SNPs referenced in "7-repl_CpGs_posthoc.Rmd" from the GRS which are mQTL for CpGs associated with the overall GRS score, and tests their interaction with the environmental factors above.
+
+## In combined case-control data
+
+### Prepare genotype data, DNAm data, and meta data
+```{r read mqtl, eval=F}
+# Get list of 8 SNPs
+mqtl_sig <- read.csv("~/PD_GRS/posthoc/mqtl_terre_sig_anno.csv")
+length(unique(mqtl_sig$snp)) #8
+terre_snps <- unique(mqtl_sig$snp)
+
+# Meta data with SNP genotype
+meta_geno <- read.csv("~/PD_GRS/meta_geno_GRS_SNPs.csv")
+cols <- c(colnames(meta_geno)[1:168],terre_snps)
+meta_geno_sub <- meta_geno[,cols]
+
+# DNAm data (2022, most recent QC'ed, same as npj PD 2024 article)
+load("~/SHARE_DECIPHER/processed_DNAm_data/2022/TERRE_processed_2022/1-TERRE_RG_filtered.RData")
+mvals <- getM(PD_RG_filtered)
+
+# subset to 11 replicated CpGs
+repl_cpgs <- read.csv("~/PD_GRS/TERRE_cross_sex_in_DIGPD_B.csv")
+repl_cpgs <- repl_cpgs[repl_cpgs$direction==TRUE,]
+dim(mvals <- mvals[rownames(mvals) %in% repl_cpgs$TargetID,colnames(mvals)%in%meta$patient]) #[1]  11 218
+
+# subset meta data to relevant columns and re-format
+meta_geno_sub$PD <- as.factor(meta_geno_sub$PD)
+meta_geno_sub$sex <- as.factor(meta_geno_sub$sex)
+meta_geno_sub$smoking <- as.factor(meta_geno_sub$smoking)
+meta_geno_sub$pesticides <- as.factor(meta_geno_sub$pesticides)
+meta_geno_sub$head_trauma <- as.factor(meta_geno_sub$head_trauma)
+meta_geno_sub$alcohol1 <- as.factor(meta_geno_sub$alcohol1)
+meta_geno_sub$levodopa <- as.factor(meta_geno_sub$levodopa)
+meta_geno_sub$plate <- as.factor(meta_geno_sub$plate)
+meta_geno_sub$SentrixPosition_A <- as.factor(meta_geno_sub$SentrixPosition_A)
+
+# match meta data and M-values
+meta_geno_sub <- meta_geno_sub[complete.cases(meta_geno_sub$CTP_PC1),]
+mvals <- mvals[,match(meta_geno_sub$patient, colnames(mvals))]
+all(colnames(mvals)==meta_geno_sub$patient) #TRUE
+```
+
+### Smoking, alcohol, head trauma, and overall pesticide exposure
+Pulling out adjusted p-values for the SNP and SNPxE terms in each model.
+```{r snp x e non imp, eval=F}
+####### SNP x smoking
+# limma design matrix and linear model fit
+snp_smoking <- lapply(1:8, function(x){
+  snp <- colnames(meta_geno_sub)[167+x]
+  print(paste(x, snp, sep=": "))
+  design_snp_E <- model.matrix(~ 1 + meta_geno_sub[,167+x]*smoking + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD, data = meta_geno_sub)
+  snp_E_fit <- lmFit(mvals, design_snp_E)
+  snp_E_fit <- eBayes(snp_E_fit)
+  pvals <- snp_E_fit$p.value[,c(28:29)]
+  colnames(pvals) <- c(paste(snp,"smoking2",sep=":"), paste(snp,"smoking3",sep=":"))
+  pvals.adj <- apply(pvals, 2, function(x) p.adjust(x,method="BH"))
+  return(pvals.adj)})
+snp_smoking <- do.call(cbind, snp_smoking)
+snp_smoking_melt <- reshape2::melt(snp_smoking)
+colnames(snp_smoking_melt) <- c("CpG","SNPxE","p.adj")
+snp_smoking_melt[which(snp_smoking_melt$p.adj<=0.05),]
+#          CpG               SNPxE       p.adj
+#68 cg05314706 rs62053943:smoking2 0.001345513
+
+####### SNP x alcohol
+# limma design matrix and linear model fit
+snp_alc <- lapply(1:8, function(x){
+  snp <- colnames(meta_geno_sub)[167+x]
+  print(paste(x, snp, sep=": "))
+  design_snp_E <- model.matrix(~ 1 + meta_geno_sub[,167+x]*alcohol1 + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD, data = meta_geno_sub)
+  snp_E_fit <- lmFit(mvals, design_snp_E)
+  snp_E_fit <- eBayes(snp_E_fit)
+  pvals <- snp_E_fit$p.value[,c(29:31)]
+  colnames(pvals) <- c(paste(snp,"alcohol1.2",sep=":"), paste(snp,"alcohol1.3",sep=":"), paste(snp,"alcohol1.4",sep=":"))
+  pvals.adj <- apply(pvals, 2, function(x) p.adjust(x,method="BH"))
+  return(pvals.adj)})
+snp_alc <- do.call(cbind, snp_alc)
+snp_alc_melt <- reshape2::melt(snp_alc)
+colnames(snp_alc_melt) <- c("CpG","SNPxE","p.adj")
+snp_alc_melt[which(snp_alc_melt$p.adj<=0.05),]
+#           CpG                  SNPxE       p.adj
+#39  cg09793084 rs138017112:alcohol1.2 0.007639155
+#61  cg09793084 rs138017112:alcohol1.4 0.000524759
+#66  cg15633388 rs138017112:alcohol1.4 0.024807406
+#94  cg09793084  rs17686238:alcohol1.4 0.038363098
+#123 cg05314706  rs62053943:alcohol1.4 0.037005942
+
+####### SNP x head trauma
+# limma design matrix and linear model fit
+snp_ht <- lapply(1:8, function(x){
+  snp <- colnames(meta_geno_sub)[167+x]
+  print(paste(x, snp, sep=": "))
+  design_snp_E <- model.matrix(~ 1 + meta_geno_sub[,167+x]*head_trauma + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD, data = meta_geno_sub)
+  snp_E_fit <- lmFit(mvals, design_snp_E)
+  snp_E_fit <- eBayes(snp_E_fit)
+  pvals <- data.frame(snp_E_fit$p.value[,27])
+  colnames(pvals) <- paste(snp,"head_trauma",sep=":")
+  pvals.adj <- apply(pvals, 2, function(x) p.adjust(x,method="BH"))
+  return(pvals.adj)})
+snp_ht <- do.call(cbind, snp_ht)
+snp_ht_melt <- reshape2::melt(snp_ht)
+colnames(snp_ht_melt) <- c("CpG","SNPxE","p.adj")
+snp_ht_melt[which(snp_ht_melt$p.adj<=0.05),]
+#          CpG                   SNPxE       p.adj
+#12 cg27060340 rs138017112:head_trauma 0.018841069
+#13 cg05314706 rs138017112:head_trauma 0.018841069
+#17 cg09793084 rs138017112:head_trauma 0.028800275
+#23 cg27060340  rs17686238:head_trauma 0.017323858
+#24 cg05314706  rs17686238:head_trauma 0.017323858
+#27 cg01341218  rs17686238:head_trauma 0.008160269
+#28 cg09793084  rs17686238:head_trauma 0.008160269
+#29 cg15072451  rs17686238:head_trauma 0.033584884
+#30 cg04226788  rs17686238:head_trauma 0.017323858
+#31 cg02478991  rs17686238:head_trauma 0.017323858
+#32 cg09860564  rs17686238:head_trauma 0.033584884
+#33 cg15633388  rs17686238:head_trauma 0.017323858
+
+####### SNP x pesticides
+# limma design matrix and linear model fit
+snp_pest <- lapply(1:8, function(x){
+  snp <- colnames(meta_geno_sub)[167+x]
+  print(paste(x, snp, sep=": "))
+  design_snp_E <- model.matrix(~ 1 + meta_geno_sub[complete.cases(meta_geno_sub$pesticides),167+x]*pesticides + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD, data = meta_geno_sub[complete.cases(meta_geno_sub$pesticides),])
+  snp_E_fit <- lmFit(mvals[,meta_geno_sub[complete.cases(meta_geno_sub$pesticides),"patient"]], design_snp_E)
+  snp_E_fit <- eBayes(snp_E_fit)
+  pvals <- snp_E_fit$p.value[,c(28:29)]
+  colnames(pvals) <- c(paste(snp,"pesticides1",sep=":"), paste(snp,"pesticides2",sep=":"))
+  pvals.adj <- apply(pvals, 2, function(x) p.adjust(x,method="BH"))
+  return(pvals.adj)})
+snp_pest <- do.call(cbind, snp_pest)
+snp_pest_melt <- reshape2::melt(snp_pest)
+colnames(snp_pest_melt) <- c("CpG","SNPxE","p.adj")
+snp_pest_melt[which(snp_pest_melt$p.adj<=0.05),] #none
+min(snp_pest_melt$p.adj) #[1] 0.1056145
+
+### save all results
+SNPxE_non_imp <- rbind(snp_smoking_melt, snp_alc_melt, snp_ht_melt, snp_pest_melt)
+write.csv(SNPxE_non_imp, file="~/PD_GRS/non_genetic_sensitivity/SNPxE_non_imp.csv", row.names=F)
+```
+
+### Imputed pesticide exposures
+Pulling out adjusted p-values for the SNP and SNPxE terms in each model. Focusing on overall occupational exposure to insecticides, fungicides, and herbicides, as well as "gardening" (domestic) exposure. These were each included in the subset of pesticides with >10% of individuals exposed.
+```{r snp x e imp, eval=F}
+# read in individual imputed pesticides data
+pest_imp <- read.csv("~/SHARE_DECIPHER/TERRE_pesticides/pesticides_imputed.csv")
+
+# subset to TERRE early disease duration data set
+pest_imp <- pest_imp[pest_imp$num %in% meta_geno_sub$patient,c("X_imputation_","num","ins","fong","herb","gardening")]
+length(unique(pest_imp$num)) #186 individuals with imputed pesticide data
+
+# prepare mice input
+pest_missing <- read.csv("~/SHARE_DECIPHER/TERRE_pesticides/pesticides.csv")
+pest_missing <- pest_missing[pest_missing$num %in% meta_geno_sub$patient,c("num","ins","fong","herb","gardening")]
+all(pest_imp$num[1:186]==pest_missing$num) #TRUE
+all(colnames(pest_imp[2:ncol(pest_imp)])==colnames(pest_missing)) #TRUE
+mvals_pest <- mvals[,match(pest_missing$num,colnames(mvals))]
+
+pre_mids <-rbind(cbind(data.frame(X_imputation_=0),pest_missing)[,colnames(pest_imp)],pest_imp)
+pre_mids <- pre_mids[pre_mids$num %in% colnames(mvals_pest),]
+pest_mids <- as.mids(pre_mids, .imp="X_imputation_",.id="num")
+terre_pest_meta <- meta_geno_sub[match(rownames(pest_mids$data),meta_geno_sub$patient),]
+mvals_pest <- mvals_pest[,rownames(pest_mids$data)]
+
+####### SNP x insecticides
+snp_ins <- lapply(1:8, function(x){
+  snp <- colnames(terre_pest_meta)[167+x]
+  print(paste(x, snp, sep=": "))
+    ewas <- mclapply(1:nrow(mvals_pest), function(y){
+    fit.cpg <- substitute(pest_mids %>% with(lm(mvals_pest[y,] ~ terre_pest_meta[,167+x]*E + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD, data=terre_pest_meta)),
+                          list(E=as.name("ins")))
+    fit.cpg <- eval(fit.cpg, list(E=as.name("ins")))
+    est.cpg <- pool(fit.cpg)
+    return(summary(est.cpg)[27,])
+    }, mc.cores=10)
+  res <- cbind(do.call(rbind, ewas), probe=rownames(mvals_pest))
+  res$term <- paste(snp,"ins",sep=":")
+  res$p.adj <- p.adjust(res$p.value,method="BH")
+  res <- res[,c("probe","term","p.adj")]
+  colnames(res)[1:2] <- c("CpG","SNPxE")
+  return(res) })
+snp_ins <- do.call(rbind, snp_ins)
+snp_ins[which(snp_ins$p.adj<=0.05),]
+min(snp_ins$p.adj) #[1] 0.1791788
+
+####### SNP x fungicides
+snp_fong <- lapply(1:8, function(x){
+  snp <- colnames(terre_pest_meta)[167+x]
+  print(paste(x, snp, sep=": "))
+    ewas <- mclapply(1:nrow(mvals_pest), function(y){
+    fit.cpg <- substitute(pest_mids %>% with(lm(mvals_pest[y,] ~ terre_pest_meta[,167+x]*E + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD, data=terre_pest_meta)),
+                          list(E=as.name("fong")))
+    fit.cpg <- eval(fit.cpg, list(E=as.name("fong")))
+    est.cpg <- pool(fit.cpg)
+    return(summary(est.cpg)[27,])
+    }, mc.cores=10)
+  res <- cbind(do.call(rbind, ewas), probe=rownames(mvals_pest))
+  res$term <- paste(snp,"fong",sep=":")
+  res$p.adj <- p.adjust(res$p.value,method="BH")
+  res <- res[,c("probe","term","p.adj")]
+  colnames(res)[1:2] <- c("CpG","SNPxE")
+  return(res) })
+snp_fong <- do.call(rbind, snp_fong)
+snp_fong[which(snp_fong$p.adj<=0.05),]
+#             CpG            SNPxE       p.adj
+#2711  cg27060340 rs138017112:fong 0.021154677
+#2712  cg05314706 rs138017112:fong 0.012784827
+#2741  cg01341218 rs138017112:fong 0.021154677
+#2751  cg09793084 rs138017112:fong 0.001647162
+#2761  cg15072451 rs138017112:fong 0.012784827
+#2771  cg04226788 rs138017112:fong 0.025313708
+#2781  cg02478991 rs138017112:fong 0.012784827
+#2791  cg09860564 rs138017112:fong 0.022741380
+#27101 cg15633388 rs138017112:fong 0.001987947
+
+####### SNP x herbicides
+snp_herb <- lapply(1:8, function(x){
+  snp <- colnames(terre_pest_meta)[167+x]
+  print(paste(x, snp, sep=": "))
+    ewas <- mclapply(1:nrow(mvals_pest), function(y){
+    fit.cpg <- substitute(pest_mids %>% with(lm(mvals_pest[y,] ~ terre_pest_meta[,167+x]*E + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD, data=terre_pest_meta)),
+                          list(E=as.name("herb")))
+    fit.cpg <- eval(fit.cpg, list(E=as.name("herb")))
+    est.cpg <- pool(fit.cpg)
+    return(summary(est.cpg)[27,])
+    }, mc.cores=10)
+  res <- cbind(do.call(rbind, ewas), probe=rownames(mvals_pest))
+  res$term <- paste(snp,"herb",sep=":")
+  res$p.adj <- p.adjust(res$p.value,method="BH")
+  res <- res[,c("probe","term","p.adj")]
+  colnames(res)[1:2] <- c("CpG","SNPxE")
+  return(res) })
+snp_herb <- do.call(rbind, snp_herb)
+snp_herb[which(snp_herb$p.adj<=0.05),]
+#             CpG            SNPxE       p.adj
+#2711  cg27060340 rs138017112:herb 0.032653953
+#2712  cg05314706 rs138017112:herb 0.023453720
+#2741  cg01341218 rs138017112:herb 0.032653953
+#2751  cg09793084 rs138017112:herb 0.004704698
+#2761  cg15072451 rs138017112:herb 0.017331204
+#2771  cg04226788 rs138017112:herb 0.040476594
+#2781  cg02478991 rs138017112:herb 0.023453720
+#2791  cg09860564 rs138017112:herb 0.040476594
+#27101 cg15633388 rs138017112:herb 0.004704698
+
+####### SNP x gardening
+snp_gardening <- lapply(1:8, function(x){
+  snp <- colnames(terre_pest_meta)[167+x]
+  print(paste(x, snp, sep=": "))
+    ewas <- mclapply(1:nrow(mvals_pest), function(y){
+    fit.cpg <- substitute(pest_mids %>% with(lm(mvals_pest[y,] ~ terre_pest_meta[,167+x]*E + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A + PD, data=terre_pest_meta)),
+                          list(E=as.name("gardening")))
+    fit.cpg <- eval(fit.cpg, list(E=as.name("gardening")))
+    est.cpg <- pool(fit.cpg)
+    return(summary(est.cpg)[27,])
+    }, mc.cores=10)
+  res <- cbind(do.call(rbind, ewas), probe=rownames(mvals_pest))
+  res$term <- paste(snp,"gardening",sep=":")
+  res$p.adj <- p.adjust(res$p.value,method="BH")
+  res <- res[,c("probe","term","p.adj")]
+  colnames(res)[1:2] <- c("CpG","SNPxE")
+  return(res) })
+snp_gardening <- do.call(rbind, snp_gardening)
+snp_gardening[which(snp_gardening$p.adj<=0.05),]
+min(snp_gardening$p.adj) #0.1156359
+
+### save all results
+SNPxE_imp <- rbind(snp_ins, snp_fong, snp_herb, snp_gardening)
+write.csv(SNPxE_imp, file="~/PD_GRS/non_genetic_sensitivity/SNPxE_imp.csv", row.names=F)
+```
+
+## In controls
+
+### Prepare genotype data, DNAm data, and meta data
+```{r read mqtl ctrl, eval=F}
+# match meta data and M-values
+meta_ctrl <- meta_geno_sub[meta_geno_sub$PD==0,]
+mvals_ctrl <- mvals[,match(meta_ctrl$patient, colnames(mvals))]
+all(colnames(mvals_ctrl)==meta_ctrl$patient) #TRUE
+```
+
+### Smoking, alcohol, head trauma, and overall pesticide exposure
+Pulling out adjusted p-values for the SNP and SNPxE terms in each model.
+```{r snp x e non imp ctrl, eval=F}
+####### SNP x smoking
+
+# combine former and current (only 14 current smoker ctrls, errors in model)
+meta_ctrl$smoking[meta_ctrl$smoking==3] <- 2
+meta_ctrl$smoking <- as.factor(as.numeric(meta_ctrl$smoking))
+
+# limma design matrix and linear model fit
+snp_smoking <- lapply(1:8, function(x){
+  snp <- colnames(meta_ctrl)[167+x]
+  print(paste(x, snp, sep=": "))
+  design_snp_E <- model.matrix(~ 1 + meta_ctrl[,167+x]*smoking + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A , data = meta_ctrl)
+  snp_E_fit <- lmFit(mvals_ctrl, design_snp_E)
+  snp_E_fit <- eBayes(snp_E_fit)
+  pvals <- data.frame(snp_E_fit$p.value[,26])
+  colnames(pvals) <- c(paste(snp,"smoking2",sep=":"))
+  pvals.adj <- apply(pvals, 2, function(x) p.adjust(x,method="BH"))
+  return(pvals.adj)})
+snp_smoking <- do.call(cbind, snp_smoking)
+snp_smoking_melt <- reshape2::melt(snp_smoking)
+colnames(snp_smoking_melt) <- c("CpG","SNPxE","p.adj")
+snp_smoking_melt[which(snp_smoking_melt$p.adj<=0.05),]
+#          CpG              SNPxE      p.adj
+#61 cg09793084 rs7221167:smoking2 0.04323164
+#66 cg15633388 rs7221167:smoking2 0.04323164
+
+####### SNP x alcohol
+# limma design matrix and linear model fit
+snp_alc <- lapply(1:8, function(x){
+  snp <- colnames(meta_ctrl)[167+x]
+  print(paste(x, snp, sep=": "))
+  design_snp_E <- model.matrix(~ 1 + meta_ctrl[,167+x]*alcohol1 + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A , data = meta_ctrl)
+  snp_E_fit <- lmFit(mvals_ctrl, design_snp_E)
+  snp_E_fit <- eBayes(snp_E_fit)
+  pvals <- snp_E_fit$p.value[,c(28:30)]
+  colnames(pvals) <- c(paste(snp,"alcohol1.2",sep=":"), paste(snp,"alcohol1.3",sep=":"), paste(snp,"alcohol1.4",sep=":"))
+  pvals.adj <- apply(pvals, 2, function(x) p.adjust(x,method="BH"))
+  return(pvals.adj)})
+snp_alc <- do.call(cbind, snp_alc)
+snp_alc_melt <- reshape2::melt(snp_alc)
+colnames(snp_alc_melt) <- c("CpG","SNPxE","p.adj")
+snp_alc_melt[which(snp_alc_melt$p.adj<=0.05),]
+#           CpG                  SNPxE       p.adj
+#39  cg09793084 rs138017112:alcohol1.2 0.002343561
+#44  cg15633388 rs138017112:alcohol1.2 0.006071070
+#61  cg09793084 rs138017112:alcohol1.4 0.016648186
+#150 cg15072451   rs9912362:alcohol1.3 0.042394234
+#182 cg09793084   rs7221167:alcohol1.3 0.038268226
+
+####### SNP x head trauma
+# limma design matrix and linear model fit
+snp_ht <- lapply(1:8, function(x){
+  snp <- colnames(meta_ctrl)[167+x]
+  print(paste(x, snp, sep=": "))
+  design_snp_E <- model.matrix(~ 1 + meta_ctrl[,167+x]*head_trauma + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A , data = meta_ctrl)
+  snp_E_fit <- lmFit(mvals_ctrl, design_snp_E)
+  snp_E_fit <- eBayes(snp_E_fit)
+  pvals <- data.frame(snp_E_fit$p.value[,26])
+  colnames(pvals) <- paste(snp,"head_trauma",sep=":")
+  pvals.adj <- apply(pvals, 2, function(x) p.adjust(x,method="BH"))
+  return(pvals.adj)})
+snp_ht <- do.call(cbind, snp_ht)
+snp_ht_melt <- reshape2::melt(snp_ht)
+colnames(snp_ht_melt) <- c("CpG","SNPxE","p.adj")
+snp_ht_melt[which(snp_ht_melt$p.adj<=0.05),]
+min(snp_ht_melt$p.adj[complete.cases(snp_ht_melt$p.adj)]) #0.3057652
+
+####### SNP x pesticides
+# limma design matrix and linear model fit
+snp_pest <- lapply(1:8, function(x){
+  snp <- colnames(meta_ctrl)[167+x]
+  print(paste(x, snp, sep=": "))
+  design_snp_E <- model.matrix(~ 1 + meta_ctrl[complete.cases(meta_ctrl$pesticides),167+x]*pesticides + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A , data = meta_ctrl[complete.cases(meta_ctrl$pesticides),])
+  snp_E_fit <- lmFit(mvals_ctrl[,meta_ctrl[complete.cases(meta_ctrl$pesticides),"patient"]], design_snp_E)
+  snp_E_fit <- eBayes(snp_E_fit)
+  pvals <- snp_E_fit$p.value[,c(27:28)]
+  colnames(pvals) <- c(paste(snp,"pesticides1",sep=":"), paste(snp,"pesticides2",sep=":"))
+  pvals.adj <- apply(pvals, 2, function(x) p.adjust(x,method="BH"))
+  return(pvals.adj)})
+snp_pest <- do.call(cbind, snp_pest)
+snp_pest_melt <- reshape2::melt(snp_pest)
+colnames(snp_pest_melt) <- c("CpG","SNPxE","p.adj")
+snp_pest_melt[which(snp_pest_melt$p.adj<=0.05),] #none
+#          CpG                   SNPxE      p.adj
+#36 cg20163478 rs138017112:pesticides2 0.02641039
+#37 cg12609785 rs138017112:pesticides2 0.02641039
+#39 cg09793084 rs138017112:pesticides2 0.04349909
+#40 cg15072451 rs138017112:pesticides2 0.04143577
+#41 cg04226788 rs138017112:pesticides2 0.02641039
+#42 cg02478991 rs138017112:pesticides2 0.04089044
+#43 cg09860564 rs138017112:pesticides2 0.02641039
+#44 cg15633388 rs138017112:pesticides2 0.03159038
+
+### save all results
+SNPxE_non_imp_ctrl <- rbind(snp_smoking_melt, snp_alc_melt, snp_ht_melt, snp_pest_melt)
+write.csv(SNPxE_non_imp_ctrl, file="~/PD_GRS/non_genetic_sensitivity/SNPxE_non_imp_ctrl.csv", row.names=F)
+```
+
+### Imputed pesticide exposures
+Pulling out adjusted p-values for the SNP and SNPxE terms in each model. Focusing on overall occupational exposure to insecticides, fungicides, and herbicides, as well as "gardening" (domestic) exposure. These were each included in the subset of pesticides with >10% of individuals exposed.
+```{r snp x e imp ctrl, eval=F}
+# subset to TERRE early disease duration data set
+pest_imp_ctrl <- pest_imp[pest_imp$num %in% meta_ctrl$patient,c("X_imputation_","num","ins","fong","herb","gardening")]
+length(unique(pest_imp_ctrl$num)) #124 individuals with imputed pesticide data
+
+# prepare mice input
+pest_missing_ctrl <- pest_missing[pest_missing$num %in% meta_ctrl$patient,c("num","ins","fong","herb","gardening")]
+all(pest_imp_ctrl$num[1:124]==pest_missing_ctrl$num) #TRUE
+all(colnames(pest_imp_ctrl[2:ncol(pest_imp_ctrl)])==colnames(pest_missing_ctrl)) #TRUE
+mvals_ctrl_pest <- mvals_ctrl[,match(pest_missing_ctrl$num,colnames(mvals_ctrl))]
+
+pre_mids <-rbind(cbind(data.frame(X_imputation_=0),pest_missing_ctrl)[,colnames(pest_imp_ctrl)],pest_imp_ctrl)
+pre_mids <- pre_mids[pre_mids$num %in% colnames(mvals_ctrl_pest),]
+pest_mids <- as.mids(pre_mids, .imp="X_imputation_",.id="num")
+terre_pest_meta <- meta_ctrl[match(rownames(pest_mids$data),meta_ctrl$patient),]
+mvals_ctrl_pest <- mvals_ctrl_pest[,rownames(pest_mids$data)]
+
+####### SNP x insecticides
+snp_ins <- lapply(1:8, function(x){
+  snp <- colnames(terre_pest_meta)[167+x]
+  print(paste(x, snp, sep=": "))
+    ewas <- mclapply(1:nrow(mvals_ctrl_pest), function(y){
+    fit.cpg <- substitute(pest_mids %>% with(lm(mvals_ctrl_pest[y,] ~ terre_pest_meta[,167+x]*E + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A, data=terre_pest_meta)),
+                          list(E=as.name("ins")))
+    fit.cpg <- eval(fit.cpg, list(E=as.name("ins")))
+    est.cpg <- pool(fit.cpg)
+    return(summary(est.cpg)[26,])
+    }, mc.cores=10)
+  res <- cbind(do.call(rbind, ewas), probe=rownames(mvals_ctrl_pest))
+  res$term <- paste(snp,"ins",sep=":")
+  res$p.adj <- p.adjust(res$p.value,method="BH")
+  res <- res[,c("probe","term","p.adj")]
+  colnames(res)[1:2] <- c("CpG","SNPxE")
+  return(res) })
+snp_ins <- do.call(rbind, snp_ins)
+snp_ins[which(snp_ins$p.adj<=0.05),]
+min(snp_ins$p.adj) #0.1158857
+
+####### SNP x fungicides
+snp_fong <- lapply(1:8, function(x){
+  snp <- colnames(terre_pest_meta)[167+x]
+  print(paste(x, snp, sep=": "))
+    ewas <- mclapply(1:nrow(mvals_ctrl_pest), function(y){
+    fit.cpg <- substitute(pest_mids %>% with(lm(mvals_ctrl_pest[y,] ~ terre_pest_meta[,167+x]*E + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A , data=terre_pest_meta)),
+                          list(E=as.name("fong")))
+    fit.cpg <- eval(fit.cpg, list(E=as.name("fong")))
+    est.cpg <- pool(fit.cpg)
+    return(summary(est.cpg)[26,])
+    }, mc.cores=10)
+  res <- cbind(do.call(rbind, ewas), probe=rownames(mvals_ctrl_pest))
+  res$term <- paste(snp,"fong",sep=":")
+  res$p.adj <- p.adjust(res$p.value,method="BH")
+  res <- res[,c("probe","term","p.adj")]
+  colnames(res)[1:2] <- c("CpG","SNPxE")
+  return(res) })
+snp_fong <- do.call(rbind, snp_fong)
+snp_fong[which(snp_fong$p.adj<=0.05),]
+#            CpG         SNPxE      p.adj
+#2627 cg27060340 rs199453:fong 0.02996133
+
+####### SNP x herbicides
+snp_herb <- lapply(1:8, function(x){
+  snp <- colnames(terre_pest_meta)[167+x]
+  print(paste(x, snp, sep=": "))
+    ewas <- mclapply(1:nrow(mvals_ctrl_pest), function(y){
+    fit.cpg <- substitute(pest_mids %>% with(lm(mvals_ctrl_pest[y,] ~ terre_pest_meta[,167+x]*E + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A , data=terre_pest_meta)),
+                          list(E=as.name("herb")))
+    fit.cpg <- eval(fit.cpg, list(E=as.name("herb")))
+    est.cpg <- pool(fit.cpg)
+    return(summary(est.cpg)[26,])
+    }, mc.cores=10)
+  res <- cbind(do.call(rbind, ewas), probe=rownames(mvals_ctrl_pest))
+  res$term <- paste(snp,"herb",sep=":")
+  res$p.adj <- p.adjust(res$p.value,method="BH")
+  res <- res[,c("probe","term","p.adj")]
+  colnames(res)[1:2] <- c("CpG","SNPxE")
+  return(res) })
+snp_herb <- do.call(rbind, snp_herb)
+snp_herb[which(snp_herb$p.adj<=0.05),]
+min(snp_herb$p.adj) #[1] 0.151696
+
+####### SNP x gardening
+snp_gardening <- lapply(1:8, function(x){
+  snp <- colnames(terre_pest_meta)[167+x]
+  print(paste(x, snp, sep=": "))
+    ewas <- mclapply(1:nrow(mvals_ctrl_pest), function(y){
+    fit.cpg <- substitute(pest_mids %>% with(lm(mvals_ctrl_pest[y,] ~ terre_pest_meta[,167+x]*E + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A , data=terre_pest_meta)),
+                          list(E=as.name("gardening")))
+    fit.cpg <- eval(fit.cpg, list(E=as.name("gardening")))
+    est.cpg <- pool(fit.cpg)
+    return(summary(est.cpg)[26,])
+    }, mc.cores=10)
+  res <- cbind(do.call(rbind, ewas), probe=rownames(mvals_ctrl_pest))
+  res$term <- paste(snp,"gardening",sep=":")
+  res$p.adj <- p.adjust(res$p.value,method="BH")
+  res <- res[,c("probe","term","p.adj")]
+  colnames(res)[1:2] <- c("CpG","SNPxE")
+  return(res) })
+snp_gardening <- do.call(rbind, snp_gardening)
+snp_gardening[which(snp_gardening$p.adj<=0.05),]
+min(snp_gardening$p.adj[complete.cases(snp_gardening$p.adj)]) #0.1045104
+
+### save all results
+SNPxE_imp_ctrl <- rbind(snp_ins, snp_fong, snp_herb, snp_gardening)
+write.csv(SNPxE_imp_ctrl, file="~/PD_GRS/non_genetic_sensitivity/SNPxE_imp_ctrl.csv", row.names=F)
+```
+
+## In PD cases
+
+### Prepare genotype data, DNAm data, and meta data
+```{r read mqtl pd, eval=F}
+# match meta data and M-values
+meta_pd <- meta_geno_sub[meta_geno_sub$PD==1,]
+mvals_pd <- mvals[,match(meta_pd$patient, colnames(mvals))]
+all(colnames(mvals_pd)==meta_pd$patient) #TRUE
+```
+
+### Smoking, alcohol, head trauma, and overall pesticide exposure
+Pulling out adjusted p-values for the SNP and SNPxE terms in each model.
+```{r snp x e non imp pd, eval=F}
+####### SNP x smoking
+
+# combine former and current (only 1 current smoker pds, errors in model)
+meta_pd$smoking[meta_pd$smoking==3] <- 2
+meta_pd$smoking <- as.factor(as.numeric(meta_pd$smoking))
+
+# limma design matrix and linear model fit
+snp_smoking <- lapply(1:8, function(x){
+  snp <- colnames(meta_pd)[167+x]
+  print(paste(x, snp, sep=": "))
+  design_snp_E <- model.matrix(~ 1 + meta_pd[,167+x]*smoking + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A , data = meta_pd)
+  snp_E_fit <- lmFit(mvals_pd, design_snp_E)
+  snp_E_fit <- eBayes(snp_E_fit)
+  pvals <- data.frame(snp_E_fit$p.value[,26])
+  colnames(pvals) <- c(paste(snp,"smoking2",sep=":"))
+  pvals.adj <- apply(pvals, 2, function(x) p.adjust(x,method="BH"))
+  return(pvals.adj)})
+snp_smoking <- do.call(cbind, snp_smoking)
+snp_smoking_melt <- reshape2::melt(snp_smoking)
+colnames(snp_smoking_melt) <- c("CpG","SNPxE","p.adj")
+snp_smoking_melt[which(snp_smoking_melt$p.adj<=0.05),]
+min(snp_smoking_melt$p.adj) #[1] 0.08090365
+
+####### SNP x alcohol
+# limma design matrix and linear model fit
+snp_alc <- lapply(1:8, function(x){
+  snp <- colnames(meta_pd)[167+x]
+  print(paste(x, snp, sep=": "))
+  design_snp_E <- model.matrix(~ 1 + meta_pd[,167+x]*alcohol1 + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A , data = meta_pd)
+  snp_E_fit <- lmFit(mvals_pd, design_snp_E)
+  snp_E_fit <- eBayes(snp_E_fit)
+  pvals <- snp_E_fit$p.value[,c(28:30)]
+  colnames(pvals) <- c(paste(snp,"alcohol1.2",sep=":"), paste(snp,"alcohol1.3",sep=":"), paste(snp,"alcohol1.4",sep=":"))
+  pvals.adj <- apply(pvals, 2, function(x) p.adjust(x,method="BH"))
+  return(pvals.adj)})
+snp_alc <- do.call(cbind, snp_alc)
+snp_alc_melt <- reshape2::melt(snp_alc)
+colnames(snp_alc_melt) <- c("CpG","SNPxE","p.adj")
+snp_alc_melt[which(snp_alc_melt$p.adj<=0.05),]
+#           CpG                 SNPxE      p.adj
+#112 cg05314706 rs62053943:alcohol1.3 0.01901672
+#244 cg05314706   rs199453:alcohol1.3 0.03132121
+
+####### SNP x head trauma
+# limma design matrix and linear model fit
+snp_ht <- lapply(1:8, function(x){
+  snp <- colnames(meta_pd)[167+x]
+  print(paste(x, snp, sep=": "))
+  design_snp_E <- model.matrix(~ 1 + meta_pd[,167+x]*head_trauma + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A , data = meta_pd)
+  snp_E_fit <- lmFit(mvals_pd, design_snp_E)
+  snp_E_fit <- eBayes(snp_E_fit)
+  pvals <- data.frame(snp_E_fit$p.value[,26])
+  colnames(pvals) <- paste(snp,"head_trauma",sep=":")
+  pvals.adj <- apply(pvals, 2, function(x) p.adjust(x,method="BH"))
+  return(pvals.adj)})
+snp_ht <- do.call(cbind, snp_ht)
+snp_ht_melt <- reshape2::melt(snp_ht)
+colnames(snp_ht_melt) <- c("CpG","SNPxE","p.adj")
+snp_ht_melt[which(snp_ht_melt$p.adj<=0.05),]
+#          CpG                   SNPxE       p.adj
+#12 cg27060340 rs138017112:head_trauma 0.013854432
+#13 cg05314706 rs138017112:head_trauma 0.009301937
+#14 cg20163478 rs138017112:head_trauma 0.023672965
+
+####### SNP x pesticides
+# limma design matrix and linear model fit
+snp_pest <- lapply(1:8, function(x){
+  snp <- colnames(meta_pd)[167+x]
+  print(paste(x, snp, sep=": "))
+  design_snp_E <- model.matrix(~ 1 + meta_pd[complete.cases(meta_pd$pesticides),167+x]*pesticides + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A , data = meta_pd[complete.cases(meta_pd$pesticides),])
+  snp_E_fit <- lmFit(mvals_pd[,meta_pd[complete.cases(meta_pd$pesticides),"patient"]], design_snp_E)
+  snp_E_fit <- eBayes(snp_E_fit)
+  pvals <- snp_E_fit$p.value[,c(27:28)]
+  colnames(pvals) <- c(paste(snp,"pesticides1",sep=":"), paste(snp,"pesticides2",sep=":"))
+  pvals.adj <- apply(pvals, 2, function(x) p.adjust(x,method="BH"))
+  return(pvals.adj)})
+snp_pest <- do.call(cbind, snp_pest)
+snp_pest_melt <- reshape2::melt(snp_pest)
+colnames(snp_pest_melt) <- c("CpG","SNPxE","p.adj")
+snp_pest_melt[which(snp_pest_melt$p.adj<=0.05),]
+#          CpG                   SNPxE       p.adj
+#34 cg27060340 rs138017112:pesticides2 0.015885148
+#35 cg05314706 rs138017112:pesticides2 0.006277232
+#36 cg20163478 rs138017112:pesticides2 0.008049647
+#39 cg09793084 rs138017112:pesticides2 0.006277232
+#44 cg15633388 rs138017112:pesticides2 0.008049647
+
+### save all results
+SNPxE_non_imp_pd <- rbind(snp_smoking_melt, snp_alc_melt, snp_ht_melt, snp_pest_melt)
+write.csv(SNPxE_non_imp_pd, file="~/PD_GRS/non_genetic_sensitivity/SNPxE_non_imp_PD.csv", row.names=F)
+```
+
+### Imputed pesticide exposures
+Pulling out adjusted p-values for the SNP and SNPxE terms in each model. Focusing on overall occupational exposure to insecticides, fungicides, and herbicides, as well as "gardening" (domestic) exposure. These were each included in the subset of pesticides with >10% of individuals exposed.
+```{r snp x e imp pd, eval=F}
+# subset to TERRE early disease duration data set
+pest_imp_pd <- pest_imp[pest_imp$num %in% meta_pd$patient,c("X_imputation_","num","ins","fong","herb","gardening")]
+length(unique(pest_imp_pd$num)) #62individuals with imputed pesticide data
+
+# prepare mice input
+pest_missing_pd <- pest_missing[pest_missing$num %in% meta_pd$patient,c("num","ins","fong","herb","gardening")]
+all(pest_imp_pd$num[1:62]==pest_missing_pd$num) #TRUE
+all(colnames(pest_imp_pd[2:ncol(pest_imp_pd)])==colnames(pest_missing_pd)) #TRUE
+mvals_pd_pest <- mvals_pd[,match(pest_missing_pd$num,colnames(mvals_pd))]
+
+pre_mids <-rbind(cbind(data.frame(X_imputation_=0),pest_missing_pd)[,colnames(pest_imp_pd)],pest_imp_pd)
+pre_mids <- pre_mids[pre_mids$num %in% colnames(mvals_pd_pest),]
+pest_mids <- as.mids(pre_mids, .imp="X_imputation_",.id="num")
+terre_pest_meta <- meta_pd[match(rownames(pest_mids$data),meta_pd$patient),]
+mvals_pd_pest <- mvals_pd_pest[,rownames(pest_mids$data)]
+
+####### SNP x insecticides
+snp_ins <- lapply(1:8, function(x){
+  snp <- colnames(terre_pest_meta)[167+x]
+  print(paste(x, snp, sep=": "))
+    ewas <- mclapply(1:nrow(mvals_pd_pest), function(y){
+    fit.cpg <- substitute(pest_mids %>% with(lm(mvals_pd_pest[y,] ~ terre_pest_meta[,167+x]*E + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A , data=terre_pest_meta)),
+                          list(E=as.name("ins")))
+    fit.cpg <- eval(fit.cpg, list(E=as.name("ins")))
+    est.cpg <- pool(fit.cpg)
+    return(summary(est.cpg)[26,])
+    }, mc.cores=10)
+  res <- cbind(do.call(rbind, ewas), probe=rownames(mvals_pd_pest))
+  res$term <- paste(snp,"ins",sep=":")
+  res$p.adj <- p.adjust(res$p.value,method="BH")
+  res <- res[,c("probe","term","p.adj")]
+  colnames(res)[1:2] <- c("CpG","SNPxE")
+  return(res) })
+snp_ins <- do.call(rbind, snp_ins)
+snp_ins[which(snp_ins$p.adj<=0.05),]
+#             CpG           SNPxE      p.adj
+#2611  cg27060340 rs138017112:ins 0.04419904
+#2612  cg05314706 rs138017112:ins 0.02347138
+#2621  cg20163478 rs138017112:ins 0.02347138
+#2651  cg09793084 rs138017112:ins 0.02347138
+#26101 cg15633388 rs138017112:ins 0.03089055
+
+####### SNP x fungicides
+snp_fong <- lapply(1:8, function(x){
+  snp <- colnames(terre_pest_meta)[167+x]
+  print(paste(x, snp, sep=": "))
+    ewas <- mclapply(1:nrow(mvals_pd_pest), function(y){
+    fit.cpg <- substitute(pest_mids %>% with(lm(mvals_pd_pest[y,] ~ terre_pest_meta[,167+x]*E + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A , data=terre_pest_meta)),
+                          list(E=as.name("fong")))
+    fit.cpg <- eval(fit.cpg, list(E=as.name("fong")))
+    est.cpg <- pool(fit.cpg)
+    return(summary(est.cpg)[26,])
+    }, mc.cores=10)
+  res <- cbind(do.call(rbind, ewas), probe=rownames(mvals_pd_pest))
+  res$term <- paste(snp,"fong",sep=":")
+  res$p.adj <- p.adjust(res$p.value,method="BH")
+  res <- res[,c("probe","term","p.adj")]
+  colnames(res)[1:2] <- c("CpG","SNPxE")
+  return(res) })
+snp_fong <- do.call(rbind, snp_fong)
+snp_fong[which(snp_fong$p.adj<=0.05),]
+#             CpG            SNPxE      p.adj
+#2611  cg27060340 rs138017112:fong 0.02883502
+#2612  cg05314706 rs138017112:fong 0.01586198
+#2621  cg20163478 rs138017112:fong 0.01586198
+#2651  cg09793084 rs138017112:fong 0.01586198
+#26101 cg15633388 rs138017112:fong 0.02458967
+
+####### SNP x herbicides
+snp_herb <- lapply(1:8, function(x){
+  snp <- colnames(terre_pest_meta)[167+x]
+  print(paste(x, snp, sep=": "))
+    ewas <- mclapply(1:nrow(mvals_pd_pest), function(y){
+    fit.cpg <- substitute(pest_mids %>% with(lm(mvals_pd_pest[y,] ~ terre_pest_meta[,167+x]*E + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A , data=terre_pest_meta)),
+                          list(E=as.name("herb")))
+    fit.cpg <- eval(fit.cpg, list(E=as.name("herb")))
+    est.cpg <- pool(fit.cpg)
+    return(summary(est.cpg)[26,])
+    }, mc.cores=10)
+  res <- cbind(do.call(rbind, ewas), probe=rownames(mvals_pd_pest))
+  res$term <- paste(snp,"herb",sep=":")
+  res$p.adj <- p.adjust(res$p.value,method="BH")
+  res <- res[,c("probe","term","p.adj")]
+  colnames(res)[1:2] <- c("CpG","SNPxE")
+  return(res) })
+snp_herb <- do.call(rbind, snp_herb)
+snp_herb[which(snp_herb$p.adj<=0.05),]
+#             CpG            SNPxE      p.adj
+#2611  cg27060340 rs138017112:herb 0.02642315
+#2612  cg05314706 rs138017112:herb 0.02642315
+#2621  cg20163478 rs138017112:herb 0.02642315
+#2651  cg09793084 rs138017112:herb 0.02642315
+#26101 cg15633388 rs138017112:herb 0.02642315
+
+####### SNP x gardening
+snp_gardening <- lapply(1:8, function(x){
+  snp <- colnames(terre_pest_meta)[167+x]
+  print(paste(x, snp, sep=": "))
+    ewas <- mclapply(1:nrow(mvals_pd_pest), function(y){
+    fit.cpg <- substitute(pest_mids %>% with(lm(mvals_pd_pest[y,] ~ terre_pest_meta[,167+x]*E + age + sex + geno_V3 + geno_V4 + geno_V5 + CTP_PC1 + CTP_PC2 + CTP_PC3 + CTP_PC4 + CTP_PC5 + CTP_PC6 + plate + SentrixPosition_A , data=terre_pest_meta)),
+                          list(E=as.name("gardening")))
+    fit.cpg <- eval(fit.cpg, list(E=as.name("gardening")))
+    est.cpg <- pool(fit.cpg)
+    return(summary(est.cpg)[26,])
+    }, mc.cores=10)
+  res <- cbind(do.call(rbind, ewas), probe=rownames(mvals_pd_pest))
+  res$term <- paste(snp,"gardening",sep=":")
+  res$p.adj <- p.adjust(res$p.value,method="BH")
+  res <- res[,c("probe","term","p.adj")]
+  colnames(res)[1:2] <- c("CpG","SNPxE")
+  return(res) })
+snp_gardening <- do.call(rbind, snp_gardening)
+snp_gardening[which(snp_gardening$p.adj<=0.05),]
+min(snp_gardening$p.adj[complete.cases(snp_gardening$p.adj)]) # 0.131084
+
+### save all results
+SNPxE_imp_pd <- rbind(snp_ins, snp_fong, snp_herb, snp_gardening)
+write.csv(SNPxE_imp_pd, file="~/PD_GRS/non_genetic_sensitivity/SNPxE_imp_pd.csv", row.names=F)
 ```
