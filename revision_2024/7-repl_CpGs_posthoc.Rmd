@@ -7,7 +7,7 @@ The manuscript "A Parkinson’s disease genetic risk score associates with blood
 
 This script will test the associations of the GRS SNPs from Nalls et al. with the 11 individual CpGs discovered in TERRE EWAS and replicated in DIGPD EWAS.
 
-Last updated Feb 9, 2025 by Samantha Schaffner
+Last updated Aug 24, 2025 by Samantha Schaffner: Double-checking whether any GRS-associated CpGs in the revised EWAS overlap with CpGs that colocalized with Nalls GWAS loci in Will's original analysis
 
 ### Libraries
 ```{r lib, eval=F}
@@ -15,6 +15,7 @@ library(data.table)
 library(dplyr)
 library(limma)
 library(lumi)
+library(readxl)
 ```
 
 ### Read in data
@@ -328,4 +329,30 @@ write.csv(coloc_sub, file="~/PD_GRS/coloc/digpd_posthoc_coloc.csv", row.names=FA
 ```
 
 rs7225002 has evidence for being a shared causal variant for affecting PD risk in the Nalls dataset and affecting DNAm in DIG-PD at 11 CpGs, including cg01341218, cg12609785, and cg15633388 (the same 3 from TERRE), plus 8 more.
+
+### Checking GRS-associated CpGs against colocalized CpGs from Nalls/GODMC analysis
+Added Aug 24, 2025. Check for the 23 from initial TERRE EWAS as well as the 11 replicated in DIG-PD.
+
+Also checking EWAS stats for 12 CpGs from GODMC colocalization analysis that were on chromosome 17.
+```{r coloc godmc, eval=F}
+terre_ewas <- read.csv("~/PD_GRS/EWAS_TERRE/EWAS_GRS_cross_sex_hits.csv")
+coloc_godmc <- read_xlsx("~/PD_GRS/coloc_analysis_WC.xlsx", sheet=1, skip=1)
+coloc_godmc$terre_grs_ewas <- (coloc_godmc$Probe %in% terre_ewas$TargetID)
+coloc_godmc$digpd_repl <- (coloc_godmc$Probe %in% repl_cpgs$TargetID)
+summary(coloc_godmc[,c("terre_grs_ewas","digpd_repl")])
+# terre_grs_ewas  digpd_repl     
+# Mode :logical   Mode :logical  
+# FALSE:79        FALSE:79  
+
+#check the EWAS stats for the 12 CpGs on chr17 that had mQTL colocalized with Nalls loci
+coloc_probes <- coloc_godmc[coloc_godmc$Chromosome=="chr17","Probe"]
+coloc_probes <- coloc_probes$Probe
+terre_ewas <- read.csv("~/PD_GRS/EWAS_TERRE/EWAS_GRS_cross_sex.csv")
+terre_ewas_sub <- terre_ewas[terre_ewas$TargetID %in% coloc_probes,c("TargetID","delta_M","P.Value","adj.P.Val","adjDB","CHR","MAPINFO","UCSC_REFGENE_NAME","UCSC_REFGENE_GROUP","RELATION_TO_UCSC_CPG_ISLAND","METHYL450_LOCI","threshold_B")]
+terre_ewas_sub[terre_ewas_sub$P.Value<=0.05,c("TargetID","UCSC_REFGENE_NAME","P.Value","adj.P.Val","adjDB")]
+#        TargetID UCSC_REFGENE_NAME    P.Value adj.P.Val      adjDB
+#23603 cg15679139 LOC100128977;IMP5 0.02375372 0.8068494 0.05474954
+
+write.csv(terre_ewas_sub, file="~/PD_GRS/posthoc/coloc_GODMC_in_TERRE.csv")
+```
 
